@@ -34,6 +34,12 @@ class Options {
  public:
     // return true if processing is successful
     typedef std::function<bool(const char* optarg)> OptionProcessor;
+    void registerOption(const char* option,   // option to register, e.g., -c or --version
+                        const char* argName,  // name of option argument;
+                                              // nullptr if no argument expected
+                        OptionProcessor processor,  // function to execute when option matches
+                        const char* description);   // option help message
+    void registerUsage(const char* msg) { additionalUsage.push_back(msg); }
 
  protected:
     struct Option {
@@ -54,13 +60,6 @@ class Options {
     bool collectUnknownOptions = false;
 
     void setOutStream(std::ostream* out) { outStream = out; }
-    void registerUsage(const char* msg) { additionalUsage.push_back(msg); }
-    void registerOption(const char* option,   // option to register, e.g., -c or --version
-                        const char* argName,  // name of option argument;
-                                              // nullptr if no argument expected
-                        OptionProcessor processor,  // function to execute when option matches
-                        const char* description);   // option help message
-
     explicit Options(cstring message) : binaryName(nullptr), message(message) {}
 
  public:

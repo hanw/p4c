@@ -66,6 +66,9 @@ class CompilerOptions : public Util::Options {
     // substrings matched agains pass names
     std::vector<cstring> top4;
 
+    std::vector<cstring> partitions;
+    bool dumpTable = false;
+
     // Expect that the only remaining argument is the input file.
     void setInputFile();
 

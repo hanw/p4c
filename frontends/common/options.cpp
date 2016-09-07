@@ -105,6 +105,16 @@ CompilerOptions::CompilerOptions() : Util::Options(defaultMessage) {
     registerOption("--dump", "folder",
                    [this](const char* arg) { dumpFolder = arg; return true; },
                    "[Compiler debugging] Folder where P4 programs are dumped\n");
+    registerOption("-P", "partition1[,partition2]",
+                   [this](const char* arg) {
+                        auto copy = strdup(arg);
+                        while (auto partition = strsep(&copy, ","))
+                            partitions.push_back(partition);
+                        return true;},
+                   "Partition control flow at specified table id" );
+    registerOption("--profile", nullptr,
+                   [this](const char*) { dumpTable = true; return true; },
+                   "Dump table resource utilization");
     registerUsage("loglevel format is:\n"
                   "  sourceFile:level,...,sourceFile:level\n"
                   "where 'sourceFile' is a compiler source file and\n"
