@@ -22,8 +22,6 @@ limitations under the License.
 #include "frontends/p4/coreLibrary.h"
 #include "ir/ir.h"
 
-namespace Model {
-
 namespace P4V1 {
 
 // This should be kept in sync with p4includes/v1model.p4
@@ -221,7 +219,7 @@ struct TableAttributes_Model {
     const unsigned defaultTableSize = 1024;
 };
 
-class 14Model : public ::Model::Model {
+class V1Model : public ::Model::Model {
  protected:
     V1Model() :
             Model::Model("0.1"), file("v1model.p4"),
@@ -274,10 +272,9 @@ class 14Model : public ::Model::Model {
     ::Model::Elem       recirculate;
     DirectMeter_Model   directMeter;
 
-    static 14Model instance;
+    static V1Model instance;
 };
 
 } // namespace P4V1
-} // namespace Model
 
 #endif /* _FRONTENDS_P4_FROMV1_0_V1MODEL_H_ */
