@@ -25,29 +25,33 @@ limitations under the License.
 namespace Model {
 
 // Model element
-class Elem {
-  cstring name;
- public:
+struct Elem {
   explicit Elem(cstring name) : name(name) {}
   Elem() = delete;
 
+  cstring name;
   IR::ID Id() const { return IR::ID(name); }
   const char* str() const { return name.c_str(); }
   cstring toString() const { return name; }
 };
 
-class Type_Model : public Elem {
- public:
+struct Type_Model : public Elem {
   explicit Type_Model(cstring name) : Elem(name) {}
 };
 
-class Param_Model : public Elem {
+struct Enum_Model : public Type_Model {
+    explicit Enum_Model(cstring name) : Type_Model(name) {}
+};
+
+struct Extern_Model : public Type_Model {
+    explicit Extern_Model(cstring name) : Type_Model(name) {}
+};
+
+struct Param_Model : public Elem {
   Type_Model type;
   unsigned   index;
   Param(cstring name, Type_Model type, unsigned index) :
       Elem(name), type(type), index(index) {}
- public:
-  Type_Model getType() { return type; }
 };
 
 class Model {
