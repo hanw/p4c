@@ -24,19 +24,11 @@ limitations under the License.
 
 namespace Model {
 
-namespace P4_14 {
+namespace P4V1 {
 
 // This should be kept in sync with p4includes/v1model.p4
 // In a perfect world this would be generated automatically from
 // p4includes/v1model.p4
-
-struct Enum_Model : public Type_Model {
-    explicit Enum_Model(cstring name) : Type_Model(name) {}
-};
-
-struct Extern_Model : public Type_Model {
-    explicit Extern_Model(cstring name) : Type_Model(name) {}
-};
 
 struct Parser_Model : public ::Model::Elem {
     Parser_Model(Model::Type_Model headersType, Model::Type_Model userMetaType,
@@ -285,7 +277,7 @@ class 14Model : public ::Model::Model {
     static 14Model instance;
 };
 
-} // namespace P4_14
+} // namespace P4V1
 } // namespace Model
 
 #endif /* _FRONTENDS_P4_FROMV1_0_V1MODEL_H_ */
