@@ -22,11 +22,21 @@ limitations under the License.
 #include "frontends/p4/coreLibrary.h"
 #include "ir/ir.h"
 
-namespace P4V1 {
+namespace Model {
+
+namespace P4_14 {
 
 // This should be kept in sync with p4includes/v1model.p4
 // In a perfect world this would be generated automatically from
 // p4includes/v1model.p4
+
+struct Enum_Model : public Type_Model {
+    explicit Enum_Model(cstring name) : Type_Model(name) {}
+};
+
+struct Extern_Model : public Type_Model {
+    explicit Extern_Model(cstring name) : Type_Model(name) {}
+};
 
 struct Parser_Model : public ::Model::Elem {
     Parser_Model(Model::Type_Model headersType, Model::Type_Model userMetaType,
@@ -219,7 +229,7 @@ struct TableAttributes_Model {
     const unsigned defaultTableSize = 1024;
 };
 
-class V1Model : public ::Model::Model {
+class 14Model : public ::Model::Model {
  protected:
     V1Model() :
             Model::Model("0.1"), file("v1model.p4"),
@@ -272,9 +282,10 @@ class V1Model : public ::Model::Model {
     ::Model::Elem       recirculate;
     DirectMeter_Model   directMeter;
 
-    static V1Model instance;
+    static 14Model instance;
 };
 
-}  // namespace P4V1
+} // namespace P4_14
+} // namespace Model
 
 #endif /* _FRONTENDS_P4_FROMV1_0_V1MODEL_H_ */
