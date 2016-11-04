@@ -50,7 +50,7 @@ struct Extern_Model : public Type_Model {
 struct Param_Model : public Elem {
   Type_Model type;
   unsigned   index;
-  Param(cstring name, Type_Model type, unsigned index) :
+  Param_Model(cstring name, Type_Model type, unsigned index) :
       Elem(name), type(type), index(index) {}
 };
 

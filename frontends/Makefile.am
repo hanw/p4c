@@ -83,7 +83,9 @@ p4_frontend_SOURCES = \
 	frontends/p4/moveDeclarations.cpp \
 	frontends/p4/moveDeclarations.h \
 	frontends/p4/specialize.h \
-	frontends/p4/specialize.cpp
+	frontends/p4/specialize.cpp \
+    frontends/p4/inferArchitecture.h \
+    frontends/p4/inferArchitecture.cpp
 
 common_frontend_SOURCES = \
 	frontends/common/options.h  \
