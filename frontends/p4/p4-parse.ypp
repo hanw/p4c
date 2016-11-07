@@ -50,9 +50,11 @@ limitations under the License.
                  : Util::SourceInfo(YYRHSLOC(Rhs, 0).getEnd()))
 
 // Program IR built here
-static IR::IndexedVector<IR::Node> *declarations;
+static IR::IndexedVector<IR::Node> *declarations = nullptr;
+static IR::Type_Error* allErrors = nullptr;
 static void yyerror(const char *fmt, ...);
 static void checkShift(Util::SourceInfo f, Util::SourceInfo r);
+static void addErrors(IR::Type_Error* decl);
 
 static Util::ProgramStructure structure;
 
@@ -111,6 +113,7 @@ static int yylex();
     IR::Type_Name               *Type_Name;
     IR::TypeParameters          *TypeParameters;
     IR::Type_Parser             *Type_Parser;
+    IR::Type_Error              *Type_Error;
 }
 
 %token      LE GE SHL AND OR NE EQ
@@ -118,7 +121,7 @@ static int yylex();
 %token      ABSTRACT ACTION ACTIONS APPLY BOOL BIT CONST CONTROL DATA
             DEFAULT DONTCARE ELSE ENUM T_ERROR  // There is an ERROR macro elsewhere
             EXIT EXTERN HEADER HEADER_UNION IF IN INOUT INT KEY MASK SELECT MATCH_KIND OUT
-            PACKAGE PARSER RANGE RETURN STATE STRUCT SWITCH TABLE TRANSITION
+            PACKAGE PARSER RANGE RETURN SET STATE STRUCT SWITCH TABLE TRANSITION
             TUPLE TYPEDEF VARBIT VOID
 %token<str> IDENTIFIER TYPE NAMESPACE STRING_LITERAL
 %token<Constant>  INTEGER
@@ -132,7 +135,7 @@ static int yylex();
                         argument simpleKeysetExpression transitionStatement switchLabel
 %type<PathPrefix>       pathPrefix relativePathPrefix nonEmptyRelativePathPrefix
 %type<TypePtr>          baseType typeOrVoid specializedType headerStackType typeRef
-                        tupleType typeArg
+                        tupleType typeArg setType
 %type<Type_Name>        typeName
 %type<Parameter>        parameter
 %type<annos>            optAnnotations
@@ -146,7 +149,7 @@ static int yylex();
 %type<selectCases>      selectCaseList
 %type<Statement>        statement emptyStatement returnStatement switchStatement exitStatement
                         assignmentOrMethodCallStatement conditionalStatement
-%type<BlockStatement>   blockStatement controlBody objInitializer
+%type<BlockStatement>   blockStatement parserBlockStatement controlBody objInitializer
 %type<StatOrDecl>       statementOrDeclaration parserStatement
 %type<statOrDecls>      objDeclarations statOrDeclList parserStatements
 %type<SwitchCase>       switchCase
@@ -161,7 +164,8 @@ static int yylex();
                         derivedTypeDeclaration parserDeclaration
                         controlDeclaration enumDeclaration typedefDeclaration
                         packageTypeDeclaration typeDeclaration
-%type<Node>             errorDeclaration declaration externDeclaration matchKindDeclaration
+%type<Type_Error>       errorDeclaration
+%type<Node>             declaration externDeclaration matchKindDeclaration
 %type<Type_Parser>      parserTypeDeclaration
 %type<Type_Control>     controlTypeDeclaration
 %type<decls>            parserLocalElements controlLocalDeclarations
@@ -231,7 +235,7 @@ symbol_print(FILE* file, int type, YYSTYPE value)
 
 input
     : /* epsilon */
-    | input declaration       { declarations->push_back($2->getNode()); }
+    | input declaration       { if ($2) declarations->push_back($2->getNode()); }
     | input ';'               {}   // empty declaration
     ;
 
@@ -243,7 +247,7 @@ declaration
     | typeDeclaration         { $$ = $1; }
     | controlDeclaration      { $$ = $1; }
     | instantiation           { $$ = $1; }
-    | errorDeclaration        { $$ = $1; }
+    | errorDeclaration        { addErrors($1); $$ = nullptr; }
     | matchKindDeclaration    { $$ = $1; }
     ;
 
@@ -256,7 +260,7 @@ nonTypeName
     ;
 
 name
-    : nonTypeName
+    : nonTypeName { $$ = $1; }
     | TYPE      { $$ = new IR::ID(@1, $1); }
     | NAMESPACE { $$ = new IR::ID(@1, $1); }
     ;
@@ -407,6 +411,11 @@ parserStatements
 parserStatement
     : assignmentOrMethodCallStatement { $$ = $1; }
     | variableDeclaration             { $$ = $1; }
+    | parserBlockStatement            { $$ = $1; }
+    ;
+
+parserBlockStatement
+    : optAnnotations '{' parserStatements '}' { $$ = new IR::BlockStatement(@1+@4, $1, $3); }
     ;
 
 transitionStatement
@@ -522,7 +531,7 @@ functionPrototype
 methodPrototype
     : functionPrototype ';' { $$ = $1; }
     | ABSTRACT functionPrototype ';'    { $$ = $2; $$->setAbstract(); }
-    | TYPE '(' parameterList ')' ';' // constructor
+    | TYPE '(' parameterList ')' ';'  // constructor
                                         { auto par = new IR::ParameterList(@3, $3);
                                           auto mt = new IR::Type_Method(@1, par);
                                           $$ = new IR::Method(@1, IR::ID(@1, $1), mt); }
@@ -536,6 +545,7 @@ typeRef
     | specializedType                  { $$ = $1; }
     | headerStackType                  { $$ = $1; }
     | tupleType                        { $$ = $1; }
+    | setType                          { $$ = $1; }
     ;
 
 typeName
@@ -545,6 +555,10 @@ typeName
 
 tupleType
     : TUPLE '<' typeArgumentList '>'   { $$ = new IR::Type_Tuple(@1+@4, $3); }
+    ;
+
+setType
+    : SET '<' typeRef '>'              { $$ = new IR::Type_Set(@1+@4, $3); }
     ;
 
 headerStackType
@@ -563,7 +577,8 @@ specializedType
 
 baseType
     : BOOL                             { $$ = IR::Type_Boolean::get(); }
-    | T_ERROR                          { $$ = IR::Type_Error::get(); }
+    | T_ERROR                          { $$ = new IR::Type_Name(@1, new IR::Path(
+                                                                    IR::ID(@1, "error"))); }
     | BIT                              { $$ = IR::Type::Bits::get(@1, 1); }
     | BIT '<' INTEGER '>'              { $$ = IR::Type::Bits::get(@3, $3->asInt(), false); }
     | INT '<' INTEGER '>'              { $$ = IR::Type::Bits::get(@3, $3->asInt(), true); }
@@ -643,7 +658,9 @@ enumDeclaration
     ;
 
 errorDeclaration
-    : T_ERROR '{' identifierList '}'    { $$ = new IR::Declaration_Errors(@1 + @4, $3); }
+    : T_ERROR '{' identifierList '}'
+                                        { $$ = new IR::Type_Error(@1 + @4,
+                                                                  IR::ID(@1, "error"), $3); }
     ;
 
 matchKindDeclaration
@@ -901,6 +918,12 @@ expression
     | '+' expression %prec PREFIX        { $$ = $2; }
     | typeName '.' name                  { $$ = new IR::Member(
                                              @1 + @3, new IR::TypeNameExpression(@1, $1), *$3); }
+    | T_ERROR '.' name                   { $$ = new IR::Member(
+                                             @1 + @3,
+                                             new IR::TypeNameExpression(
+                                                 @1+@3, new IR::Type_Name(
+                                                     @1, new IR::Path(IR::ID(@1, "error")))),
+                                             *$3); }
     | expression '.' name                { $$ = new IR::Member(@1 + @3, $1, *$3); }
     | expression '*' expression          { $$ = new IR::Mul(@1 + @3, $1, $3); }
     | expression '/' expression          { $$ = new IR::Div(@1 + @3, $1, $3); }
@@ -991,4 +1014,15 @@ void checkShift(Util::SourceInfo l, Util::SourceInfo r)
     if (f.getLineNumber() != s.getLineNumber() ||
         f.getColumnNumber() != s.getColumnNumber() - 1)
         ::error("Syntax error at shift operator: %1%", l);
+}
+
+void addErrors(IR::Type_Error* errors) {
+    if (allErrors == nullptr) {
+        declarations->push_back(errors);
+        allErrors = errors;
+        return;
+    }
+    auto vec = new IR::IndexedVector<IR::Declaration_ID>(*allErrors->members);
+    vec->append(*errors->members);
+    allErrors->members = vec;
 }

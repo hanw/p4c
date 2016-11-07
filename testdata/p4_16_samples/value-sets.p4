@@ -47,8 +47,8 @@ parser TopParser(packet_in b, out Parsed_packet p) {
     }
 
     state dispatch_value_sets {
-        bit<8> set = ethtype_kinds.index(p.ethernet.etherType);
-        transition select(set) {
+        bit<8> setIndex = ethtype_kinds.index(p.ethernet.etherType);
+        transition select(setIndex) {
             ETH_KIND_TRILL: parse_trill;
             ETH_KIND_TPID: parse_vlan_tag;
         }

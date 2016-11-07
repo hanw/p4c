@@ -35,7 +35,7 @@ struct Parser_Model : public ::Model::Elem {
             packetParam("packet", P4::P4CoreLibrary::instance.packetIn, 0),
             headersParam("hdr", headersType, 1),
             metadataParam("meta", userMetaType, 2),
-            standardMetadataParam("stdMeta", standardMetadataType, 3)
+            standardMetadataParam("standard_metadata", standardMetadataType, 3)
     {}
     ::Model::Param_Model packetParam;
     ::Model::Param_Model headersParam;
@@ -102,10 +102,9 @@ struct ActionSelector_Model : public ::Model::Extern_Model {
 
 struct Random_Model : public ::Model::Elem {
     Random_Model() : Elem("random"),
-                     resultType(IR::Type_Bits::get(32)), logRangeType(IR::Type_Bits::get(5)),
+                     resultType(IR::Type_Bits::get(32)),
                      modify_field_rng_uniform("modify_field_rng_uniform") {}
     const IR::Type* resultType;
-    const IR::Type* logRangeType;
     ::Model::Elem   modify_field_rng_uniform;
 };
 
@@ -232,7 +231,7 @@ class V1Model : public ::Model::Model {
             ingress("ingress", headersType, metadataType, standardMetadataType),
             sw(), counterOrMeter("$"), counter(), meter(), random(), action_profile(),
             action_selector(), clone(), resubmit("resubmit"),
-            tableAttributes(), selectorMatchType("selector"),
+            tableAttributes(), rangeMatchType("range"), selectorMatchType("selector"),
             verify("verifyChecksum", headersType), update("computeChecksum", headersType),
             ck16(), digest_receiver(), hash(), algorithm(),
             directCounter("direct_counter"), registers(), drop("mark_to_drop"),
@@ -259,6 +258,7 @@ class V1Model : public ::Model::Model {
     Cloner_Model        clone;
     ::Model::Elem       resubmit;
     TableAttributes_Model tableAttributes;
+    ::Model::Elem       rangeMatchType;
     ::Model::Elem       selectorMatchType;
     VerifyUpdate_Model  verify;
     VerifyUpdate_Model  update;

@@ -15,8 +15,10 @@ limitations under the License.
 */
 
 #include "midend.h"
+#include "validateProperties.h"
 #include "lower.h"
 #include "inlining.h"
+#include "copyStructures.h"
 #include "midend/actionsInlining.h"
 #include "midend/removeReturns.h"
 #include "midend/moveConstructors.h"
@@ -117,7 +119,7 @@ void MidEnd::setup_for_P4_16(CompilerOptions&) {
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::SynthesizeActions(&refMap, &typeMap),
         new P4::MoveActionsToTables(&refMap, &typeMap),
-    });
+     });
 }
 
 
@@ -125,7 +127,7 @@ MidEnd::MidEnd(CompilerOptions& options) {
     bool isv1 = options.isv1();
     setName("MidEnd");
     refMap.setIsV1(isv1);  // must be done BEFORE creating passes
-    if (isv1)
+    if (0 && isv1)
         // TODO: This path should be eventually deprecated
         setup_for_P4_14(options);
     else
@@ -134,11 +136,14 @@ MidEnd::MidEnd(CompilerOptions& options) {
     // BMv2-specific passes
     auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
     addPasses({
+        // TODO: replace Tuple types with structs
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::TypeChecking(&refMap, &typeMap),
         new P4::RemoveLeftSlices(&typeMap),
         new P4::TypeChecking(&refMap, &typeMap),
         new LowerExpressions(&typeMap),
+        new CopyStructures(&refMap, &typeMap),
+        new ValidateTableProperties(),
         new P4::ConstantFolding(&refMap, &typeMap),
         evaluator,
         new VisitFunctor([this, evaluator]() { toplevel = evaluator->getToplevelBlock(); })

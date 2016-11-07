@@ -21,8 +21,6 @@ limitations under the License.
 
 #include "core.p4"
 
-const Version v1modelVersion = { 8w0, 8w1 };
-
 match_kind {
     range,
     // Used for implementing dynamic_action_selection
@@ -82,8 +80,8 @@ extern action_profile {
     action_profile(bit<32> size);
 }
 
-// Get a random number in the range 0..2^logRange
-extern void random(in bit<5> logRange, out bit<32> result);
+// Get a random number in the range lo..hi
+extern void random(out bit<32> result, in bit<32> lo, in bit<32> hi);
 // If the type T is a named struct, the name is used
 // to generate the control-plane API.
 extern void digest<T>(in bit<32> receiver, in T data);
@@ -114,7 +112,11 @@ extern void recirculate<T>(in T data);
 extern void clone(in CloneType type, in bit<32> session);
 extern void clone3<T>(in CloneType type, in bit<32> session, in T data);
 
-// Architecture
+// The name 'standard_metadata' is reserved
+
+// Architecture.
+// M should be a struct of structs
+// H should be a struct of headers or stacks
 
 parser Parser<H, M>(packet_in b,
                     out H parsedHdr,

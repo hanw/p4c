@@ -63,7 +63,8 @@ class Local(object):
     pass
 
 def run_timeout(options, args, timeout, stderr):
-    # if options.verbose:
+    if options.verbose:
+        print(args[0], args[len(args) - 1])  # handy for manual cut-and-paste
     print(" ".join(args))
     local = Local()
     local.process = None
@@ -89,7 +90,7 @@ def run_timeout(options, args, timeout, stderr):
         print("Exit code ", local.process.returncode)
     return local.process.returncode
 
-timeout = 200  # seconds
+timeout = 300  # seconds
 
 def compare_files(options, produced, expected):
     if options.replace:

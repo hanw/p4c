@@ -1,5 +1,5 @@
 /*
-Copyright 2013-present Barefoot Networks, Inc. 
+Copyright 2013-present Barefoot Networks, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,12 +31,12 @@ EBPFType* EBPFTypeFactory::create(const IR::Type* type) {
     } else if (type->is<IR::Type_StructLike>()) {
         result = new EBPFStructType(type->to<IR::Type_StructLike>());
     } else if (type->is<IR::Type_Typedef>()) {
-        auto canon = typeMap->getType(type);
+        auto canon = typeMap->getTypeType(type, true);
         result = create(canon);
         auto path = new IR::Path(type->to<IR::Type_Typedef>()->name);
         result = new EBPFTypeName(new IR::Type_Name(Util::SourceInfo(), path), result);
     } else if (type->is<IR::Type_Name>()) {
-        auto canon = typeMap->getType(type);
+        auto canon = typeMap->getTypeType(type, true);
         result = create(canon);
         result = new EBPFTypeName(type->to<IR::Type_Name>(), result);
     } else {
@@ -183,8 +183,10 @@ void EBPFStructType::emit(CodeBuilder* builder) {
     if (type->is<IR::Type_Header>()) {
         builder->emitIndent();
         auto type = EBPFTypeFactory::instance->create(IR::Type_Boolean::get());
-        type->declare(builder, "ebpf_valid", false);
-        builder->endOfStatement(true);
+        if (type != nullptr) {
+            type->declare(builder, "ebpf_valid", false);
+            builder->endOfStatement(true);
+        }
     }
 
     builder->blockEnd(false);
@@ -194,11 +196,13 @@ void EBPFStructType::emit(CodeBuilder* builder) {
 ///////////////////////////////////////////////////////////////
 
 void EBPFTypeName::declare(CodeBuilder* builder, cstring id, bool asPointer) {
-    canonical->declare(builder, id, asPointer);
+    if (canonical != nullptr)
+        canonical->declare(builder, id, asPointer);
 }
 
 void EBPFTypeName::emitInitializer(CodeBuilder* builder) {
-    canonical->emitInitializer(builder);
+    if (canonical != nullptr)
+        canonical->emitInitializer(builder);
 }
 
 unsigned EBPFTypeName::widthInBits() {
