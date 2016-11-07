@@ -21,6 +21,8 @@ class InferArchitecture : public Inspector {
     this->typeMap = tm;
   }
 
+  ::P4_16::V2Model *getModel() { return this->archModel; }
+
   // Control bock will need to "infer" if it is a deparser
   bool preorder(const IR::Type_Control *node) override;
   bool preorder(const IR::Type_Parser *node) override;
@@ -33,6 +35,7 @@ class InferArchitecture : public Inspector {
   // don't care
   bool preorder(const IR::Node *node) override;
 
+  static InferArchitecture *instance;
 };
 
 } // namespace P4

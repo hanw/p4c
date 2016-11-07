@@ -22,6 +22,7 @@ limitations under the License.
 #include "frontends/p4/enumInstance.h"
 #include "analyzer.h"
 #include "lower.h"
+#include "frontends/p4/inferArchitecture.h"
 
 namespace BMV2 {
 
@@ -1685,6 +1686,8 @@ void JsonConverter::addLocals(Util::JsonArray* headerTypes, Util::JsonArray* ins
     }
 }
 
+using ::P4::InferArchitecture;
+
 void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
                             IR::ToplevelBlock* toplevelBlock) {
     this->toplevelBlock = toplevelBlock;
@@ -1709,9 +1712,25 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     if (::errorCount() > 0)
         return;
 
+    auto headerTypes = mkArrayField(&toplevel, "header_types");
+    auto headers = mkArrayField(&toplevel, "headers");
+    auto headerStacks = mkArrayField(&toplevel, "header_stacks");
+    auto fieldLists = mkArrayField(&toplevel, "field_lists");
+    (void)nextId("field_lists");  // field list IDs must start at 1; 0 is reserved
+    (void)nextId("learn_lists");  // idem
+
+    toplevel.emplace("program", options.file);
+
+    for (auto p : *InferArchitecture::instance->getModel()->parsers) {
+      auto parserBlock = package->getParameterValue(p->toString());
+      CHECK_NULL(parserBlock);
+      auto parser = parserBlock->to<IR::ParserBlock>()->container;
+    }
+
     auto parserBlock = package->getParameterValue(v1model.sw.parser.name);
     CHECK_NULL(parserBlock);
     auto parser = parserBlock->to<IR::ParserBlock>()->container;
+
     auto hdr = parser->type->applyParams->getParameter(v1model.parser.headersParam.index);
     auto headersType = typeMap->getType(hdr->getNode(), true);
     auto ht = headersType->to<IR::Type_Struct>();
@@ -1719,14 +1738,6 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
         ::error("Expected headers %1% to be a struct", headersType);
         return;
     }
-    toplevel.emplace("program", options.file);
-
-    auto headerTypes = mkArrayField(&toplevel, "header_types");
-    auto headers = mkArrayField(&toplevel, "headers");
-    auto headerStacks = mkArrayField(&toplevel, "header_stacks");
-    auto fieldLists = mkArrayField(&toplevel, "field_lists");
-    (void)nextId("field_lists");  // field list IDs must start at 1; 0 is reserved
-    (void)nextId("learn_lists");  // idem
 
     std::set<cstring> headerTypesCreated;
     addTypesAndInstances(ht, false, headerTypes, headers, headerTypesCreated);

@@ -69,6 +69,8 @@ class PrettyPrint : public Inspector {
 };
 }  // namespace
 
+InferArchitecture *InferArchitecture::instance = nullptr;
+
 const IR::P4Program*
 FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program) {
     if (program == nullptr)
@@ -78,6 +80,8 @@ FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program) {
     ReferenceMap  refMap;
     TypeMap       typeMap;
     refMap.setIsV1(isv1);
+
+    InferArchitecture::instance = new InferArchitecture(&typeMap);
 
     PassManager passes = {
         new PrettyPrint(options),
@@ -111,7 +115,7 @@ FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program) {
         new SimplifyDefUse(&refMap, &typeMap),
         new SimplifyControlFlow(&refMap, &typeMap),
         new SpecializeAll(&refMap, &typeMap),
-        new InferArchitecture(&typeMap),
+        InferArchitecture::instance,
     };
 
     passes.setName("FrontEnd");
