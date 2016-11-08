@@ -43,17 +43,17 @@ bool InferArchitecture::preorder(const IR::Type_Parser *node) {
 
 bool InferArchitecture::preorder(const IR::Type_Package *node) {
   for (auto param : *node->getConstructorParameters()->parameters) {
-    auto mappedType = this->typeMap->getType(param->type);
-    BUG_CHECK(mappedType->is<IR::Type_SpecializedCanonical>(),
+    BUG_CHECK(param->type->is<IR::Type_Specialized>(),
               "Unexpected Package param type");
-    auto baseType = mappedType->to<IR::Type_SpecializedCanonical>()->baseType;
-    if (baseType->is<IR::Type_Parser>()) {
+    auto baseType = param->type->to<IR::Type_Specialized>()->baseType;
+    auto typeObj = this->typeMap->getType(baseType)->getP4Type();
+    if (typeObj->is<IR::Type_Parser>()) {
       this->archModel->parsers->push_back(new Parser_Model(param->toString()));
-      visit(baseType->to<IR::Type_Parser>());
-    } else if (baseType->is<IR::Type_Control>()) {
+      visit(typeObj->to<IR::Type_Parser>());
+    } else if (typeObj->is<IR::Type_Control>()) {
       // do deparser logic
       this->archModel->controls->push_back(new Control_Model(param->toString()));
-      visit(baseType->to<IR::Type_Control>());
+      visit(typeObj->to<IR::Type_Control>());
     }
   }
   return false;
