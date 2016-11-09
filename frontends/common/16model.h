@@ -17,6 +17,7 @@ class Block_Model : public Type_Model {
   Block_Model(cstring name) : ::Model::Type_Model(name) {}
   void add(T elem) { this->elems.push_back(elem); }
   T get(int index) { return this->elems[index]; }
+  std::vector<T> *getElems() { return &elems; }
 };
 
 class Enum_Model : public Block_Model<Elem> {
