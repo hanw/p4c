@@ -1744,9 +1744,9 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     if (::errorCount() > 0)
         return;
 
-//    auto headerTypes = mkArrayField(&toplevel, "header_types");
-//    auto headers = mkArrayField(&toplevel, "headers");
-//    auto headerStacks = mkArrayField(&toplevel, "header_stacks");
+//    headerTypes = mkArrayField(&toplevel, "header_types");
+//    headerInstances = mkArrayField(&toplevel, "headers");
+//    headerStacks = mkArrayField(&toplevel, "header_stacks");
 //    auto fieldLists = mkArrayField(&toplevel, "field_lists");
 //    (void)nextId("field_lists");  // field list IDs must start at 1; 0 is reserved
 //    (void)nextId("learn_lists");  // idem
@@ -1785,9 +1785,9 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
         return;
     }
 
-    auto headerTypes = mkArrayField(&toplevel, "header_types");
-    auto headers = mkArrayField(&toplevel, "headers");
-    auto headerStacks = mkArrayField(&toplevel, "header_stacks");
+    headerTypes = mkArrayField(&toplevel, "header_types");
+    headerInstances = mkArrayField(&toplevel, "headers");
+    headerStacks = mkArrayField(&toplevel, "header_stacks");
     auto fieldLists = mkArrayField(&toplevel, "field_lists");
     (void)nextId("field_lists");  // field list IDs must start at 1; 0 is reserved
     (void)nextId("learn_lists");  // idem
