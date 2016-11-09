@@ -27,5 +27,5 @@ cd build
 # TODO: the "prefix" is needed for finding the p4include folder.
 # It should be an absolute path.  This may need to change
 # when we have a proper installation procedure.
-../configure CXXFLAGS="-g -O1" --prefix=$sourcedir $*
+../configure CXX=clang-3.6 CXXFLAGS="-g -O0" LDFLAGS="-lstdc++" --prefix=$sourcedir $*
 echo "### Configured for building in 'build' folder"
