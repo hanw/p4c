@@ -1744,20 +1744,34 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     if (::errorCount() > 0)
         return;
 
-    auto headerTypes = mkArrayField(&toplevel, "header_types");
-    auto headers = mkArrayField(&toplevel, "headers");
-    auto headerStacks = mkArrayField(&toplevel, "header_stacks");
-    auto fieldLists = mkArrayField(&toplevel, "field_lists");
-    (void)nextId("field_lists");  // field list IDs must start at 1; 0 is reserved
-    (void)nextId("learn_lists");  // idem
+//    auto headerTypes = mkArrayField(&toplevel, "header_types");
+//    auto headers = mkArrayField(&toplevel, "headers");
+//    auto headerStacks = mkArrayField(&toplevel, "header_stacks");
+//    auto fieldLists = mkArrayField(&toplevel, "field_lists");
+//    (void)nextId("field_lists");  // field list IDs must start at 1; 0 is reserved
+//    (void)nextId("learn_lists");  // idem
+//
+//    toplevel.emplace("program", options.file);
 
-    toplevel.emplace("program", options.file);
+//    headerTypesCreated.clear();
+//    tupleTypesCreated.clear();
 
-    for (auto p : *InferArchitecture::instance->getModel()->parsers) {
-      auto parserBlock = package->getParameterValue(p->toString());
-      CHECK_NULL(parserBlock);
-      auto parser = parserBlock->to<IR::ParserBlock>()->container;
-    }
+//    for (auto p : *InferArchitecture::instance->getModel()->parsers) {
+//      auto parserBlock = package->getParameterValue(p->toString());
+//      CHECK_NULL(parserBlock);
+//      auto parser = parserBlock->to<IR::ParserBlock>()->container;
+//      for (auto parserParam : *p->getElems()) {
+//        auto paramVal = parser->type->applyParams->getParameter(parserParam.index);
+//        auto paramValType = typeMap->getType(paramVal->getNode(), true);
+//        auto pvt = paramValType->to<IR::Type_Struct>();
+//        if (pvt == nullptr) {
+//            ::error("Expected headers %1% to be a struct", headersType);
+//            return;
+//        }
+//        addTypesAndInstances(pvt, true);
+//      }
+//    }
+//    addLocals();
 
     auto parserBlock = package->getParameterValue(v1model.sw.parser.name);
     CHECK_NULL(parserBlock);
@@ -1770,6 +1784,15 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
         ::error("Expected headers %1% to be a struct", headersType);
         return;
     }
+
+    auto headerTypes = mkArrayField(&toplevel, "header_types");
+    auto headers = mkArrayField(&toplevel, "headers");
+    auto headerStacks = mkArrayField(&toplevel, "header_stacks");
+    auto fieldLists = mkArrayField(&toplevel, "field_lists");
+    (void)nextId("field_lists");  // field list IDs must start at 1; 0 is reserved
+    (void)nextId("learn_lists");  // idem
+
+    toplevel.emplace("program", options.file);
 
     headerTypesCreated.clear();
     tupleTypesCreated.clear();
@@ -1936,6 +1959,27 @@ void JsonConverter::generateUpdate(const IR::P4Control* updateControl,
         BUG("%1%: not handled yet", stat);
     }
 }
+
+//void JsonConverter::addTypesAndInstances(const IR::Type_Struct *type) {
+//  for (auto f : *type->fields) {
+//    auto ft = typeMap->getType(f, true);
+//    createJsonType(ft->to<IR::Type_StructLike>());
+//    auto json = new Util::JsonObject();
+//    if (ft->is<IR::Type_Header>()) {
+//      json->emplace("name", nameFromAnnotation(f->annotations, f->name));
+//      json->emplace("id", nextId("headers"));
+//      json->emplace("header_type", ft->to<IR::Type_StructLike>()->name.name);
+//      json->emplace("metadata", false);
+//      headerInstances->append(json);
+//    } else if (ft->is<IR::Type_Struct>()) {
+//      json->emplace("name", nameFromAnnotation(f->annotations, f->name));
+//      json->emplace("id", nextId("headers"));
+//      json->emplace("header_type", ft->to<IR::Type_StructLike>()->name.name);
+//      json->emplace("metadata", true);
+//      headerInstances->append(json);
+//    }
+//  }
+//}
 
 void JsonConverter::addTypesAndInstances(const IR::Type_StructLike* type, bool meta) {
     // TODO: this is wrong if the structs are more deeply nested.

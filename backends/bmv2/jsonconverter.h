@@ -88,6 +88,7 @@ class JsonConverter final {
     void addHeaderStacks(const IR::Type_Struct* headersStruct);
     void addLocals();
     void addTypesAndInstances(const IR::Type_StructLike* type, bool meta);
+//    void addTypesAndInstances(const IR::Type_Struct *type);
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                            Util::JsonArray* result, Util::JsonArray* fieldLists,
                            Util::JsonArray* calculations, Util::JsonArray* learn_lists);
