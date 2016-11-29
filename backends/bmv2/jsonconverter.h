@@ -20,6 +20,7 @@ limitations under the License.
 #include "lib/json.h"
 #include "frontends/common/options.h"
 #include "frontends/p4/fromv1.0/v1model.h"
+#include "frontends/common/16model.h"
 #include "analyzer.h"
 // Currently we are requiring a v1model to be used
 
@@ -27,6 +28,19 @@ limitations under the License.
 // https://github.com/p4lang/behavioral-model/blob/master/docs/JSON_format.md
 
 namespace BMV2 {
+
+struct TableAttributes_Model {
+  TableAttributes_Model() : tableImplementation("implementation"),
+                            directCounter("counters"),
+                            directMeter("meters"), size("size"),
+                            supportTimeout("support_timeout") {}
+  ::Model::Elem tableImplementation;
+  ::Model::Elem directCounter;
+  ::Model::Elem directMeter;
+  ::Model::Elem size;
+  ::Model::Elem supportTimeout;
+  const unsigned defaultTableSize = 1024;
+};
 
 class ExpressionConverter;
 
@@ -55,7 +69,15 @@ class JsonConverter final {
  public:
     const CompilerOptions& options;
     Util::JsonObject       toplevel;  // output is constructed here
+
+    // TODO(pierce): going away
     P4V1::V1Model&         v1model;
+
+    // TODO(pierce): can I add these here?
+    TableAttributes_Model  tableAttributes;
+    ::Model::Elem          rangeMatchType;
+    ::Model::Elem          selectorMatchType;
+
     P4::P4CoreLibrary&     corelib;
     P4::ReferenceMap*      refMap;
     P4::TypeMap*           typeMap;
@@ -85,10 +107,8 @@ class JsonConverter final {
     cstring createJsonType(const IR::Type_StructLike *type);
     cstring createJsonType(const IR::Type_Tuple *type);
     unsigned nextId(cstring group);
-    void addHeaderStacks(const IR::Type_Struct* headersStruct);
     void addLocals();
-    void addTypesAndInstances(const IR::Type_StructLike* type, bool meta);
-//    void addTypesAndInstances(const IR::Type_Struct *type);
+    void addTypesAndInstances(const IR::Type_Struct *type);
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                            Util::JsonArray* result, Util::JsonArray* fieldLists,
                            Util::JsonArray* calculations, Util::JsonArray* learn_lists);
@@ -107,8 +127,6 @@ class JsonConverter final {
     cstring createCalculation(cstring algo, const IR::Expression* fields,
                               Util::JsonArray* calculations);
     Util::IJson* nodeName(const CFG::Node* node) const;
-    void createForceArith(const IR::Type* stdMetaType, cstring name,
-                          Util::JsonArray* force_list) const;
     cstring convertHashAlgorithm(cstring algorithm) const;
     // Return 'true' if the table is 'simple'
     bool handleTableImplementation(const IR::TableProperty* implementation,
@@ -118,8 +136,6 @@ class JsonConverter final {
     // returns id of created field list
     int createFieldList(const IR::Expression* expr, cstring group,
                         cstring listName, Util::JsonArray* fieldLists);
-    void generateUpdate(const IR::P4Control* cont,
-                        Util::JsonArray* checksums, Util::JsonArray* calculations);
 
     // Operates on a select keyset
     void convertSimpleKey(const IR::Expression* keySet,

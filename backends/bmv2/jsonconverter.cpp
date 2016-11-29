@@ -231,6 +231,12 @@ class ExpressionConverter : public Inspector {
                 v->append(width);
                 map.emplace(expression, j);
                 return;
+            } else {
+                // TODO(pierce): extern method call json here
+                printf("Got extern methodcall expression: %s\n", expression->toString());
+                auto j = new Util::JsonObject();
+                map.emplace(expression, j);
+                return;
             }
         } else if (instance->is<P4::BuiltInMethod>()) {
             auto bim = instance->to<P4::BuiltInMethod>();
@@ -398,6 +404,14 @@ class ExpressionConverter : public Inspector {
                     e->append(expression->member);
                     done = true;
                 }
+            } else if (expression->expr->is<IR::PathExpression>()) {
+              // TODO(pierce): look ahead to skip externs for now, but do them eventually
+              auto pathExp = expression->expr->to<IR::PathExpression>();
+              auto decl = converter->refMap->getDeclaration(pathExp->path, true);
+              if (decl->is<IR::Declaration_Instance>()) {
+                printf("Got extern path expression: %s\n", expression->toString());
+                done = true;
+              }
             }
 
             if (!done) {
@@ -546,67 +560,77 @@ class ExpressionConverter : public Inspector {
     }
 
     void postorder(const IR::PathExpression* expression) override {
-        // This is useful for action bodies mostly
-        auto decl = converter->refMap->getDeclaration(expression->path, true);
-        if (auto param = decl->to<IR::Parameter>()) {
-            if (param == converter->stdMetadataParameter) {
-                // This is a flat struct
-                auto result = new Util::JsonObject();
-                result->emplace("type", "header");
-                result->emplace("value", converter->jsonMetadataParameterName);
-                map.emplace(expression, result);
-                return;
-            }
-            if (converter->structure.nonActionParameters.find(param) !=
-                converter->structure.nonActionParameters.end()) {
-                map.emplace(expression, new Util::JsonValue(param->name.name));
-                return;
-            }
-
-            auto result = new Util::JsonObject();
-            result->emplace("type", "runtime_data");
-            unsigned paramIndex = ::get(converter->structure.index, param);
-            result->emplace("value", paramIndex);
-            map.emplace(expression, result);
-        } else if (auto var = decl->to<IR::Declaration_Variable>()) {
-            auto result = new Util::JsonObject();
-            auto type = converter->typeMap->getType(var, true);
-            if (type->is<IR::Type_StructLike>()) {
-                result->emplace("type", "header");
-                result->emplace("value", var->name);
-            } else if (auto tt = type->to<IR::Type_Tuple>()) {
-                result->emplace("type", "header");
-                result->emplace("value", converter->createJsonType(tt));
-            } else if (type->is<IR::Type_Bits>() ||
-                       (type->is<IR::Type_Boolean>() && leftValue)) {
-                // no convertion d2b when writing (leftValue is true) to a boolean
-                result->emplace("type", "field");
-                auto e = mkArrayField(result, "value");
-                e->append(converter->scalarsName);
-                e->append(var->name);
-            } else if (type->is<IR::Type_Boolean>()) {
-                // Boolean variables are stored as ints, so we have to insert a conversion when
-                // reading such a variable
-                result->emplace("type", "expression");
-                auto e = new Util::JsonObject();
-                result->emplace("value", e);
-                e->emplace("op", "d2b");  // data to Boolean cast
-                e->emplace("left", Util::JsonValue::null);
-                auto r = new Util::JsonObject();
-                e->emplace("right", r);
-                r->emplace("type", "field");
-                auto f = mkArrayField(r, "value");
-                f->append(converter->scalarsName);
-                f->append(var->name);
-            } else {
-                BUG("%1%: type not yet handled", type);
-            }
-            map.emplace(expression, result);
+      // This is useful for action bodies mostly
+      auto decl = converter->refMap->getDeclaration(expression->path, true);
+      if (auto param = decl->to<IR::Parameter>()) {
+        if (param == converter->stdMetadataParameter) {
+          // This is a flat struct
+          auto result = new Util::JsonObject();
+          result->emplace("type", "header");
+          result->emplace("value", converter->jsonMetadataParameterName);
+          map.emplace(expression, result);
+          return;
         }
+        if (converter->structure.nonActionParameters.find(param) !=
+            converter->structure.nonActionParameters.end()) {
+          map.emplace(expression, new Util::JsonValue(param->name.name));
+          return;
+        }
+
+        auto result = new Util::JsonObject();
+        result->emplace("type", "runtime_data");
+        unsigned paramIndex = ::get(converter->structure.index, param);
+        result->emplace("value", paramIndex);
+        map.emplace(expression, result);
+      } else if (auto var = decl->to<IR::Declaration_Variable>()) {
+        auto result = new Util::JsonObject();
+        auto type = converter->typeMap->getType(var, true);
+        if (type->is<IR::Type_StructLike>()) {
+          result->emplace("type", "header");
+          result->emplace("value", var->name);
+        } else if (auto tt = type->to<IR::Type_Tuple>()) {
+          result->emplace("type", "header");
+          result->emplace("value", converter->createJsonType(tt));
+        } else if (type->is<IR::Type_Bits>() ||
+                   (type->is<IR::Type_Boolean>() && leftValue)) {
+          // no convertion d2b when writing (leftValue is true) to a boolean
+          result->emplace("type", "field");
+          auto e = mkArrayField(result, "value");
+          e->append(converter->scalarsName);
+          e->append(var->name);
+        } else if (type->is<IR::Type_Boolean>()) {
+          // Boolean variables are stored as ints, so we have to
+          // insert a conversion when reading such a variable
+          result->emplace("type", "expression");
+          auto e = new Util::JsonObject();
+          result->emplace("value", e);
+          e->emplace("op", "d2b");  // data to Boolean cast
+          e->emplace("left", Util::JsonValue::null);
+          auto r = new Util::JsonObject();
+          e->emplace("right", r);
+          r->emplace("type", "field");
+          auto f = mkArrayField(r, "value");
+          f->append(converter->scalarsName);
+          f->append(var->name);
+        } else {
+            BUG("%1%: type not yet handled", type);
+        }
+        map.emplace(expression, result);
+      } else if (auto inst = decl->to<IR::Declaration_Instance>()) {
+        // TODO(pierce): wait for antonin to implement this in bmv2
+        // the json representation for externs is not finalized
+        auto result = new Util::JsonObject();
+        auto type = converter->typeMap->getType(inst, true);
+        if (type->is<IR::Type_Extern>()) {
+        } else {
+            BUG("%1%: type not yet handled", type);
+        }
+        map.emplace(expression, result);
+      }
     }
 
     void postorder(const IR::Expression* expression) override {
-        BUG("%1%: Unhandled case", expression);
+      BUG("%1%: Unhandled case", expression);
     }
 
     // doFixup = true -> insert masking operations for proper arithmetic implementation
@@ -670,102 +694,107 @@ class ExpressionConverter : public Inspector {
 };
 
 JsonConverter::JsonConverter(const CompilerOptions& options) :
-        options(options), v1model(P4V1::V1Model::instance),
-        corelib(P4::P4CoreLibrary::instance),
-        refMap(nullptr), typeMap(nullptr), dropActionId(0), toplevelBlock(nullptr),
-        conv(new ExpressionConverter(this)),
-        headerParameter(nullptr), userMetadataParameter(nullptr), stdMetadataParameter(nullptr)
+    options(options), v1model(P4V1::V1Model::instance), tableAttributes(),
+    rangeMatchType("range"), selectorMatchType("selector"),
+    corelib(P4::P4CoreLibrary::instance),
+    refMap(nullptr), typeMap(nullptr), dropActionId(0), toplevelBlock(nullptr),
+    conv(new ExpressionConverter(this)),
+    headerParameter(nullptr), userMetadataParameter(nullptr), stdMetadataParameter(nullptr)
 {}
 
 // return calculation name
 cstring JsonConverter::createCalculation(cstring algo, const IR::Expression* fields,
                                          Util::JsonArray* calculations) {
-    cstring calcName = refMap->newName("calc_");
-    auto calc = new Util::JsonObject();
-    calc->emplace("name", calcName);
-    calc->emplace("id", nextId("calculations"));
-    calc->emplace("algo", algo);
-    auto jright = conv->convert(fields);
-    calc->emplace("input", jright);
-    calculations->append(calc);
-    return calcName;
+  cstring calcName = refMap->newName("calc_");
+  auto calc = new Util::JsonObject();
+  calc->emplace("name", calcName);
+  calc->emplace("id", nextId("calculations"));
+  calc->emplace("algo", algo);
+  auto jright = conv->convert(fields);
+  calc->emplace("input", jright);
+  calculations->append(calc);
+  return calcName;
 }
 
+
+// TODO(pierce): maybe break up this function a bit?
 void
 JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                                  Util::JsonArray* result, Util::JsonArray* fieldLists,
                                  Util::JsonArray* calculations, Util::JsonArray* learn_lists) {
-    for (auto s : *body) {
-        if (!s->is<IR::Statement>()) {
-            continue;
-        } else if (s->is<IR::BlockStatement>()) {
-            convertActionBody(s->to<IR::BlockStatement>()->components, result, fieldLists,
-                              calculations, learn_lists);
-            continue;
-        } else if (s->is<IR::ReturnStatement>()) {
-            break;
-        } else if (s->is<IR::ExitStatement>()) {
-            auto primitive = mkPrimitive("exit", result);
-            (void)mkParameters(primitive);
-            break;
-        } else if (s->is<IR::AssignmentStatement>()) {
-            const IR::Expression* l, *r;
-            auto assign = s->to<IR::AssignmentStatement>();
-            l = assign->left;
-            r = assign->right;
+  for (auto s : *body) {
+    if (!s->is<IR::Statement>()) {
+      continue;
+    } else if (s->is<IR::BlockStatement>()) {
+      convertActionBody(s->to<IR::BlockStatement>()->components, result,
+                        fieldLists, calculations, learn_lists);
+      continue;
+    } else if (s->is<IR::ReturnStatement>()) {
+      break;
+    } else if (s->is<IR::ExitStatement>()) {
+      auto primitive = mkPrimitive("exit", result);
+      (void)mkParameters(primitive);
+      break;
+    } else if (s->is<IR::AssignmentStatement>()) {
+      const IR::Expression* l, *r;
+      auto assign = s->to<IR::AssignmentStatement>();
+      l = assign->left;
+      r = assign->right;
 
-            cstring operation;
-            auto type = typeMap->getType(l, true);
-            if (type->is<IR::Type_StructLike>())
-                operation = "copy_header";
-            else
-                operation = "modify_field";
-            auto primitive = mkPrimitive(operation, result);
-            auto parameters = mkParameters(primitive);
-            auto left = conv->convertLeftValue(l);
-            parameters->append(left);
-            bool convertBool = type->is<IR::Type_Boolean>();
-            auto right = conv->convert(r, true, true, convertBool);
-            parameters->append(right);
-            continue;
-        } else if (s->is<IR::EmptyStatement>()) {
-            continue;
-        } else if (s->is<IR::MethodCallStatement>()) {
-            auto mc = s->to<IR::MethodCallStatement>()->methodCall;
-            auto mi = P4::MethodInstance::resolve(mc, refMap, typeMap);
-            if (mi->is<P4::ActionCall>()) {
-                BUG("%1%: action call should have been inlined", mc);
-                continue;
-            } else if (mi->is<P4::BuiltInMethod>()) {
-                auto builtin = mi->to<P4::BuiltInMethod>();
+      cstring operation;
+      auto type = typeMap->getType(l, true);
+      if (type->is<IR::Type_StructLike>()) {
+        operation = "copy_header";
+      } else {
+        operation = "modify_field";
+      }
+      auto primitive = mkPrimitive(operation, result);
+      auto parameters = mkParameters(primitive);
+      auto left = conv->convertLeftValue(l);
+      parameters->append(left);
+      bool convertBool = type->is<IR::Type_Boolean>();
+      auto right = conv->convert(r, true, true, convertBool);
+      parameters->append(right);
+      continue;
+    } else if (s->is<IR::EmptyStatement>()) {
+      continue;
+    } else if (s->is<IR::MethodCallStatement>()) {
+      auto mc = s->to<IR::MethodCallStatement>()->methodCall;
+      auto mi = P4::MethodInstance::resolve(mc, refMap, typeMap);
+      if (mi->is<P4::ActionCall>()) {
+        BUG("%1%: action call should have been inlined", mc);
+        continue;
+      } else if (mi->is<P4::BuiltInMethod>()) {
+        auto builtin = mi->to<P4::BuiltInMethod>();
 
-                cstring prim;
-                auto parameters = new Util::JsonArray();
-                auto obj = conv->convert(builtin->appliedTo);
-                parameters->append(obj);
+        cstring prim;
+        auto parameters = new Util::JsonArray();
+        auto obj = conv->convert(builtin->appliedTo);
+        parameters->append(obj);
 
-                if (builtin->name == IR::Type_Header::setValid) {
-                    prim = "add_header";
-                } else if (builtin->name == IR::Type_Header::setInvalid) {
-                    prim = "remove_header";
-                } else if (builtin->name == IR::Type_Stack::push_front) {
-                    BUG_CHECK(mc->arguments->size() == 1, "Expected 1 argument for %1%", mc);
-                    auto arg = conv->convert(mc->arguments->at(0));
-                    prim = "push";
-                    parameters->append(arg);
-                } else if (builtin->name == IR::Type_Stack::pop_front) {
-                    BUG_CHECK(mc->arguments->size() == 1, "Expected 1 argument for %1%", mc);
-                    auto arg = conv->convert(mc->arguments->at(0));
-                    prim = "pop";
-                    parameters->append(arg);
-                } else {
-                    BUG("%1%: Unexpected built-in method", s);
-                }
-                auto primitive = mkPrimitive(prim, result);
-                primitive->emplace("parameters", parameters);
-                continue;
-            } else if (mi->is<P4::ExternMethod>()) {
-                auto em = mi->to<P4::ExternMethod>();
+        if (builtin->name == IR::Type_Header::setValid) {
+          prim = "add_header";
+        } else if (builtin->name == IR::Type_Header::setInvalid) {
+          prim = "remove_header";
+        } else if (builtin->name == IR::Type_Stack::push_front) {
+          BUG_CHECK(mc->arguments->size() == 1, "Expected 1 argument for %1%", mc);
+          auto arg = conv->convert(mc->arguments->at(0));
+          prim = "push";
+          parameters->append(arg);
+        } else if (builtin->name == IR::Type_Stack::pop_front) {
+          BUG_CHECK(mc->arguments->size() == 1, "Expected 1 argument for %1%", mc);
+          auto arg = conv->convert(mc->arguments->at(0));
+          prim = "pop";
+          parameters->append(arg);
+        } else {
+          BUG("%1%: Unexpected built-in method", s);
+        }
+        auto primitive = mkPrimitive(prim, result);
+        primitive->emplace("parameters", parameters);
+        continue;
+      } else if (mi->is<P4::ExternMethod>()) {
+        auto em = mi->to<P4::ExternMethod>();
+        // TODO(pierce): this code will go away once externs are solved in bmv2
                 if (em->originalExternType->name == v1model.counter.name) {
                     if (em->method->name == v1model.counter.increment.name) {
                         BUG_CHECK(mc->arguments->size() == 1, "Expected 1 argument for %1%", mc);
@@ -1002,52 +1031,52 @@ int JsonConverter::createFieldList(const IR::Expression* expr, cstring group, cs
 Util::JsonArray* JsonConverter::createActions(Util::JsonArray* fieldLists,
                                               Util::JsonArray* calculations,
                                               Util::JsonArray* learn_lists) {
-    auto result = new Util::JsonArray();
-    for (auto it : structure.actions) {
-        auto action = it.first;
-        auto control = it.second;
-        if (control != nullptr) {
-            // It could be nullptr for global actions
-            if (v1model.ingress.standardMetadataParam.index >= control->type->applyParams->size()) {
-                // FIXME -- compute/verifyChecksum don't have a standard_metadata argument and will
-                // fail below if we try to convert their 'action'.  When converting from p4_14,
-                // we don't even call here with them (why?), but when compiling native P4_16
-                // we do.  skipping for now.
-                continue; }
-            stdMetadataParameter = control->type->applyParams->getParameter(
-                v1model.ingress.standardMetadataParam.index);
-            userMetadataParameter = control->type->applyParams->getParameter(
-                v1model.ingress.metadataParam.index);
-        }
-
-        cstring name = nameFromAnnotation(action->annotations, action->name);
-        auto jact = new Util::JsonObject();
-        jact->emplace("name", name);
-        unsigned id = nextId("actions");
-        structure.ids.emplace(action, id);
-        jact->emplace("id", id);
-        auto params = mkArrayField(jact, "runtime_data");
-        for (auto p : *action->parameters->getEnumerator()) {
-            // The P4 v1.0 compiler removes unused action parameters!
-            // We have to do the same, although this seems wrong.
-            if (!refMap->isUsed(p)) {
-                ::warning("Removing unused action parameter %1% for compatibility reasons", p);
-                continue;
-            }
-
-            auto param = new Util::JsonObject();
-            param->emplace("name", p->name);
-            auto type = typeMap->getType(p, true);
-            if (!type->is<IR::Type_Bits>())
-                ::error("%1%: Action parameters can only be bit<> or int<> on this target", p);
-            param->emplace("bitwidth", type->width_bits());
-            params->append(param);
-        }
-        auto body = mkArrayField(jact, "primitives");
-        convertActionBody(action->body->components, body, fieldLists, calculations, learn_lists);
-        result->append(jact);
+  auto result = new Util::JsonArray();
+  for (auto it : structure.actions) {
+    auto action = it.first;
+    auto control = it.second;
+    if (control != nullptr) {
+      // It could be nullptr for global actions
+      if (v1model.ingress.standardMetadataParam.index >= control->type->applyParams->size()) {
+        // FIXME -- compute/verifyChecksum don't have a standard_metadata argument and will
+        // fail below if we try to convert their 'action'.  When converting from p4_14,
+        // we don't even call here with them (why?), but when compiling native P4_16
+        // we do.  skipping for now.
+        continue; }
+      stdMetadataParameter = control->type->applyParams->getParameter(
+          v1model.ingress.standardMetadataParam.index);
+      userMetadataParameter = control->type->applyParams->getParameter(
+          v1model.ingress.metadataParam.index);
     }
-    return result;
+
+    cstring name = nameFromAnnotation(action->annotations, action->name);
+    auto jact = new Util::JsonObject();
+    jact->emplace("name", name);
+    unsigned id = nextId("actions");
+    structure.ids.emplace(action, id);
+    jact->emplace("id", id);
+    auto params = mkArrayField(jact, "runtime_data");
+    for (auto p : *action->parameters->getEnumerator()) {
+      // The P4 v1.0 compiler removes unused action parameters!
+      // We have to do the same, although this seems wrong.
+      if (!refMap->isUsed(p)) {
+        ::warning("Removing unused action parameter %1% for compatibility reasons", p);
+        continue;
+      }
+
+      auto param = new Util::JsonObject();
+      param->emplace("name", p->name);
+      auto type = typeMap->getType(p, true);
+      if (!type->is<IR::Type_Bits>())
+        ::error("%1%: Action parameters can only be bit<> or int<> on this target", p);
+        param->emplace("bitwidth", type->width_bits());
+        params->append(param);
+      }
+      auto body = mkArrayField(jact, "primitives");
+      convertActionBody(action->body->components, body, fieldLists, calculations, learn_lists);
+      result->append(jact);
+  }
+  return result;
 }
 
 Util::IJson* JsonConverter::nodeName(const CFG::Node* node) const
@@ -1116,7 +1145,7 @@ bool JsonConverter::handleTableImplementation(const IR::TableProperty* implement
         for (auto ke : *key->keyElements) {
             auto mt = refMap->getDeclaration(ke->matchType->path, true)->to<IR::Declaration_ID>();
             BUG_CHECK(mt != nullptr, "%1%: could not find declaration", ke->matchType);
-            if (mt->name.name != v1model.selectorMatchType.name)
+            if (mt->name.name != selectorMatchType.name)
                 continue;
 
             auto expr = ke->expression;
@@ -1133,22 +1162,7 @@ bool JsonConverter::handleTableImplementation(const IR::TableProperty* implement
 }
 
 cstring JsonConverter::convertHashAlgorithm(cstring algorithm) const {
-    cstring result;
-    if (algorithm == v1model.algorithm.crc32.name)
-        result = "crc32";
-    else if (algorithm == v1model.algorithm.crc32_custom.name)
-        result = "crc32_custom";
-    else if (algorithm == v1model.algorithm.crc16.name)
-        result = "crc16";
-    else if (algorithm == v1model.algorithm.crc16_custom.name)
-        result = "crc16_custom";
-    else if (algorithm == v1model.algorithm.random.name)
-        result = "random";
-    else if (algorithm == v1model.algorithm.identity.name)
-        result = "identity";
-    else
-        ::error("%1%: unexpected algorithm", algorithm);
-    return result;
+  return algorithm;
 }
 
 Util::IJson*
@@ -1207,9 +1221,9 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
             } else if (mt->name.name == corelib.lpmMatch.name) {
                 if (table_match_type != "lpm")
                     table_match_type = "lpm";
-            } else if (mt->name.name == v1model.rangeMatchType.name) {
+            } else if (mt->name.name == rangeMatchType.name) {
                 continue;
-            } else if (mt->name.name == v1model.selectorMatchType.name) {
+            } else if (mt->name.name == selectorMatchType.name) {
                 continue;
             } else {
                 ::error("%1%: match type not supported on this target", mt);
@@ -1229,11 +1243,13 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
     result->emplace("match_type", table_match_type);
     conv->simpleExpressionsOnly = false;
 
-    auto impl = table->properties->getProperty(v1model.tableAttributes.tableImplementation.name);
+    // TODO(pierce): table attributes will have to be agnostically
+    // listed in the json so the target can interpret them
+    auto impl = table->properties->getProperty(tableAttributes.tableImplementation.name);
     bool simple = handleTableImplementation(impl, key, result);
 
     unsigned size = 0;
-    auto sz = table->properties->getProperty(v1model.tableAttributes.size.name);
+    auto sz = table->properties->getProperty(tableAttributes.size.name);
     if (sz != nullptr) {
         if (sz->value->is<IR::ExpressionValue>()) {
             auto expr = sz->value->to<IR::ExpressionValue>()->expression;
@@ -1248,10 +1264,10 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
         }
     }
     if (size == 0)
-        size = v1model.tableAttributes.defaultTableSize;
+        size = tableAttributes.defaultTableSize;
 
     result->emplace("max_size", size);
-    auto ctrs = table->properties->getProperty(v1model.tableAttributes.directCounter.name);
+    auto ctrs = table->properties->getProperty(tableAttributes.directCounter.name);
     if (ctrs != nullptr) {
         result->emplace("with_counters", true);
         auto jctr = new Util::JsonObject();
@@ -1266,7 +1282,7 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
     }
 
     bool sup_to = false;
-    auto timeout = table->properties->getProperty(v1model.tableAttributes.supportTimeout.name);
+    auto timeout = table->properties->getProperty(tableAttributes.supportTimeout.name);
     if (timeout != nullptr) {
         if (timeout->value->is<IR::ExpressionValue>()) {
             auto expr = timeout->value->to<IR::ExpressionValue>()->expression;
@@ -1281,7 +1297,7 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
     }
     result->emplace("support_timeout", sup_to);
 
-    auto dm = table->properties->getProperty(v1model.tableAttributes.directMeter.name);
+    auto dm = table->properties->getProperty(tableAttributes.directMeter.name);
     if (dm != nullptr) {
         if (dm->value->is<IR::ExpressionValue>()) {
             auto expr = dm->value->to<IR::ExpressionValue>()->expression;
@@ -1436,169 +1452,181 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
 Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block, cstring name,
                                            Util::JsonArray *counters, Util::JsonArray* meters,
                                            Util::JsonArray* registers) {
-    const IR::P4Control* cont = block->container;
+  const IR::P4Control* cont = block->container;
+// TODO(pierce): why is he doing this
     // the index is the same for ingress and egress
+#if 0
     stdMetadataParameter = cont->type->applyParams->getParameter(
         v1model.ingress.standardMetadataParam.index);
     userMetadataParameter = cont->type->applyParams->getParameter(
         v1model.ingress.metadataParam.index);
+#endif
 
-    LOG1("Processing " << cont);
-    auto result = new Util::JsonObject();
-    result->emplace("name", name);
-    result->emplace("id", nextId("control"));
+  LOG1("Processing " << cont);
+  auto result = new Util::JsonObject();
+  result->emplace("name", name);
+  result->emplace("id", nextId("control"));
 
-    auto cfg = new CFG();
-    cfg->build(cont, refMap, typeMap);
+  auto cfg = new CFG();
+  cfg->build(cont, refMap, typeMap);
 
-    if (cfg->entryPoint->successors.size() == 0) {
-        result->emplace("init_table", Util::JsonValue::null);
-    } else {
-        BUG_CHECK(cfg->entryPoint->successors.size() == 1, "Expected 1 start node for %1%", cont);
-        auto start = (*(cfg->entryPoint->successors.edges.begin()))->endpoint;
-        result->emplace("init_table", start->name);
+  if (cfg->entryPoint->successors.size() == 0) {
+    result->emplace("init_table", Util::JsonValue::null);
+  } else {
+    BUG_CHECK(cfg->entryPoint->successors.size() == 1,
+              "Expected 1 start node for %1%", cont);
+    auto start = (*(cfg->entryPoint->successors.edges.begin()))->endpoint;
+    result->emplace("init_table", start->name);
+  }
+  auto tables = mkArrayField(result, "tables");
+  auto conditionals = mkArrayField(result, "conditionals");
+
+  for (auto node : cfg->allNodes) {
+    if (node->is<CFG::TableNode>()) {
+      auto j = convertTable(node->to<CFG::TableNode>(), counters);
+      tables->append(j);
+    } else if (node->is<CFG::IfNode>()) {
+      auto j = convertIf(node->to<CFG::IfNode>(), cont->name);
+      conditionals->append(j);
     }
-    auto tables = mkArrayField(result, "tables");
-    auto conditionals = mkArrayField(result, "conditionals");
+  }
 
-    for (auto node : cfg->allNodes) {
-        if (node->is<CFG::TableNode>()) {
-            auto j = convertTable(node->to<CFG::TableNode>(), counters);
-            tables->append(j);
-        } else if (node->is<CFG::IfNode>()) {
-            auto j = convertIf(node->to<CFG::IfNode>(), cont->name);
-            conditionals->append(j);
+  {
+    // synthesize an special table at the exit for dropping the packet
+    auto exitTable = new Util::JsonObject();
+    exitTable->emplace("name", nodeName(cfg->exitPoint));
+    exitTable->emplace("id", nextId("tables"));
+    auto key = mkArrayField(exitTable, "key");
+    auto ke = new Util::JsonObject();
+    key->append(ke);
+    ke->emplace("match_type", "exact");
+    auto drop = mkArrayField(ke, "target");
+    drop->append("standard_metadata");
+    drop->append("drop");
+    exitTable->emplace("match_type", "exact");
+    exitTable->emplace("type", "simple");
+    exitTable->emplace("max_size", 1);
+    exitTable->emplace("with_counters", false);
+    exitTable->emplace("support_timeout", false);
+    exitTable->emplace("direct_meters", Util::JsonValue::null);
+    auto actions = mkArrayField(exitTable, "actions");
+    actions->append(dropAction);
+    auto action_ids = mkArrayField(exitTable, "action_ids");
+    action_ids->append(dropActionId);
+    auto next_tables = new Util::JsonObject();
+    next_tables->emplace(dropAction, Util::JsonValue::null);
+    exitTable->emplace("next_tables", next_tables);
+    tables->append(exitTable);
+  }
+
+  for (auto c : *cont->controlLocals) {
+    if (c->is<IR::Declaration_Constant>() ||
+        c->is<IR::Declaration_Variable>() ||
+        c->is<IR::P4Action>() ||
+        c->is<IR::P4Table>())
+      continue;
+    if (c->is<IR::Declaration_Instance>()) {
+      auto bl = block->getValue(c);
+      CHECK_NULL(bl);
+      if (bl->is<IR::ExternBlock>()) {
+        auto eb = bl->to<IR::ExternBlock>();
+        if (eb->type->name == v1model.counter.name) {
+          auto jctr = new Util::JsonObject();
+          jctr->emplace("name", c->name);
+          jctr->emplace("id", nextId("counter_arrays"));
+          auto sz = eb->getParameterValue(v1model.counter.sizeParam.name);
+          CHECK_NULL(sz);
+          BUG_CHECK(sz->is<IR::Constant>(), "%1%: expected a constant", sz);
+          jctr->emplace("size", sz->to<IR::Constant>()->value);
+          jctr->emplace("is_direct", false);
+          counters->append(jctr);
+          continue;
+        } else if (eb->type->name == v1model.meter.name) {
+          auto jmtr = new Util::JsonObject();
+          jmtr->emplace("name", c->name);
+          jmtr->emplace("id", nextId("meter_arrays"));
+          jmtr->emplace("is_direct", false);
+          auto sz = eb->getParameterValue(v1model.meter.sizeParam.name);
+          CHECK_NULL(sz);
+          BUG_CHECK(sz->is<IR::Constant>(), "%1%: expected a constant", sz);
+          jmtr->emplace("size", sz->to<IR::Constant>()->value);
+          jmtr->emplace("rate_count", 2);
+          auto mkind = eb->getParameterValue(v1model.meter.typeParam.name);
+          CHECK_NULL(mkind);
+          BUG_CHECK(mkind->is<IR::Declaration_ID>(), "%1%: expected a member", mkind);
+          cstring name = mkind->to<IR::Declaration_ID>()->name;
+          cstring type;
+          if (name == v1model.meter.counterType.packets.name) {
+            type = "packets";
+          } else if (name == v1model.meter.counterType.bytes.name) {
+            type = "bytes";
+          } else {
+            type = "both";
+          }
+          jmtr->emplace("type", type);
+          meters->append(jmtr);
+          continue;
+        } else if (eb->type->name == v1model.registers.name) {
+          auto jreg = new Util::JsonObject();
+          jreg->emplace("name", c->name);
+          jreg->emplace("id", nextId("register_arrays"));
+          auto sz = eb->getParameterValue(v1model.registers.sizeParam.name);
+          CHECK_NULL(sz);
+          BUG_CHECK(sz->is<IR::Constant>(), "%1%: expected a constant", sz);
+          jreg->emplace("size", sz->to<IR::Constant>()->value);
+          BUG_CHECK(eb->instanceType->is<IR::Type_SpecializedCanonical>(),
+                    "%1%: Expected a generic specialized type", eb->instanceType);
+          auto st = eb->instanceType->to<IR::Type_SpecializedCanonical>();
+          BUG_CHECK(st->arguments->size() == 1, "%1%: expected 1 type argument");
+          unsigned width = st->arguments->at(0)->width_bits();
+          if (width == 0) {
+            ::error("%1%: unknown width", st->arguments->at(0));
+          }
+          jreg->emplace("bitwidth", width);
+          registers->append(jreg);
+          continue;
+        } else if (eb->type->name == v1model.directMeter.name) {
+          auto info = meterMap.getInfo(c);
+          CHECK_NULL(info);
+          CHECK_NULL(info->table);
+          CHECK_NULL(info->destinationField);
+
+          auto jmtr = new Util::JsonObject();
+          jmtr->emplace("name", c->name);
+          jmtr->emplace("id", nextId("meter_arrays"));
+          jmtr->emplace("is_direct", true);
+          jmtr->emplace("rate_count", 2);
+          auto mkind = eb->getParameterValue(v1model.directMeter.typeParam.name);
+          CHECK_NULL(mkind);
+          BUG_CHECK(mkind->is<IR::Declaration_ID>(), "%1%: expected a member", mkind);
+          cstring name = mkind->to<IR::Declaration_ID>()->name;
+          cstring type;
+          if (name == v1model.meter.counterType.packets.name) {
+            type = "packets";
+          } else if (name == v1model.meter.counterType.bytes.name) {
+            type = "bytes";
+          } else {
+            type = "both";
+          }
+          jmtr->emplace("type", type);
+          jmtr->emplace("size", info->tableSize);
+          cstring tblname = nameFromAnnotation(info->table->annotations,
+                                               info->table->name);
+          jmtr->emplace("binding", tblname);
+          auto result = conv->convert(info->destinationField);
+          jmtr->emplace("result_target", result->to<Util::JsonObject>()->get("value"));
+          meters->append(jmtr);
+          continue;
+        } else if (eb->type->name == v1model.ck16.name) {
+          // TODO(pierce): rewrite this whole for loop to agnostically
+          // create externs in the json eventually...but for now
+          // leave it and move on (for compile)
+          continue;
         }
+      }
     }
-
-    {
-        // synthesize an special table at the exit for dropping the packet
-        auto exitTable = new Util::JsonObject();
-        exitTable->emplace("name", nodeName(cfg->exitPoint));
-        exitTable->emplace("id", nextId("tables"));
-        auto key = mkArrayField(exitTable, "key");
-        auto ke = new Util::JsonObject();
-        key->append(ke);
-        ke->emplace("match_type", "exact");
-        auto drop = mkArrayField(ke, "target");
-        drop->append("standard_metadata");
-        drop->append("drop");
-        exitTable->emplace("match_type", "exact");
-        exitTable->emplace("type", "simple");
-        exitTable->emplace("max_size", 1);
-        exitTable->emplace("with_counters", false);
-        exitTable->emplace("support_timeout", false);
-        exitTable->emplace("direct_meters", Util::JsonValue::null);
-        auto actions = mkArrayField(exitTable, "actions");
-        actions->append(dropAction);
-        auto action_ids = mkArrayField(exitTable, "action_ids");
-        action_ids->append(dropActionId);
-        auto next_tables = new Util::JsonObject();
-        next_tables->emplace(dropAction, Util::JsonValue::null);
-        exitTable->emplace("next_tables", next_tables);
-        tables->append(exitTable);
-    }
-
-    for (auto c : *cont->controlLocals) {
-        if (c->is<IR::Declaration_Constant>() ||
-            c->is<IR::Declaration_Variable>() ||
-            c->is<IR::P4Action>() ||
-            c->is<IR::P4Table>())
-            continue;
-        if (c->is<IR::Declaration_Instance>()) {
-            auto bl = block->getValue(c);
-            CHECK_NULL(bl);
-            if (bl->is<IR::ExternBlock>()) {
-                auto eb = bl->to<IR::ExternBlock>();
-                if (eb->type->name == v1model.counter.name) {
-                    auto jctr = new Util::JsonObject();
-                    jctr->emplace("name", c->name);
-                    jctr->emplace("id", nextId("counter_arrays"));
-                    auto sz = eb->getParameterValue(v1model.counter.sizeParam.name);
-                    CHECK_NULL(sz);
-                    BUG_CHECK(sz->is<IR::Constant>(), "%1%: expected a constant", sz);
-                    jctr->emplace("size", sz->to<IR::Constant>()->value);
-                    jctr->emplace("is_direct", false);
-                    counters->append(jctr);
-                    continue;
-                } else if (eb->type->name == v1model.meter.name) {
-                    auto jmtr = new Util::JsonObject();
-                    jmtr->emplace("name", c->name);
-                    jmtr->emplace("id", nextId("meter_arrays"));
-                    jmtr->emplace("is_direct", false);
-                    auto sz = eb->getParameterValue(v1model.meter.sizeParam.name);
-                    CHECK_NULL(sz);
-                    BUG_CHECK(sz->is<IR::Constant>(), "%1%: expected a constant", sz);
-                    jmtr->emplace("size", sz->to<IR::Constant>()->value);
-                    jmtr->emplace("rate_count", 2);
-                    auto mkind = eb->getParameterValue(v1model.meter.typeParam.name);
-                    CHECK_NULL(mkind);
-                    BUG_CHECK(mkind->is<IR::Declaration_ID>(), "%1%: expected a member", mkind);
-                    cstring name = mkind->to<IR::Declaration_ID>()->name;
-                    cstring type;
-                    if (name == v1model.meter.counterType.packets.name)
-                        type = "packets";
-                    else if (name == v1model.meter.counterType.bytes.name)
-                        type = "bytes";
-                    else
-                        type = "both";
-                    jmtr->emplace("type", type);
-                    meters->append(jmtr);
-                    continue;
-                } else if (eb->type->name == v1model.registers.name) {
-                    auto jreg = new Util::JsonObject();
-                    jreg->emplace("name", c->name);
-                    jreg->emplace("id", nextId("register_arrays"));
-                    auto sz = eb->getParameterValue(v1model.registers.sizeParam.name);
-                    CHECK_NULL(sz);
-                    BUG_CHECK(sz->is<IR::Constant>(), "%1%: expected a constant", sz);
-                    jreg->emplace("size", sz->to<IR::Constant>()->value);
-                    BUG_CHECK(eb->instanceType->is<IR::Type_SpecializedCanonical>(),
-                              "%1%: Expected a generic specialized type", eb->instanceType);
-                    auto st = eb->instanceType->to<IR::Type_SpecializedCanonical>();
-                    BUG_CHECK(st->arguments->size() == 1, "%1%: expected 1 type argument");
-                    unsigned width = st->arguments->at(0)->width_bits();
-                    if (width == 0)
-                        ::error("%1%: unknown width", st->arguments->at(0));
-                    jreg->emplace("bitwidth", width);
-                    registers->append(jreg);
-                    continue;
-                } else if (eb->type->name == v1model.directMeter.name) {
-                    auto info = meterMap.getInfo(c);
-                    CHECK_NULL(info);
-                    CHECK_NULL(info->table);
-                    CHECK_NULL(info->destinationField);
-
-                    auto jmtr = new Util::JsonObject();
-                    jmtr->emplace("name", c->name);
-                    jmtr->emplace("id", nextId("meter_arrays"));
-                    jmtr->emplace("is_direct", true);
-                    jmtr->emplace("rate_count", 2);
-                    auto mkind = eb->getParameterValue(v1model.directMeter.typeParam.name);
-                    CHECK_NULL(mkind);
-                    BUG_CHECK(mkind->is<IR::Declaration_ID>(), "%1%: expected a member", mkind);
-                    cstring name = mkind->to<IR::Declaration_ID>()->name;
-                    cstring type;
-                    if (name == v1model.meter.counterType.packets.name)
-                        type = "packets";
-                    else if (name == v1model.meter.counterType.bytes.name)
-                        type = "bytes";
-                    else
-                        type = "both";
-                    jmtr->emplace("type", type);
-                    jmtr->emplace("size", info->tableSize);
-                    cstring tblname = nameFromAnnotation(info->table->annotations,
-                                                         info->table->name);
-                    jmtr->emplace("binding", tblname);
-                    auto result = conv->convert(info->destinationField);
-                    jmtr->emplace("result_target", result->to<Util::JsonObject>()->get("value"));
-                    meters->append(jmtr);
-                    continue;
-                }
-            }
-        }
-        BUG("%1%: not yet handled", c);
-    }
+    BUG("%1%: not yet handled", c);
+  }
 
     return result;
 }
@@ -1606,42 +1634,6 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block, cstrin
 unsigned JsonConverter::nextId(cstring group) {
     static std::map<cstring, unsigned> counters;
     return counters[group]++;
-}
-
-void JsonConverter::addHeaderStacks(const IR::Type_Struct* headersStruct) {
-    for (auto f : *headersStruct->fields) {
-        auto ft = typeMap->getType(f, true);
-        auto stack = ft->to<IR::Type_Stack>();
-        if (stack == nullptr)
-            continue;
-
-        LOG1("Creating " << stack);
-        auto json = new Util::JsonObject();
-        json->emplace("name", nameFromAnnotation(f->annotations, f->name.name));
-        json->emplace("id", nextId("stack"));
-        json->emplace("size", stack->getSize());
-        auto type = typeMap->getTypeType(stack->elementType, true);
-        BUG_CHECK(type->is<IR::Type_Header>(), "%1% not a header type", stack->elementType);
-        auto ht = type->to<IR::Type_Header>();
-        createJsonType(ht);
-
-        cstring header_type = stack->elementType->to<IR::Type_Header>()->name;
-        json->emplace("header_type", header_type);
-        auto stackMembers = mkArrayField(json, "header_ids");
-        for (unsigned i=0; i < stack->getSize(); i++) {
-            unsigned id = nextId("headers");
-            stackMembers->append(id);
-            auto header = new Util::JsonObject();
-            cstring name = nameFromAnnotation(f->annotations, f->name.name) +
-                    "[" + Util::toString(i) + "]";
-            header->emplace("name", name);
-            header->emplace("id", id);
-            header->emplace("header_type", header_type);
-            header->emplace("metadata", false);
-            headerInstances->append(header);
-        }
-        headerStacks->append(json);
-    }
 }
 
 void JsonConverter::addLocals() {
@@ -1722,323 +1714,182 @@ using ::P4::InferArchitecture;
 
 void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
                             IR::ToplevelBlock* toplevelBlock) {
-    this->toplevelBlock = toplevelBlock;
-    this->refMap = refMap;
-    this->typeMap = typeMap;
-    CHECK_NULL(typeMap);
-    CHECK_NULL(refMap);
+  this->toplevelBlock = toplevelBlock;
+  this->refMap = refMap;
+  this->typeMap = typeMap;
+  CHECK_NULL(typeMap);
+  CHECK_NULL(refMap);
 
-    auto package = toplevelBlock->getMain();
-    if (package == nullptr) {
-        ::error("No output to generate");
-        return;
-    }
+  auto package = toplevelBlock->getMain();
+  if (package == nullptr) {
+    ::error("No output to generate");
+    return;
+  }
 
-    if (package->type->name != v1model.sw.name) {
-        ::error("This back-end requires the program to be compiled for the %1% model",
-                v1model.sw.name);
-        return;
-    }
+  structure.analyze(toplevelBlock);
+  if (::errorCount() > 0) {
+    return;
+  }
 
-    structure.analyze(toplevelBlock);
-    if (::errorCount() > 0)
-        return;
+  headerTypes = mkArrayField(&toplevel, "header_types");
+  headerInstances = mkArrayField(&toplevel, "headers");
+  headerStacks = mkArrayField(&toplevel, "header_stacks");
+  auto fieldLists = mkArrayField(&toplevel, "field_lists");
+  auto prsrs = mkArrayField(&toplevel, "parsers");
 
-//    headerTypes = mkArrayField(&toplevel, "header_types");
-//    headerInstances = mkArrayField(&toplevel, "headers");
-//    headerStacks = mkArrayField(&toplevel, "header_stacks");
-//    auto fieldLists = mkArrayField(&toplevel, "field_lists");
-//    (void)nextId("field_lists");  // field list IDs must start at 1; 0 is reserved
-//    (void)nextId("learn_lists");  // idem
-//
-//    toplevel.emplace("program", options.file);
+  (void)nextId("field_lists");  // field list IDs must start at 1; 0 is reserved
+  (void)nextId("learn_lists");  // idem
 
-//    headerTypesCreated.clear();
-//    tupleTypesCreated.clear();
+  toplevel.emplace("program", options.file);
 
-//    for (auto p : *InferArchitecture::instance->getModel()->parsers) {
-//      auto parserBlock = package->getParameterValue(p->toString());
-//      CHECK_NULL(parserBlock);
-//      auto parser = parserBlock->to<IR::ParserBlock>()->container;
-//      for (auto parserParam : *p->getElems()) {
-//        auto paramVal = parser->type->applyParams->getParameter(parserParam.index);
-//        auto paramValType = typeMap->getType(paramVal->getNode(), true);
-//        auto pvt = paramValType->to<IR::Type_Struct>();
-//        if (pvt == nullptr) {
-//            ::error("Expected headers %1% to be a struct", headersType);
-//            return;
-//        }
-//        addTypesAndInstances(pvt, true);
-//      }
-//    }
-//    addLocals();
+  headerTypesCreated.clear();
+  tupleTypesCreated.clear();
 
-    auto parserBlock = package->getParameterValue(v1model.sw.parser.name);
+  for (auto p : *InferArchitecture::instance->getModel()->parsers) {
+    auto parserBlock = package->getParameterValue(p->toString());
     CHECK_NULL(parserBlock);
     auto parser = parserBlock->to<IR::ParserBlock>()->container;
 
-    auto hdr = parser->type->applyParams->getParameter(v1model.parser.headersParam.index);
-    auto headersType = typeMap->getType(hdr->getNode(), true);
-    auto ht = headersType->to<IR::Type_Struct>();
-    if (ht == nullptr) {
-        ::error("Expected headers %1% to be a struct", headersType);
-        return;
-    }
-
-    headerTypes = mkArrayField(&toplevel, "header_types");
-    headerInstances = mkArrayField(&toplevel, "headers");
-    headerStacks = mkArrayField(&toplevel, "header_stacks");
-    auto fieldLists = mkArrayField(&toplevel, "field_lists");
-    (void)nextId("field_lists");  // field list IDs must start at 1; 0 is reserved
-    (void)nextId("learn_lists");  // idem
-
-    toplevel.emplace("program", options.file);
-
-    headerTypesCreated.clear();
-    tupleTypesCreated.clear();
-    addTypesAndInstances(ht, false);
-    addHeaderStacks(ht);
-    if (::errorCount() > 0)
-        return;
-
+    // TODO(pierce): decouple -- what are these used for
     userMetadataParameter = parser->type->applyParams->getParameter(
         v1model.parser.metadataParam.index);
     stdMetadataParameter = parser->type->applyParams->getParameter(
         v1model.parser.standardMetadataParam.index);
-    auto mdType = typeMap->getType(userMetadataParameter, true);
-    auto mt = mdType->to<IR::Type_Struct>();
-    if (mt == nullptr) {
-        ::error("Expected metadata %1% to be a struct", mdType);
-        return;
-    }
-    addTypesAndInstances(mt, true);
-    addLocals();
 
-    auto prsrs = mkArrayField(&toplevel, "parsers");
+    for (auto parserParam : *p->getElems()) {
+      auto paramVal = parser->type->applyParams->getParameter(parserParam.index);
+      auto paramValType = typeMap->getType(paramVal->getNode(), true);
+      auto pvt = paramValType->to<IR::Type_Struct>();
+      if (pvt != nullptr) {
+        addTypesAndInstances(pvt);
+      }
+    }
     auto parserJson = toJson(parser);
     prsrs->append(parserJson);
+  }
+  addLocals();
 
-    auto deparserBlock = package->getParameterValue(v1model.sw.deparser.name);
-    CHECK_NULL(deparserBlock);
-    auto deparser = deparserBlock->to<IR::ControlBlock>()->container;
+  auto meters = mkArrayField(&toplevel, "meter_arrays");
+  auto counters = mkArrayField(&toplevel, "counter_arrays");
+  auto registers = mkArrayField(&toplevel, "register_arrays");
+  auto calculations = mkArrayField(&toplevel, "calculations");
+  auto learn_lists = mkArrayField(&toplevel, "learn_lists");
 
-    auto dprs = mkArrayField(&toplevel, "deparsers");
-    auto deparserJson = convertDeparser(deparser);
-    if (::errorCount() > 0)
-        return;
-    dprs->append(deparserJson);
+  auto acts = createActions(fieldLists, calculations, learn_lists);
+  if (::errorCount() > 0) {
+    return;
+  }
+  toplevel.emplace("actions", acts);
+  {
+    // synthesize a "drop" action
+    auto drop = new Util::JsonObject();
+    drop->emplace("name", dropAction);
+    dropActionId = nextId("actions");
+    drop->emplace("id", dropActionId);
+    drop->emplace("runtime_data", new Util::JsonArray());
+    auto body = mkArrayField(drop, "primitives");
+    auto call = new Util::JsonObject();
+    call->emplace("op", "drop");
+    call->emplace("parameters", new Util::JsonArray());
+    body->append(call);
+    acts->append(drop);
+  }
 
-    auto meters = mkArrayField(&toplevel, "meter_arrays");
-    auto counters = mkArrayField(&toplevel, "counter_arrays");
-    auto registers = mkArrayField(&toplevel, "register_arrays");
-    auto calculations = mkArrayField(&toplevel, "calculations");
-    auto learn_lists = mkArrayField(&toplevel, "learn_lists");
+  auto pipelines = mkArrayField(&toplevel, "pipelines");
 
-    auto acts = createActions(fieldLists, calculations, learn_lists);
-    if (::errorCount() > 0)
-        return;
-    toplevel.emplace("actions", acts);
-    {
-        // synthesize a "drop" action
-        auto drop = new Util::JsonObject();
-        drop->emplace("name", dropAction);
-        dropActionId = nextId("actions");
-        drop->emplace("id", dropActionId);
-        drop->emplace("runtime_data", new Util::JsonArray());
-        auto body = mkArrayField(drop, "primitives");
-        auto call = new Util::JsonObject();
-        call->emplace("op", "drop");
-        call->emplace("parameters", new Util::JsonArray());
-        body->append(call);
-        acts->append(drop);
-    }
-
-    auto pipelines = mkArrayField(&toplevel, "pipelines");
-    auto ingressBlock = package->getParameterValue(v1model.sw.ingress.name);
-    auto ingressControl = ingressBlock->to<IR::ControlBlock>();
-    auto ingress = convertControl(ingressControl, v1model.ingress.name,
+  for (auto c : *InferArchitecture::instance->getModel()->controls) {
+    auto controlBlock = package->getParameterValue(c->toString())->to<IR::ControlBlock>();
+    auto control = convertControl(controlBlock, controlBlock->container->getName(),
                                   counters, meters, registers);
-    if (::errorCount() > 0)
-        return;
-    pipelines->append(ingress);
-    auto egressBlock = package->getParameterValue(v1model.sw.egress.name);
-    auto egress = convertControl(egressBlock->to<IR::ControlBlock>(),
-                                 v1model.egress.name, counters, meters, registers);
-    if (::errorCount() > 0)
-        return;
-    pipelines->append(egress);
-
-    // standard metadata type and instance
-    stdMetadataParameter = ingressControl->container->type->applyParams->getParameter(
-        v1model.ingress.standardMetadataParam.index);
-    auto stdMetaType = typeMap->getType(stdMetadataParameter, true);
-    auto stdMetaName = createJsonType(stdMetaType->to<IR::Type_StructLike>());
-
-    {
-        auto json = new Util::JsonObject();
-        json->emplace("name", v1model.ingress.standardMetadataParam.name);
-        json->emplace("id", nextId("headers"));
-        json->emplace("header_type", stdMetaName);
-        json->emplace("metadata", true);
-        headerInstances->append(json);
+    if (::errorCount() > 0) {
+      return; 
     }
+    pipelines->append(control);
+  }
 
-    auto checksums = mkArrayField(&toplevel, "checksums");
-    auto updateBlock = package->getParameterValue(v1model.sw.update.name);
-    CHECK_NULL(updateBlock);
-    generateUpdate(updateBlock->to<IR::ControlBlock>()->container, checksums, calculations);
-    if (::errorCount() > 0)
-        return;
-
-    // The whole P4 v1.0 spec about metadata is very confusing.
-    // So this is rather heuristic...  Maybe these should be in v1model.p4.
-    auto fa = mkArrayField(&toplevel, "force_arith");
-    createForceArith(stdMetaType, v1model.standardMetadata.name, fa);
-    std::vector<cstring> toForce = { "intrinsic_metadata", "queueing_metadata" };
-    for (auto metaname : toForce) {
-        auto im = mt->getField(metaname);
-        if (im != nullptr) {
-            auto type = typeMap->getType(im->type, true);
-            createForceArith(type, metaname, fa);
-        }
-    }
 }
 
-void JsonConverter::createForceArith(const IR::Type* meta, cstring name,
-                                     Util::JsonArray* force) const {
-    if (!meta->is<IR::Type_Struct>())
-        return;
-    auto st = meta->to<IR::Type_StructLike>();
-    for (auto f : *st->fields) {
-        auto field = pushNewArray(force);
-        field->append(name);
-        field->append(f->name.name);
-    }
-}
+void JsonConverter::addTypesAndInstances(const IR::Type_Struct *type) {
+  // TODO(pierce): generalize for different header/metadata structures
+  for (auto f : *type->fields) {
+    auto ft = typeMap->getType(f, true);
+    if (ft->is<IR::Type_Header>()) {
+      createJsonType(ft->to<IR::Type_StructLike>());
+      auto json = new Util::JsonObject();
+      json->emplace("name", nameFromAnnotation(f->annotations, f->name));
+      json->emplace("id", nextId("headers"));
+      json->emplace("header_type", ft->to<IR::Type_StructLike>()->name.name);
+      json->emplace("metadata", false);
+      headerInstances->append(json);
+    } else if (ft->is<IR::Type_Struct>()) {
+      createJsonType(ft->to<IR::Type_StructLike>());
+      auto json = new Util::JsonObject();
+      json->emplace("name", nameFromAnnotation(f->annotations, f->name));
+      json->emplace("id", nextId("headers"));
+      json->emplace("header_type", ft->to<IR::Type_StructLike>()->name.name);
+      json->emplace("metadata", true);
+      headerInstances->append(json);
+    } else if (ft->is<IR::Type_Stack>()) {
+      auto stack = ft->to<IR::Type_Stack>();
+      LOG1("Creating " << stack);
+      auto json = new Util::JsonObject();
+      json->emplace("name", nameFromAnnotation(f->annotations, f->name.name));
+      json->emplace("id", nextId("stack"));
+      json->emplace("size", stack->getSize());
+      auto type = typeMap->getTypeType(stack->elementType, true);
+      BUG_CHECK(type->is<IR::Type_Header>(),
+                "%1% not a header type",
+                stack->elementType);
+      auto ht = type->to<IR::Type_Header>();
+      createJsonType(ht);
 
-void JsonConverter::generateUpdate(const IR::P4Control* updateControl,
-                                   Util::JsonArray* checksums, Util::JsonArray* calculations) {
-    // Currently this is very hacky to target the very limited support for checksums in BMv2
-    // This will work much better when BMv2 offers a checksum extern.
-    for (auto stat : *updateControl->body->components) {
-        if (stat->is<IR::IfStatement>()) {
-            // The way checksums work in Json, they always ignore the condition!
-            stat = stat->to<IR::IfStatement>()->ifTrue;
-        }
-        if (stat->is<IR::AssignmentStatement>()) {
-            auto assign = stat->to<IR::AssignmentStatement>();
-            if (assign->right->is<IR::MethodCallExpression>()) {
-                auto mi = P4::MethodInstance::resolve(
-                    assign->right->to<IR::MethodCallExpression>(), refMap, typeMap);
-                if (mi->is<P4::ExternMethod>()) {
-                    auto em = mi->to<P4::ExternMethod>();
-                    if (em->method->name.name == v1model.ck16.get.name &&
-                        em->originalExternType->name.name == v1model.ck16.name) {
-                        BUG_CHECK(mi->expr->arguments->size() == 1,
-                                  "%1%: Expected 1 argument", assign->right);
-                        auto cksum = new Util::JsonObject();
-                        cstring calcName = createCalculation("csum16", mi->expr->arguments->at(0),
-                                                             calculations);
-                        cksum->emplace("name", refMap->newName("cksum_"));
-                        cksum->emplace("id", nextId("checksums"));
-                        auto jleft = conv->convert(assign->left);
-                        cksum->emplace("target", jleft->to<Util::JsonObject>()->get("value"));
-                        cksum->emplace("type", "generic");
-                        cksum->emplace("calculation", calcName);
-                        checksums->append(cksum);
-                        continue;
-                    }
-                }
-            }
-        } else if (auto mc = stat->to<IR::MethodCallStatement>()) {
-            auto mi = P4::MethodInstance::resolve(mc->methodCall, refMap, typeMap, true);
-            BUG_CHECK(mi && mi->isApply(), "Call of something other than an apply method");
-            // FIXME -- ignore for now
-            continue;
-        }
-        BUG("%1%: not handled yet", stat);
+      cstring header_type = stack->elementType->to<IR::Type_Header>()->name;
+      json->emplace("header_type", header_type);
+      auto stackMembers = mkArrayField(json, "header_ids");
+      for (unsigned i=0; i < stack->getSize(); i++) {
+          unsigned id = nextId("headers");
+          stackMembers->append(id);
+          auto header = new Util::JsonObject();
+          cstring name = nameFromAnnotation(f->annotations, f->name.name) +
+                  "[" + Util::toString(i) + "]";
+          header->emplace("name", name);
+          header->emplace("id", id);
+          header->emplace("header_type", header_type);
+          header->emplace("metadata", false);
+          headerInstances->append(header);
+      }
+      headerStacks->append(json);
     }
-}
-
-//void JsonConverter::addTypesAndInstances(const IR::Type_Struct *type) {
-//  for (auto f : *type->fields) {
-//    auto ft = typeMap->getType(f, true);
-//    createJsonType(ft->to<IR::Type_StructLike>());
-//    auto json = new Util::JsonObject();
-//    if (ft->is<IR::Type_Header>()) {
-//      json->emplace("name", nameFromAnnotation(f->annotations, f->name));
-//      json->emplace("id", nextId("headers"));
-//      json->emplace("header_type", ft->to<IR::Type_StructLike>()->name.name);
-//      json->emplace("metadata", false);
-//      headerInstances->append(json);
-//    } else if (ft->is<IR::Type_Struct>()) {
-//      json->emplace("name", nameFromAnnotation(f->annotations, f->name));
-//      json->emplace("id", nextId("headers"));
-//      json->emplace("header_type", ft->to<IR::Type_StructLike>()->name.name);
-//      json->emplace("metadata", true);
-//      headerInstances->append(json);
-//    }
-//  }
-//}
-
-void JsonConverter::addTypesAndInstances(const IR::Type_StructLike* type, bool meta) {
-    // TODO: this is wrong if the structs are more deeply nested.
-    for (auto f : *type->fields) {
-        auto ft = typeMap->getType(f, true);
-        if (ft->is<IR::Type_StructLike>()) {
-            auto st = ft->to<IR::Type_StructLike>();
-            createJsonType(st);
-        }
-    }
-
-    for (auto f : *type->fields) {
-        auto ft = typeMap->getType(f, true);
-        if (ft->is<IR::Type_StructLike>()) {
-            auto json = new Util::JsonObject();
-            json->emplace("name", nameFromAnnotation(f->annotations, f->name));
-            json->emplace("id", nextId("headers"));
-            json->emplace("header_type", ft->to<IR::Type_StructLike>()->name.name);
-            json->emplace("metadata", meta);
-            headerInstances->append(json);
-        } else if (ft->is<IR::Type_Stack>()) {
-            // Done elsewhere
-            continue;
-        } else {
-            if (!meta)
-                ::error("Type %1% should only contain headers or stacks", type);
-            else
-                BUG("%1%: Unhandled type for %2%", ft, f);
-        }
-    }
+  }
 }
 
 void JsonConverter::pushFields(cstring prefix, const IR::Type_StructLike *st,
                                Util::JsonArray *fields) {
-    for (auto f : *st->fields) {
-        auto ftype = typeMap->getType(f, true);
-        if (auto nested = ftype->to<IR::Type_StructLike>()) {
-            pushFields(prefix + f->name.name + ".", nested, fields);
-        } else if (auto nested = ftype->to<IR::Type_Tuple>()) {
-            pushFields(prefix + f->name.name + ".", nested, fields);
-        } else if (auto type = ftype->to<IR::Type_Bits>()) {
-            auto field = pushNewArray(fields);
-            field->append(prefix + f->name.name);
-            field->append(type->size);
-            field->append(type->isSigned);
-        } else {
-            BUG_CHECK("%1%: unexpected type for %2%.%3%", ftype, st, f->name);
-        }
+  for (auto f : *st->fields) {
+    auto ftype = typeMap->getType(f, true);
+    if (auto nested = ftype->to<IR::Type_StructLike>()) {
+      pushFields(prefix + f->name.name + ".", nested, fields);
+    } else if (auto nested = ftype->to<IR::Type_Tuple>()) {
+      pushFields(prefix + f->name.name + ".", nested, fields);
+    } else if (auto type = ftype->to<IR::Type_Bits>()) {
+      auto field = pushNewArray(fields);
+      field->append(prefix + f->name.name);
+      field->append(type->size);
+      field->append(type->isSigned);
+    } else {
+      BUG_CHECK("%1%: unexpected type for %2%.%3%", ftype, st, f->name);
     }
+  }
     // must add padding
-    unsigned width = st->width_bits();
-    unsigned padding = width % 8;
-    if (padding != 0) {
-        cstring name = refMap->newName("_padding");
-        auto field = pushNewArray(fields);
-        field->append(prefix + name);
-        field->append(8 - padding);
-        field->append(false);
-    }
+  unsigned width = st->width_bits();
+  unsigned padding = width % 8;
+  if (padding != 0) {
+    cstring name = refMap->newName("_padding");
+    auto field = pushNewArray(fields);
+    field->append(prefix + name);
+    field->append(8 - padding);
+    field->append(false);
+  }
 }
 void JsonConverter::pushFields(cstring prefix, const IR::Type_Tuple *tt,
                                Util::JsonArray *fields) {
@@ -2149,79 +2000,79 @@ Util::IJson* JsonConverter::convertDeparser(const IR::P4Control* ctrl) {
 }
 
 Util::IJson* JsonConverter::toJson(const IR::P4Parser* parser) {
-    auto result = new Util::JsonObject();
-    result->emplace("name", "parser");  // at least in simple_router this name is hardwired
-    result->emplace("id", nextId("parser"));
-    result->emplace("init_state", IR::ParserState::start.name);
-    auto states = mkArrayField(result, "parse_states");
+  auto result = new Util::JsonObject();
+  result->emplace("name", parser->getName());  // at least in simple_router this name is hardwired
+  result->emplace("id", nextId("parser"));
+  result->emplace("init_state", IR::ParserState::start.name);
+  auto states = mkArrayField(result, "parse_states");
 
-    for (auto state : *parser->states) {
-        auto json = toJson(state);
-        if (json != nullptr)
-            states->append(json);
-    }
-    return result;
+  for (auto state : *parser->states) {
+    auto json = toJson(state);
+    if (json != nullptr)
+      states->append(json);
+  }
+  return result;
 }
 
 Util::IJson* JsonConverter::convertParserStatement(const IR::StatOrDecl* stat) {
-    auto result = new Util::JsonObject();
-    auto params = mkArrayField(result, "parameters");
-    if (stat->is<IR::AssignmentStatement>()) {
-        auto assign = stat->to<IR::AssignmentStatement>();
-        result->emplace("op", "set");
-        auto l = conv->convertLeftValue(assign->left);
-        auto type = typeMap->getType(assign->left, true);
-        bool convertBool = type->is<IR::Type_Boolean>();
-        auto r = conv->convert(assign->right, true, true, convertBool);
-        params->append(l);
-        params->append(r);
-        return result;
-    } else if (stat->is<IR::MethodCallStatement>()) {
-        auto mce = stat->to<IR::MethodCallStatement>()->methodCall;
-        auto minst = P4::MethodInstance::resolve(mce, refMap, typeMap);
-        if (minst->is<P4::ExternMethod>()) {
-            auto extmeth = minst->to<P4::ExternMethod>();
-            if (extmeth->method->name.name == corelib.packetIn.extract.name) {
-                result->emplace("op", "extract");
-                if (mce->arguments->size() == 1) {
-                    auto arg = mce->arguments->at(0);
-                    auto argtype = typeMap->getType(arg, true);
-                    if (!argtype->is<IR::Type_Header>()) {
-                        ::error("%1%: extract only accepts arguments with header types, not %2%",
-                                arg, argtype);
-                        return result;
-                    }
-                    auto param = new Util::JsonObject();
-                    params->append(param);
-                    cstring type;
-                    Util::IJson* j = nullptr;
-
-                    if (arg->is<IR::Member>()) {
-                        auto mem = arg->to<IR::Member>();
-                        auto baseType = typeMap->getType(mem->expr, true);
-                        if (baseType->is<IR::Type_Stack>()) {
-                            if (mem->member == IR::Type_Stack::next) {
-                                type = "stack";
-                                j = conv->convert(mem->expr);
-                            } else {
-                                BUG("%1%: unsupported", mem);
-                            }
-                        }
-                    }
-                    if (j == nullptr) {
-                        type = "regular";
-                        j = conv->convert(arg);
-                    }
-                    auto value = j->to<Util::JsonObject>()->get("value");
-                    param->emplace("type", type);
-                    param->emplace("value", value);
-                    return result;
-                }
-            }
-        }
-    }
-    ::error("%1%: not supported in parser on this target", stat);
+  auto result = new Util::JsonObject();
+  auto params = mkArrayField(result, "parameters");
+  if (stat->is<IR::AssignmentStatement>()) {
+    auto assign = stat->to<IR::AssignmentStatement>();
+    result->emplace("op", "set");
+    auto l = conv->convertLeftValue(assign->left);
+    auto type = typeMap->getType(assign->left, true);
+    bool convertBool = type->is<IR::Type_Boolean>();
+    auto r = conv->convert(assign->right, true, true, convertBool);
+    params->append(l);
+    params->append(r);
     return result;
+  } else if (stat->is<IR::MethodCallStatement>()) {
+    auto mce = stat->to<IR::MethodCallStatement>()->methodCall;
+    auto minst = P4::MethodInstance::resolve(mce, refMap, typeMap);
+    if (minst->is<P4::ExternMethod>()) {
+      auto extmeth = minst->to<P4::ExternMethod>();
+      if (extmeth->method->name.name == corelib.packetIn.extract.name) {
+        result->emplace("op", "extract");
+        if (mce->arguments->size() == 1) {
+          auto arg = mce->arguments->at(0);
+          auto argtype = typeMap->getType(arg, true);
+          if (!argtype->is<IR::Type_Header>()) {
+            ::error("%1%: extract only accepts arguments with header types, not %2%",
+                    arg, argtype);
+            return result;
+          }
+          auto param = new Util::JsonObject();
+          params->append(param);
+          cstring type;
+          Util::IJson* j = nullptr;
+
+          if (arg->is<IR::Member>()) {
+            auto mem = arg->to<IR::Member>();
+            auto baseType = typeMap->getType(mem->expr, true);
+            if (baseType->is<IR::Type_Stack>()) {
+              if (mem->member == IR::Type_Stack::next) {
+                type = "stack";
+                j = conv->convert(mem->expr);
+              } else {
+                BUG("%1%: unsupported", mem);
+              }
+            }
+          }
+          if (j == nullptr) {
+              type = "regular";
+              j = conv->convert(arg);
+          }
+          auto value = j->to<Util::JsonObject>()->get("value");
+          param->emplace("type", type);
+          param->emplace("value", value);
+          return result;
+        }
+      }
+    }
+  }
+  ::error("%1%: not supported in parser on this target", stat);
+  return result;
 }
 
 // Operates on a select keyset
@@ -2319,63 +2170,66 @@ static Util::IJson* stateName(IR::ID state) {
 }
 
 Util::IJson* JsonConverter::toJson(const IR::ParserState* state) {
-    if (state->name == IR::ParserState::reject || state->name == IR::ParserState::accept)
-        return nullptr;
+  if (state->name == IR::ParserState::reject
+      || state->name == IR::ParserState::accept) {
+    return nullptr;
+  }
 
-    auto result = new Util::JsonObject();
-    result->emplace("name", nameFromAnnotation(state->annotations, state->name.name));
-    result->emplace("id", nextId("parse_states"));
-    auto operations = mkArrayField(result, "parser_ops");
-    for (auto s : *state->components) {
-        auto j = convertParserStatement(s);
-        operations->append(j);
-    }
+  auto result = new Util::JsonObject();
+  result->emplace("name", nameFromAnnotation(state->annotations, state->name.name));
+  result->emplace("id", nextId("parse_states"));
+  auto operations = mkArrayField(result, "parser_ops");
+  for (auto s : *state->components) {
+    auto j = convertParserStatement(s);
+    operations->append(j);
+  }
 
-    Util::IJson* key;
-    auto transitions = mkArrayField(result, "transitions");
-    if (state->selectExpression != nullptr) {
-        if (state->selectExpression->is<IR::SelectExpression>()) {
-            auto se = state->selectExpression->to<IR::SelectExpression>();
-            key = conv->convert(se->select, false);
-            for (auto sc : se->selectCases) {
-                auto trans = new Util::JsonObject();
-                mpz_class value, mask;
-                unsigned bytes = combine(sc->keyset, se->select, value, mask);
-                if (mask == 0) {
-                    trans->emplace("value", "default");
-                    trans->emplace("mask", Util::JsonValue::null);
-                    trans->emplace("next_state", stateName(sc->state->path->name));
-                } else {
-                    trans->emplace("value", stringRepr(value, bytes));
-                    if (mask == -1)
-                        trans->emplace("mask", Util::JsonValue::null);
-                    else
-                        trans->emplace("mask", stringRepr(mask, bytes));
-                    trans->emplace("next_state", stateName(sc->state->path->name));
-                }
-                transitions->append(trans);
-            }
-        } else if (state->selectExpression->is<IR::PathExpression>()) {
-            auto pe = state->selectExpression->to<IR::PathExpression>();
-            key = new Util::JsonArray();
-            auto trans = new Util::JsonObject();
-            trans->emplace("value", "default");
-            trans->emplace("mask", Util::JsonValue::null);
-            trans->emplace("next_state", stateName(pe->path->name));
-            transitions->append(trans);
-        } else {
-            BUG("%1%: unexpected selectExpression", state->selectExpression);
-        }
-    } else {
-        key = new Util::JsonArray();
+  Util::IJson* key;
+  auto transitions = mkArrayField(result, "transitions");
+  if (state->selectExpression != nullptr) {
+    if (state->selectExpression->is<IR::SelectExpression>()) {
+      auto se = state->selectExpression->to<IR::SelectExpression>();
+      key = conv->convert(se->select, false);
+      for (auto sc : se->selectCases) {
         auto trans = new Util::JsonObject();
-        trans->emplace("value", "default");
-        trans->emplace("mask", Util::JsonValue::null);
-        trans->emplace("next_state", Util::JsonValue::null);
+        mpz_class value, mask;
+        unsigned bytes = combine(sc->keyset, se->select, value, mask);
+        if (mask == 0) {
+          trans->emplace("value", "default");
+          trans->emplace("mask", Util::JsonValue::null);
+          trans->emplace("next_state", stateName(sc->state->path->name));
+        } else {
+          trans->emplace("value", stringRepr(value, bytes));
+          if (mask == -1) {
+            trans->emplace("mask", Util::JsonValue::null);
+          } else {
+            trans->emplace("mask", stringRepr(mask, bytes));
+          }
+          trans->emplace("next_state", stateName(sc->state->path->name));
+        }
         transitions->append(trans);
+      }
+    } else if (state->selectExpression->is<IR::PathExpression>()) {
+      auto pe = state->selectExpression->to<IR::PathExpression>();
+      key = new Util::JsonArray();
+      auto trans = new Util::JsonObject();
+      trans->emplace("value", "default");
+      trans->emplace("mask", Util::JsonValue::null);
+      trans->emplace("next_state", stateName(pe->path->name));
+      transitions->append(trans);
+    } else {
+      BUG("%1%: unexpected selectExpression", state->selectExpression);
     }
-    result->emplace("transition_key", key);
-    return result;
+  } else {
+    key = new Util::JsonArray();
+    auto trans = new Util::JsonObject();
+    trans->emplace("value", "default");
+    trans->emplace("mask", Util::JsonValue::null);
+    trans->emplace("next_state", Util::JsonValue::null);
+    transitions->append(trans);
+  }
+  result->emplace("transition_key", key);
+  return result;
 }
 
 }  // namespace BMV2

@@ -63,6 +63,7 @@ class Extern_Model : public Block_Model<Method_Model> {
       Block_Model<Method_Model>(name), type("Extern") {}
 };
 
+
 class V2Model : public ::Model::Model {
  public:
   V2Model() : ::Model::Model("0.2") {
