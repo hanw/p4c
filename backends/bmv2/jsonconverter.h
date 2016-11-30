@@ -96,16 +96,13 @@ class JsonConverter final {
  private:
     Util::JsonArray *headerTypes;
     std::map<cstring, cstring> headerTypesCreated;
-    std::map<const IR::Type_Tuple *, cstring> tupleTypesCreated;
     Util::JsonArray *headerInstances;
     Util::JsonArray *headerStacks;
     friend class ExpressionConverter;
 
  protected:
     void pushFields(cstring prefix, const IR::Type_StructLike *st, Util::JsonArray *fields);
-    void pushFields(cstring prefix, const IR::Type_Tuple *tt, Util::JsonArray *fields);
     cstring createJsonType(const IR::Type_StructLike *type);
-    cstring createJsonType(const IR::Type_Tuple *type);
     unsigned nextId(cstring group);
     void addLocals();
     void addTypesAndInstances(const IR::Parameter *param, const IR::Type_Struct *type);
@@ -129,13 +126,17 @@ class JsonConverter final {
     Util::IJson* nodeName(const CFG::Node* node) const;
     cstring convertHashAlgorithm(cstring algorithm) const;
     // Return 'true' if the table is 'simple'
-    bool handleTableImplementation(const IR::TableProperty* implementation,
+    bool handleTableImplementation(const IR::Property* implementation,
                                    const IR::Key* key,
                                    Util::JsonObject* table);
     void addToFieldList(const IR::Expression* expr, Util::JsonArray* fl);
     // returns id of created field list
     int createFieldList(const IR::Expression* expr, cstring group,
                         cstring listName, Util::JsonArray* fieldLists);
+    void generateUpdate(const IR::BlockStatement *block,
+                        Util::JsonArray* checksums, Util::JsonArray* calculations);
+    void generateUpdate(const IR::P4Control* cont,
+                        Util::JsonArray* checksums, Util::JsonArray* calculations);
 
     // Operates on a select keyset
     void convertSimpleKey(const IR::Expression* keySet,

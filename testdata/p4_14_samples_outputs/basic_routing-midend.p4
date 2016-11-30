@@ -58,7 +58,7 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_2") action NoAction() {
+    @name("NoAction_2") action NoAction_0() {
     }
     @name("on_miss") action on_miss_0() {
     }
@@ -70,13 +70,13 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
         actions = {
             on_miss_0();
             rewrite_src_dst_mac_0();
-            NoAction();
+            NoAction_0();
         }
         key = {
             meta.ingress_metadata.nexthop_index: exact;
         }
         size = 32768;
-        default_action = NoAction();
+        default_action = NoAction_0();
     }
     apply {
         rewrite_mac.apply();
@@ -84,15 +84,15 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_3") action NoAction_0() {
+    @name("NoAction_3") action NoAction_1() {
     }
-    @name("NoAction_4") action NoAction_1() {
+    @name("NoAction_4") action NoAction_8() {
     }
-    @name("NoAction_5") action NoAction_8() {
+    @name("NoAction_5") action NoAction_9() {
     }
-    @name("NoAction_6") action NoAction_9() {
+    @name("NoAction_6") action NoAction_10() {
     }
-    @name("NoAction_7") action NoAction_10() {
+    @name("NoAction_7") action NoAction_11() {
     }
     @name("set_vrf") action set_vrf_0(bit<12> vrf) {
         meta.ingress_metadata.vrf = vrf;
@@ -120,62 +120,62 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
     @name("bd") table bd_1() {
         actions = {
             set_vrf_0();
-            NoAction_0();
+            NoAction_1();
         }
         key = {
             meta.ingress_metadata.bd: exact;
         }
         size = 65536;
-        default_action = NoAction_0();
+        default_action = NoAction_1();
     }
     @name("ipv4_fib") table ipv4_fib() {
         actions = {
             on_miss_1();
             fib_hit_nexthop_0();
-            NoAction_1();
+            NoAction_8();
         }
         key = {
             meta.ingress_metadata.vrf: exact;
             hdr.ipv4.dstAddr         : exact;
         }
         size = 131072;
-        default_action = NoAction_1();
+        default_action = NoAction_8();
     }
     @name("ipv4_fib_lpm") table ipv4_fib_lpm() {
         actions = {
             on_miss_5();
             fib_hit_nexthop_2();
-            NoAction_8();
+            NoAction_9();
         }
         key = {
             meta.ingress_metadata.vrf: exact;
             hdr.ipv4.dstAddr         : lpm;
         }
         size = 16384;
-        default_action = NoAction_8();
+        default_action = NoAction_9();
     }
     @name("nexthop") table nexthop() {
         actions = {
             on_miss_6();
             set_egress_details_0();
-            NoAction_9();
+            NoAction_10();
         }
         key = {
             meta.ingress_metadata.nexthop_index: exact;
         }
         size = 32768;
-        default_action = NoAction_9();
+        default_action = NoAction_10();
     }
     @name("port_mapping") table port_mapping() {
         actions = {
             set_bd_0();
-            NoAction_10();
+            NoAction_11();
         }
         key = {
             standard_metadata.ingress_port: exact;
         }
         size = 32768;
-        default_action = NoAction_10();
+        default_action = NoAction_11();
     }
     apply {
         if (hdr.ipv4.isValid()) {
@@ -199,6 +199,20 @@ control DeparserImpl(packet_out packet, in headers hdr) {
     }
 }
 
+struct tuple_0 {
+    bit<4>  field;
+    bit<4>  field_0;
+    bit<8>  field_1;
+    bit<16> field_2;
+    bit<16> field_3;
+    bit<3>  field_4;
+    bit<13> field_5;
+    bit<8>  field_6;
+    bit<8>  field_7;
+    bit<32> field_8;
+    bit<32> field_9;
+}
+
 control verifyChecksum(in headers hdr, inout metadata meta) {
     @name("ipv4_checksum") Checksum16() ipv4_checksum;
     action act() {
@@ -211,7 +225,7 @@ control verifyChecksum(in headers hdr, inout metadata meta) {
         const default_action = act();
     }
     apply {
-        if (hdr.ipv4.hdrChecksum == (ipv4_checksum.get<tuple<bit<4>, bit<4>, bit<8>, bit<16>, bit<16>, bit<3>, bit<13>, bit<8>, bit<8>, bit<32>, bit<32>>>({ hdr.ipv4.version, hdr.ipv4.ihl, hdr.ipv4.diffserv, hdr.ipv4.totalLen, hdr.ipv4.identification, hdr.ipv4.flags, hdr.ipv4.fragOffset, hdr.ipv4.ttl, hdr.ipv4.protocol, hdr.ipv4.srcAddr, hdr.ipv4.dstAddr }))) 
+        if (hdr.ipv4.hdrChecksum == (ipv4_checksum.get<tuple_0>({ hdr.ipv4.version, hdr.ipv4.ihl, hdr.ipv4.diffserv, hdr.ipv4.totalLen, hdr.ipv4.identification, hdr.ipv4.flags, hdr.ipv4.fragOffset, hdr.ipv4.ttl, hdr.ipv4.protocol, hdr.ipv4.srcAddr, hdr.ipv4.dstAddr }))) 
             tbl_act.apply();
     }
 }
@@ -219,7 +233,7 @@ control verifyChecksum(in headers hdr, inout metadata meta) {
 control computeChecksum(inout headers hdr, inout metadata meta) {
     @name("ipv4_checksum") Checksum16() ipv4_checksum_2;
     apply {
-        hdr.ipv4.hdrChecksum = ipv4_checksum_2.get<tuple<bit<4>, bit<4>, bit<8>, bit<16>, bit<16>, bit<3>, bit<13>, bit<8>, bit<8>, bit<32>, bit<32>>>({ hdr.ipv4.version, hdr.ipv4.ihl, hdr.ipv4.diffserv, hdr.ipv4.totalLen, hdr.ipv4.identification, hdr.ipv4.flags, hdr.ipv4.fragOffset, hdr.ipv4.ttl, hdr.ipv4.protocol, hdr.ipv4.srcAddr, hdr.ipv4.dstAddr });
+        hdr.ipv4.hdrChecksum = ipv4_checksum_2.get<tuple_0>({ hdr.ipv4.version, hdr.ipv4.ihl, hdr.ipv4.diffserv, hdr.ipv4.totalLen, hdr.ipv4.identification, hdr.ipv4.flags, hdr.ipv4.fragOffset, hdr.ipv4.ttl, hdr.ipv4.protocol, hdr.ipv4.srcAddr, hdr.ipv4.dstAddr });
     }
 }
 

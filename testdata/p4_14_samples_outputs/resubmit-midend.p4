@@ -46,10 +46,15 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
     }
 }
 
+struct tuple_0 {
+    standard_metadata_t field;
+    mymeta_t            field_0;
+}
+
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_1") action NoAction() {
+    @name("NoAction_1") action NoAction_0() {
     }
-    @name("NoAction_2") action NoAction_0() {
+    @name("NoAction_2") action NoAction_3() {
     }
     @name("_nop") action _nop_0() {
     }
@@ -60,24 +65,12 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
     }
     @name("_resubmit") action _resubmit_0() {
         meta.mymeta.f1 = 8w1;
-        resubmit<tuple<standard_metadata_t, mymeta_t>>({ standard_metadata, meta.mymeta });
+        resubmit<tuple_0>({ standard_metadata, meta.mymeta });
     }
     @name("t_ingress_1") table t_ingress_1() {
         actions = {
             _nop_0();
             set_port_0();
-            NoAction();
-        }
-        key = {
-            meta.mymeta.f1: exact;
-        }
-        size = 128;
-        default_action = NoAction();
-    }
-    @name("t_ingress_2") table t_ingress_2() {
-        actions = {
-            _nop_2();
-            _resubmit_0();
             NoAction_0();
         }
         key = {
@@ -85,6 +78,18 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         }
         size = 128;
         default_action = NoAction_0();
+    }
+    @name("t_ingress_2") table t_ingress_2() {
+        actions = {
+            _nop_2();
+            _resubmit_0();
+            NoAction_3();
+        }
+        key = {
+            meta.mymeta.f1: exact;
+        }
+        size = 128;
+        default_action = NoAction_3();
     }
     apply {
         t_ingress_1.apply();

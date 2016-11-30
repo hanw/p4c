@@ -15,35 +15,37 @@ limitations under the License.
 */
 
 #include "midend.h"
-#include "validateProperties.h"
 #include "lower.h"
 #include "inlining.h"
-#include "copyStructures.h"
-#include "midend/actionsInlining.h"
-#include "midend/removeReturns.h"
-#include "midend/moveConstructors.h"
-#include "midend/localizeActions.h"
-#include "midend/removeParameters.h"
-#include "midend/actionSynthesis.h"
-#include "midend/local_copyprop.h"
-#include "midend/removeLeftSlices.h"
-#include "midend/convertEnums.h"
-#include "midend/simplifyKey.h"
-#include "midend/parserControlFlow.h"
-#include "midend/simplifySelect.h"
-#include "frontends/p4/uniqueNames.h"
+#include "eliminateVerify.h"
+#include "frontends/common/constantFolding.h"
+#include "frontends/common/resolveReferences/resolveReferences.h"
+#include "frontends/p4/evaluator/evaluator.h"
+#include "frontends/p4/fromv1.0/v1model.h"
+#include "frontends/p4/moveDeclarations.h"
+#include "frontends/p4/simplify.h"
 #include "frontends/p4/simplifyParsers.h"
 #include "frontends/p4/strengthReduction.h"
-#include "frontends/p4/typeMap.h"
-#include "frontends/p4/evaluator/evaluator.h"
 #include "frontends/p4/typeChecking/typeChecker.h"
-#include "frontends/common/resolveReferences/resolveReferences.h"
-#include "frontends/p4/toP4/toP4.h"
-#include "frontends/p4/simplify.h"
+#include "frontends/p4/typeMap.h"
+#include "frontends/p4/uniqueNames.h"
 #include "frontends/p4/unusedDeclarations.h"
-#include "frontends/p4/moveDeclarations.h"
-#include "frontends/common/constantFolding.h"
-#include "frontends/p4/fromv1.0/v1model.h"
+#include "midend/actionsInlining.h"
+#include "midend/actionSynthesis.h"
+#include "midend/convertEnums.h"
+#include "midend/copyStructures.h"
+#include "midend/eliminateTuples.h"
+#include "midend/local_copyprop.h"
+#include "midend/localizeActions.h"
+#include "midend/moveConstructors.h"
+#include "midend/nestedStructs.h"
+#include "midend/removeLeftSlices.h"
+#include "midend/removeParameters.h"
+#include "midend/removeReturns.h"
+#include "midend/simplifyKey.h"
+#include "midend/simplifySelect.h"
+#include "midend/validateProperties.h"
+#include "midend/compileTimeOps.h"
 
 namespace BMV2 {
 
@@ -85,7 +87,6 @@ void MidEnd::setup_for_P4_16(CompilerOptions&) {
     // we may come through this path even if the program is actually a P4 v1.0 program
     auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
     addPasses({
-        new P4::RemoveParserControlFlow(&refMap, &typeMap),
         new P4::ConvertEnums(&refMap, &typeMap,
                              new EnumOn32Bits()),
         new P4::RemoveReturns(&refMap),
@@ -103,8 +104,7 @@ void MidEnd::setup_for_P4_16(CompilerOptions&) {
         new P4::InlineActions(&refMap, &typeMap),
         new P4::LocalizeAllActions(&refMap),
         new P4::UniqueNames(&refMap),
-        new P4::UniqueParameters(&refMap),
-        new P4::ClearTypeMap(&typeMap),
+        new P4::UniqueParameters(&refMap, &typeMap),
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::RemoveTableParameters(&refMap, &typeMap),
         new P4::RemoveActionParameters(&refMap, &typeMap),
@@ -114,9 +114,16 @@ void MidEnd::setup_for_P4_16(CompilerOptions&) {
         new P4::StrengthReduction(),
         new P4::SimplifySelect(&refMap, &typeMap, true),  // require constant keysets
         new P4::SimplifyParsers(&refMap),
+        new P4::StrengthReduction(),
+        new P4::EliminateTuples(&refMap, &typeMap),
+        new P4::CopyStructures(&refMap, &typeMap),
+        new P4::NestedStructs(&refMap, &typeMap),
         new P4::LocalCopyPropagation(&refMap, &typeMap),
         new P4::MoveDeclarations(),
+        new P4::ValidateTableProperties({ "implementation", "size", "counters",
+                                          "meters", "size", "support_timeout" }),
         new P4::SimplifyControlFlow(&refMap, &typeMap),
+        new P4::CompileTimeOperations(),
         new P4::SynthesizeActions(&refMap, &typeMap),
         new P4::MoveActionsToTables(&refMap, &typeMap),
      });
@@ -127,7 +134,7 @@ MidEnd::MidEnd(CompilerOptions& options) {
     bool isv1 = options.isv1();
     setName("MidEnd");
     refMap.setIsV1(isv1);  // must be done BEFORE creating passes
-    if (0 && isv1)
+    if (isv1)
         // TODO: This path should be eventually deprecated
         setup_for_P4_14(options);
     else
@@ -136,15 +143,13 @@ MidEnd::MidEnd(CompilerOptions& options) {
     // BMv2-specific passes
     auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
     addPasses({
-        // TODO: replace Tuple types with structs
-        new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::TypeChecking(&refMap, &typeMap),
-        new P4::RemoveLeftSlices(&typeMap),
+        new EliminateVerify(&refMap, &typeMap),
+        new P4::SimplifyControlFlow(&refMap, &typeMap),
+        new P4::RemoveLeftSlices(&refMap, &typeMap),
         new P4::TypeChecking(&refMap, &typeMap),
         new LowerExpressions(&typeMap),
-        new CopyStructures(&refMap, &typeMap),
-        new ValidateTableProperties(),
-        new P4::ConstantFolding(&refMap, &typeMap),
+        new P4::ConstantFolding(&refMap, &typeMap, false),
         evaluator,
         new VisitFunctor([this, evaluator]() { toplevel = evaluator->getToplevelBlock(); })
     });

@@ -7,6 +7,7 @@
       yylloc = Util::SourceInfo(tmp, Util::InputSources::instance->getCurrentPosition()); }
 
 static int lineDirectiveLine;
+static bool pragmaLine = false;  // FIXME -- use a flex state (and state stack?)
 
 // shut up warnings about unused functions and variables
 #pragma GCC diagnostic ignored "-Wunused-function"
@@ -25,12 +26,12 @@ static int lineDirectiveLine;
 %%
 
 [ \t\r]+                ;
-[\n]            { BEGIN INITIAL; }
+[\n]            { BEGIN INITIAL; if (pragmaLine) { pragmaLine = false; return '\n'; }}
 "//".*                  ;
 "/*"            { BEGIN COMMENT; }
 <COMMENT>"*/"   { BEGIN NORMAL; }
 <COMMENT>.              ;
-<COMMENT>[\n]           ;
+<COMMENT>[\n]         { if (pragmaLine) { pragmaLine = false; return '\n'; } }
 
 <INITIAL>"#line"      { BEGIN(LINE1); }
 <INITIAL>"# "         { BEGIN(LINE1); }
@@ -45,7 +46,10 @@ static int lineDirectiveLine;
 <LINE1,LINE2,LINE3>\n { BEGIN(INITIAL); }
 <LINE1,LINE2,LINE3,COMMENT,NORMAL><<EOF>> { BEGIN(INITIAL); }
 
-"@pragma".*     { yylval.str = StringRef(yytext+7).trim(); return PRAGMA; }
+"@pragma"[ \t]*[A-Za-z_][A-Za-z0-9_]* {
+                  yylval.str = StringRef(yytext+7).trim();
+                  pragmaLine = true;
+                  return PRAGMA; }
 
 "action"        { yylval.str = yytext; BEGIN(NORMAL); return ACTION; }
 "actions"       { yylval.str = yytext; BEGIN(NORMAL); return ACTIONS; }
@@ -60,6 +64,7 @@ static int lineDirectiveLine;
 "bit"           { yylval.str = yytext; BEGIN(NORMAL); return BIT; }
 "blackbox"      { yylval.str = yytext; BEGIN(NORMAL); return BLACKBOX; }
 "blackbox_type" { yylval.str = yytext; BEGIN(NORMAL); return BLACKBOX_TYPE; }
+"block"         { yylval.str = yytext; BEGIN(NORMAL); return BLOCK; }
 "calculated_field" {
                   yylval.str = yytext; BEGIN(NORMAL); return CALCULATED_FIELD; }
 "control"       { yylval.str = yytext; BEGIN(NORMAL); return CONTROL; }
@@ -73,6 +78,12 @@ static int lineDirectiveLine;
                   yylval.str = yytext; BEGIN(NORMAL);
                   return DYNAMIC_ACTION_SELECTION; }
 "else"          { yylval.str = yytext; BEGIN(NORMAL); return ELSE; }
+"extern"        { yylval.str = yytext; BEGIN(NORMAL); return BLACKBOX; }
+"extern_type"   { yylval.str = yytext; BEGIN(NORMAL); return BLACKBOX_TYPE; }
+"expression"    { yylval.str = yytext; BEGIN(NORMAL); return EXPRESSION; }
+"expression_local_variables" {
+                  yylval.str = yytext; BEGIN(NORMAL);
+                  return EXPRESSION_LOCAL_VARIABLES; }
 "extract"       { yylval.str = yytext; BEGIN(NORMAL); return EXTRACT; }
 "false"         { yylval.str = yytext; BEGIN(NORMAL); return FALSE; }
 "field_list"    { yylval.str = yytext; BEGIN(NORMAL); return FIELD_LIST; }
@@ -86,6 +97,7 @@ static int lineDirectiveLine;
 "implementation" {yylval.str = yytext; BEGIN(NORMAL); return IMPLEMENTATION; }
 "input"         { yylval.str = yytext; BEGIN(NORMAL); return INPUT; }
 "instance_count" {yylval.str = yytext; BEGIN(NORMAL); return INSTANCE_COUNT; }
+"in"            { yylval.str = yytext; BEGIN(NORMAL); return IN; }
 "int"           { yylval.str = yytext; BEGIN(NORMAL); return INT; }
 "latest"        { yylval.str = yytext; BEGIN(NORMAL); return LATEST; }
 "layout"        { yylval.str = yytext; BEGIN(NORMAL); return LAYOUT; }
@@ -101,6 +113,8 @@ static int lineDirectiveLine;
 "min_width"     { yylval.str = yytext; BEGIN(NORMAL); return MIN_WIDTH; }
 "not"           { yylval.str = yytext; BEGIN(NORMAL); return NOT; }
 "or"            { yylval.str = yytext; BEGIN(NORMAL); return OR; }
+"optional"      { yylval.str = yytext; BEGIN(NORMAL); return OPTIONAL; }
+"out"           { yylval.str = yytext; BEGIN(NORMAL); return OUT; }
 "output_width"  { yylval.str = yytext; BEGIN(NORMAL); return OUTPUT_WIDTH; }
 "parse_error"   { yylval.str = yytext; BEGIN(NORMAL); return PARSE_ERROR; }
 "parser"        { yylval.str = yytext; BEGIN(NORMAL); return PARSER; }
@@ -123,6 +137,7 @@ static int lineDirectiveLine;
 "signed"        { yylval.str = yytext; BEGIN(NORMAL); return SIGNED; }
 "size"          { yylval.str = yytext; BEGIN(NORMAL); return SIZE; }
 "static"        { yylval.str = yytext; BEGIN(NORMAL); return STATIC; }
+"string"        { yylval.str = yytext; BEGIN(NORMAL); return STRING; }
 "true"          { yylval.str = yytext; BEGIN(NORMAL); return TRUE; }
 "table"         { yylval.str = yytext; BEGIN(NORMAL); return TABLE; }
 "type"          { yylval.str = yytext; BEGIN(NORMAL); return TYPE; }

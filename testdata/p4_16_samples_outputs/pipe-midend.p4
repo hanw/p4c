@@ -35,8 +35,6 @@ struct Packet_data {
 control Q_pipe(inout TArg1 qArg1, inout TArg2 qArg2) {
     TArg1 tmp_5;
     TArg2 tmp_6;
-    TArg1 pArg1;
-    TArg2 pArg2;
     TArg1 tmp_7;
     TArg2 tmp_8;
     TArg1 tmp_9;
@@ -44,14 +42,14 @@ control Q_pipe(inout TArg1 qArg1, inout TArg2 qArg2) {
     TArg1 tArg1_0;
     TArg2 aArg2_0;
     bit<9> barg_0;
-    @name("NoAction_1") action NoAction() {
+    @name("NoAction_1") action NoAction_0() {
     }
     @name("p1.B_action") action p1_B_action(BParamType bData) {
         barg_0 = (bit<9>)bData;
         tArg1_0.field1 = (bit<9>)bData;
     }
     @name("p1.C_action") action p1_C_action(bit<9> cData) {
-        pArg1.field1 = cData;
+        tmp_5.field1 = cData;
     }
     @name("p1.T") table p1_T_0() {
         key = {
@@ -66,45 +64,51 @@ control Q_pipe(inout TArg1 qArg1, inout TArg2 qArg2) {
         const default_action = p1_C_action(9w5);
     }
     @name("p1.Drop") action p1_Drop() {
-        pArg1.drop = true;
+        tmp_5.drop = true;
     }
     @name("p1.Tinner") table p1_Tinner_0() {
         key = {
-            pArg1.field1: ternary;
+            tmp_5.field1: ternary;
         }
         actions = {
             p1_Drop();
-            NoAction();
+            NoAction_0();
         }
-        const default_action = NoAction();
+        const default_action = NoAction_0();
     }
     action act() {
-        tmp_5 = qArg1;
-        tmp_6 = qArg2;
-        pArg1 = tmp_5;
-        pArg2 = tmp_6;
-        tmp_7 = pArg1;
-        tmp_8 = pArg2;
-        tArg1_0 = tmp_7;
-        aArg2_0 = tmp_8;
+        tmp_5.field1 = qArg1.field1;
+        tmp_5.drop = qArg1.drop;
+        tmp_6.field2 = qArg2.field2;
+        tmp_7.field1 = tmp_5.field1;
+        tmp_7.drop = tmp_5.drop;
+        tmp_8.field2 = tmp_6.field2;
+        tArg1_0.field1 = tmp_7.field1;
+        tArg1_0.drop = tmp_7.drop;
+        aArg2_0.field2 = tmp_8.field2;
     }
     action act_0() {
-        tmp_7 = tArg1_0;
-        pArg1 = tmp_7;
-        tmp_9 = pArg1;
-        tmp_10 = pArg2;
-        tArg1_0 = tmp_9;
-        aArg2_0 = tmp_10;
+        tmp_7.field1 = tArg1_0.field1;
+        tmp_7.drop = tArg1_0.drop;
+        tmp_5.field1 = tmp_7.field1;
+        tmp_5.drop = tmp_7.drop;
+        tmp_9.field1 = tmp_5.field1;
+        tmp_9.drop = tmp_5.drop;
+        tmp_10.field2 = tmp_6.field2;
+        tArg1_0.field1 = tmp_9.field1;
+        tArg1_0.drop = tmp_9.drop;
+        aArg2_0.field2 = tmp_10.field2;
     }
     action act_1() {
-        tmp_9 = tArg1_0;
-        pArg1 = tmp_9;
+        tmp_9.field1 = tArg1_0.field1;
+        tmp_9.drop = tArg1_0.drop;
+        tmp_5.field1 = tmp_9.field1;
+        tmp_5.drop = tmp_9.drop;
     }
     action act_2() {
-        tmp_5 = pArg1;
-        tmp_6 = pArg2;
-        qArg1 = tmp_5;
-        qArg2 = tmp_6;
+        qArg1.field1 = tmp_5.field1;
+        qArg1.drop = tmp_5.drop;
+        qArg2.field2 = tmp_6.field2;
     }
     table tbl_act() {
         actions = {

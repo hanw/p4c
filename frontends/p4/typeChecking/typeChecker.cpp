@@ -131,7 +131,10 @@ bool TypeInference::done() const {
 const IR::Type* TypeInference::getType(const IR::Node* element) const {
     const IR::Type* result = typeMap->getType(element);
     if (result == nullptr) {
-        typeError("Could not find type of %1%", dbp(element));
+        if (auto field = element->to<IR::StructField>()) {
+            // FIXME -- for some reason, fields aren't in the typeMap?
+            return field->type; }
+        typeError("Could not find type of %1%", element);
         return nullptr;
     }
     return result;
@@ -298,15 +301,18 @@ const IR::Type* TypeInference::canonicalize(const IR::Type* type) {
         auto et = canonicalize(stack->elementType);
         if (et == nullptr)
             return nullptr;
+        const IR::Type* canon;
         if (et == stack->elementType)
-            return type;
-        const IR::Type* canon = new IR::Type_Stack(stack->srcInfo, et, stack->size);
+            canon = type;
+        else
+            canon = new IR::Type_Stack(stack->srcInfo, et, stack->size);
+        canon = typeMap->getCanonical(canon);
         return canon;
     } else if (type->is<IR::Type_Tuple>()) {
         auto tuple = type->to<IR::Type_Tuple>();
         auto fields = new IR::Vector<IR::Type>();
         // tuple<set<a>, b> = set<tuple<a, b>>
-        // TODO: this probably should not be here.
+        // TODO: this should not be done here.
         bool anySet = false;
         bool anyChange = false;
         for (auto t : *tuple->components) {
@@ -325,6 +331,7 @@ const IR::Type* TypeInference::canonicalize(const IR::Type* type) {
             canon = new IR::Type_Tuple(type->srcInfo, fields);
         else
             canon = type;
+        canon = typeMap->getCanonical(canon);
         if (anySet)
             canon = new IR::Type_Set(type->srcInfo, canon);
         return canon;
@@ -864,7 +871,7 @@ TypeInference::containerInstantiation(
         auto argInfo = new IR::ArgumentInfo(arg->srcInfo, arg, true, argType);
         args->push_back(argInfo);
     }
-    auto rettype = new IR::Type_Var(Util::SourceInfo(), IR::ID(refMap->newName("R")));
+    auto rettype = new IR::Type_Var(Util::SourceInfo(), IR::ID(refMap->newName("R"), nullptr));
     // There are never type arguments at this point; if they exist, they have been folded
     // into the constructor by type specialization.
     auto callType = new IR::Type_MethodCall(node->srcInfo,
@@ -1138,7 +1145,7 @@ const IR::Node* TypeInference::postorder(IR::Type_Struct* type) {
         t->is<IR::Type_Header>() || t->is<IR::Type_Union>() ||
         t->is<IR::Type_Enum>() || t->is<IR::Type_Error>() ||
         t->is<IR::Type_Boolean>() || t->is<IR::Type_Stack>() ||
-        t->is<IR::Type_ActionEnum>(); };
+        t->is<IR::Type_ActionEnum>() || t->is<IR::Type_Tuple>(); };
     validateFields(canon, validator);
     return type;
 }
@@ -1783,7 +1790,7 @@ const IR::Node* TypeInference::postorder(IR::PathExpression* expression) {
         //    default_action = a(2);  << a typechecked as specialized in the actions list
         // }
         // This works only if the actions property has already been visited
-        auto prop = findContext<IR::TableProperty>();
+        auto prop = findContext<IR::Property>();
         if (prop != nullptr) {
             auto table = findContext<IR::P4Table>();
             BUG_CHECK(table != nullptr, "%1%: property not within a table?", prop);
@@ -2095,7 +2102,7 @@ const IR::Node* TypeInference::postorder(IR::Member* expression) {
             if (!isLeftValue(expression->expr))
                 ::error("%1%: must be applied to a left-value", expression);
             auto params = new IR::IndexedVector<IR::Parameter>();
-            auto param = new IR::Parameter(Util::SourceInfo(), IR::ID("count"),
+            auto param = new IR::Parameter(Util::SourceInfo(), IR::ID("count", nullptr),
                                            IR::Annotations::empty, IR::Direction::In,
                                            new IR::Type_InfInt());
             setType(param, param->type);
@@ -2230,14 +2237,14 @@ const IR::Node* TypeInference::postorder(IR::MethodCallExpression* expression) {
     // with different signatures
     if (methodType->is<IR::Type_Action>()) {
         bool inActionsList = false;
-        auto prop = findContext<IR::TableProperty>();
+        auto prop = findContext<IR::Property>();
         if (prop != nullptr && prop->name == IR::TableProperties::actionsPropertyName)
             inActionsList = true;
         return actionCall(inActionsList, expression);
     } else {
         // We build a type for the callExpression and unify it with the method expression
         // Allocate a fresh variable for the return type; it will be hopefully bound in the process.
-        auto rettype = new IR::Type_Var(Util::SourceInfo(), IR::ID(refMap->newName("R")));
+        auto rettype = new IR::Type_Var(Util::SourceInfo(), IR::ID(refMap->newName("R"), nullptr));
         auto args = new IR::Vector<IR::ArgumentInfo>();
         for (auto arg : *expression->arguments) {
             auto argType = getType(arg);
@@ -2556,7 +2563,7 @@ const IR::Node* TypeInference::postorder(IR::KeyElement* elem) {
     return elem;
 }
 
-const IR::Node* TypeInference::postorder(IR::TableProperty* prop) {
+const IR::Node* TypeInference::postorder(IR::Property* prop) {
     if (prop->name == IR::TableProperties::defaultActionPropertyName) {
         auto pv = prop->value->to<IR::ExpressionValue>();
         if (pv == nullptr) {

@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 #include "uniqueNames.h"
+#include "frontends/p4/typeChecking/typeChecker.h"
 
 namespace P4 {
 
@@ -37,13 +38,14 @@ UniqueNames::UniqueNames(ReferenceMap* refMap) : renameMap(new RenameMap) {
     passes.emplace_back(new RenameSymbols(refMap, renameMap));
 }
 
-UniqueParameters::UniqueParameters(ReferenceMap* refMap) : renameMap(new RenameMap) {
-    setStopOnError(true);
+UniqueParameters::UniqueParameters(ReferenceMap* refMap, TypeMap* typeMap) :
+        renameMap(new RenameMap) {
     setName("UniqueParameters");
-    CHECK_NULL(refMap);
+    CHECK_NULL(refMap); CHECK_NULL(typeMap);
     passes.emplace_back(new ResolveReferences(refMap));
     passes.emplace_back(new FindParameters(refMap, renameMap));
     passes.emplace_back(new RenameSymbols(refMap, renameMap));
+    passes.emplace_back(new ClearTypeMap(typeMap));
 }
 
 /**************************************************************************/
@@ -53,7 +55,7 @@ IR::ID* RenameSymbols::getName() const {
     if (!renameMap->toRename(orig))
         return nullptr;
     auto newName = renameMap->getName(orig);
-    auto name = new IR::ID(orig->getName().srcInfo, newName, orig->getName().name);
+    auto name = new IR::ID(orig->getName().srcInfo, newName, orig->getName().originalName);
     return name;
 }
 
@@ -83,8 +85,8 @@ const IR::Node* RenameSymbols::postorder(IR::PathExpression* expression) {
     if (!renameMap->toRename(decl))
         return expression;
     // This should be a local name.
-    BUG_CHECK(expression->path->prefix == nullptr,
-              "%1%: renaming expression with path", expression);
+    BUG_CHECK(!expression->path->absolute,
+              "%1%: renaming absolute path", expression);
     auto newName = renameMap->getName(decl);
     auto name = IR::ID(expression->path->name.srcInfo, newName,
                        expression->path->name.originalName);

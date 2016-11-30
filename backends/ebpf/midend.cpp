@@ -25,6 +25,7 @@ limitations under the License.
 #include "midend/local_copyprop.h"
 #include "midend/simplifyKey.h"
 #include "midend/simplifySelect.h"
+#include "midend/validateProperties.h"
 #include "frontends/p4/uniqueNames.h"
 #include "frontends/p4/moveDeclarations.h"
 #include "frontends/p4/typeMap.h"
@@ -74,7 +75,7 @@ const IR::ToplevelBlock* MidEnd::run(EbpfOptions& options, const IR::P4Program* 
         new P4::InlineActions(&refMap, &typeMap),
         new P4::LocalizeAllActions(&refMap),
         new P4::UniqueNames(&refMap),
-        new P4::UniqueParameters(&refMap),
+        new P4::UniqueParameters(&refMap, &typeMap),
         new P4::ClearTypeMap(&typeMap),
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::RemoveTableParameters(&refMap, &typeMap),
@@ -89,6 +90,7 @@ const IR::ToplevelBlock* MidEnd::run(EbpfOptions& options, const IR::P4Program* 
         new P4::LocalCopyPropagation(&refMap, &typeMap),
         new P4::MoveDeclarations(),  // more may have been introduced
         new P4::SimplifyControlFlow(&refMap, &typeMap),
+        new P4::ValidateTableProperties({"implementation"}),
         evaluator,
     };
     midEnd.setName("MidEnd");

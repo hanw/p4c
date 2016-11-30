@@ -73,6 +73,8 @@ class DumpIR : public Inspector {
         } else if (node->is<IR::VectorBase>()) {
             node->Node::dbprint(str);
             str << ", size=" << node->to<IR::VectorBase>()->size();
+        } else if (node->is<IR::Path>()) {
+            node->dbprint(str);
         } else {
             node->Node::dbprint(str);
         }
@@ -81,7 +83,7 @@ class DumpIR : public Inspector {
         if (depth == 0)
             return false;
         display(node);
-        if (node->is<IR::Expression>())
+        if (node->is<IR::Expression>() || node->is<IR::Path>())
             // increase depth limit for expressions.
             depth++;
         else
@@ -90,7 +92,7 @@ class DumpIR : public Inspector {
         return true;
     }
     void postorder(const IR::Node* node) override {
-        if (node->is<IR::Expression>())
+        if (node->is<IR::Expression>() || node->is<IR::Path>())
             depth--;
         else
             depth++;
@@ -620,15 +622,6 @@ VECTOR_VISIT(IndexedVector, Declaration)
 VECTOR_VISIT(IndexedVector, Node)
 #undef VECTOR_VISIT
 
-bool ToP4::preorder(const IR::Vector<IR::Annotation> *v) {
-    if (v == nullptr) return false;
-    for (auto a : *v) {
-        visit(a);
-        builder.spc();
-    }
-    return false;
-}
-
 ///////////////////////////////////////////
 
 bool ToP4::preorder(const IR::Slice* slice) {
@@ -693,6 +686,11 @@ bool ToP4::preorder(const IR::Member* e) {
     builder.append(".");
     builder.append(e->member);
     expressionPrecedence = prec;
+    return false;
+}
+
+bool ToP4::preorder(const IR::NamedRef* e) {
+    builder.append(e->name);
     return false;
 }
 
@@ -966,11 +964,14 @@ bool ToP4::preorder(const IR::SwitchStatement* s) {
 bool ToP4::preorder(const IR::Annotation * a) {
     builder.append("@");
     builder.append(a->name);
-    if (a->expr != nullptr) {
+    if (!a->expr.empty()) {
         builder.append("(");
-        visit(a->expr);
+        setVecSep(", ");
+        preorder(&a->expr);
+        doneVec();
         builder.append(")");
     }
+    builder.spc();
     return false;
 }
 
@@ -1157,7 +1158,7 @@ bool ToP4::preorder(const IR::Key* v) {
     return false;
 }
 
-bool ToP4::preorder(const IR::TableProperty* p) {
+bool ToP4::preorder(const IR::Property* p) {
     dump(1);
     visit(p->annotations);
     if (p->isConstant)

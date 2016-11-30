@@ -96,7 +96,6 @@ std::string stringLiteral;
 "package"       { BEGIN(NORMAL); return PACKAGE; }
 "return"        { BEGIN(NORMAL); return RETURN; }
 "select"        { BEGIN(NORMAL); return SELECT; }
-"set"           { BEGIN(NORMAL); return SET; }
 "state"         { BEGIN(NORMAL); return STATE; }
 "struct"        { BEGIN(NORMAL); return STRUCT; }
 "switch"        { BEGIN(NORMAL); return SWITCH; }
@@ -120,8 +119,6 @@ std::string stringLiteral;
                       return IDENTIFIER;
                   case Util::ProgramStructure::SymbolKind::Type:
                       return TYPE;
-                  case Util::ProgramStructure::SymbolKind::Namespace:
-                      return NAMESPACE;
                   default:
                       BUG("Unexpected symbol kind");
                   }

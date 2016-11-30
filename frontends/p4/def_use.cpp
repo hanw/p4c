@@ -184,6 +184,14 @@ void LocationSet::addCanonical(const StorageLocation* location) {
     }
 }
 
+bool LocationSet::overlaps(const LocationSet* other) const {
+    for (auto s : locations) {
+        if (other->locations.find(s) != other->locations.end())
+            return true;
+    }
+    return false;
+}
+
 const ProgramPoints* ProgramPoints::merge(const ProgramPoints* with) const {
     auto result = new ProgramPoints(points);
     for (auto p : with->points)
@@ -725,7 +733,7 @@ bool ComputeWriteSet::preorder(const IR::EmptyStatement*) {
 }
 
 bool ComputeWriteSet::preorder(const IR::AssignmentStatement* statement) {
-    LOG1("Visiting " << dbp(statement));
+    LOG1("Visiting " << dbp(statement) << " " << statement);
     lhs = true;
     visit(statement->left);
     lhs = false;
@@ -739,6 +747,7 @@ bool ComputeWriteSet::preorder(const IR::AssignmentStatement* statement) {
 }
 
 bool ComputeWriteSet::preorder(const IR::SwitchStatement* statement) {
+    LOG1("Visiting " << dbp(statement));
     visit(statement->expression);
     auto locs = get(statement->expression);
     auto defs = currentDefinitions->writes(getProgramPoint(), locs);

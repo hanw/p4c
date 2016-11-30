@@ -28,6 +28,7 @@ p4_frontend_SOURCES = \
 	frontends/p4/toP4/toP4.cpp \
 	frontends/p4/toP4/toP4.h \
 	frontends/p4/callGraph.h \
+	frontends/p4/callGraph.cpp \
 	frontends/p4/typeChecking/typeChecker.cpp \
 	frontends/p4/typeChecking/typeChecker.h \
 	frontends/p4/typeChecking/bindVariables.cpp \
@@ -44,6 +45,8 @@ p4_frontend_SOURCES = \
 	frontends/p4/evaluator/evaluator.cpp \
 	frontends/p4/evaluator/substituteParameters.h \
 	frontends/p4/evaluator/substituteParameters.cpp \
+	frontends/p4/parserControlFlow.cpp \
+	frontends/p4/parserControlFlow.h \
 	frontends/p4/cloner.h \
 	frontends/p4/reservedWords.h \
 	frontends/p4/reservedWords.cpp \

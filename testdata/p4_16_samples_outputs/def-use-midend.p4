@@ -20,12 +20,7 @@ control IngressI(inout H hdr, inout M meta, inout std_meta_t std_meta) {
 }
 
 control EgressI(inout H hdr, inout M meta, inout std_meta_t std_meta) {
-    H tmp_2;
-    M tmp_3;
-    standard_metadata_t tmp_4;
-    H hdr_1;
-    M meta_1;
-    std_meta_t std_meta_1;
+    standard_metadata_t tmp;
     bool hasReturned_0;
     @name("a") action a_0() {
     }
@@ -41,14 +36,22 @@ control EgressI(inout H hdr, inout M meta, inout std_meta_t std_meta) {
         hasReturned_0 = true;
     }
     action act_0() {
-        tmp_4 = std_meta;
-        hdr_1 = tmp_2;
-        meta_1 = tmp_3;
-        std_meta_1 = tmp_4;
-        tmp_2 = hdr_1;
-        tmp_3 = meta_1;
-        tmp_4 = std_meta_1;
-        std_meta = tmp_4;
+        tmp.ingress_port = std_meta.ingress_port;
+        tmp.egress_spec = std_meta.egress_spec;
+        tmp.egress_port = std_meta.egress_port;
+        tmp.clone_spec = std_meta.clone_spec;
+        tmp.instance_type = std_meta.instance_type;
+        tmp.drop = std_meta.drop;
+        tmp.recirculate_port = std_meta.recirculate_port;
+        tmp.packet_length = std_meta.packet_length;
+        std_meta.ingress_port = tmp.ingress_port;
+        std_meta.egress_spec = tmp.egress_spec;
+        std_meta.egress_port = tmp.egress_port;
+        std_meta.clone_spec = tmp.clone_spec;
+        std_meta.instance_type = tmp.instance_type;
+        std_meta.drop = tmp.drop;
+        std_meta.recirculate_port = tmp.recirculate_port;
+        std_meta.packet_length = tmp.packet_length;
     }
     action act_1() {
         hasReturned_0 = false;

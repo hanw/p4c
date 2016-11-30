@@ -80,60 +80,65 @@ bool ProgramStructure::isHeader(const IR::ConcreteHeaderRef* nhr) const {
 void ProgramStructure::checkHeaderType(const IR::Type_StructLike* hdr, bool metadata) {
     LOG1("Checking " << hdr << " " << (metadata ? "M" : "H"));
     for (auto f : *hdr->fields) {
-        if (metadata && f->type->is<IR::Type_Varbits>())
-            ::error("%1%: varbit types illegal in metadata", f);
-        else if (f->type->is<IR::Type_Varbits>())
-            BUG("%1%: varbit types not yet supported", f);
-        else if (!f->type->is<IR::Type_Bits>())
+        if (f->type->is<IR::Type_Varbits>()) {
+            if (metadata)
+                ::error("%1%: varbit types illegal in metadata", f);
+        } else if (!f->type->is<IR::Type_Bits>()) {
             // These come from P4 v1.0, so they cannot be anything else
-            BUG("%1%: unexpected type", f);
+            BUG("%1%: unexpected type", f); }
     }
 }
 
 void ProgramStructure::createTypes() {
-    std::unordered_set<const IR::Type*> converted;
+    std::unordered_set<const IR::Type *> converted;
     for (auto it : metadata) {
         auto type = it.first->type;
         if (type->name.name == v1model.standardMetadataType.name)
             continue;
+        if (converted.count(type))
+            continue;
+        converted.emplace(type);
         auto type_name = types.get(type);
+        type = type->apply(TypeConverter(this));
         if (type->name.name != type_name) {
             auto annos = addNameAnnotation(type->name.name, type->annotations);
             type = new IR::Type_Struct(type->srcInfo, type_name, annos, type->fields);
         }
-        if (converted.find(type) == converted.end()) {
-            checkHeaderType(type, true);
-            declarations->push_back(type);
-            converted.emplace(type);
-        }
+        checkHeaderType(type, true);
+        declarations->push_back(type);
+        converted.emplace(type);
     }
 
     converted.clear();
     for (auto it : headers) {
         auto type = it.first->type;
+        if (converted.count(type))
+            continue;
+        converted.emplace(type);
         auto type_name = types.get(type);
+        type = type->apply(TypeConverter(this));
         if (type->name.name != type_name) {
             auto annos = addNameAnnotation(type->name.name, type->annotations);
             type = new IR::Type_Header(type->srcInfo, type_name, annos, type->fields);
         }
-        if (converted.find(type) == converted.end()) {
-            checkHeaderType(type, false);
-            declarations->push_back(type);
-            converted.emplace(type);
-        }
+        checkHeaderType(type, false);
+        declarations->push_back(type);
+        converted.emplace(type);
     }
     for (auto it : stacks) {
         auto type = it.first->type;
+        if (converted.count(type))
+            continue;
+        converted.emplace(type);
         auto type_name = types.get(type);
+        type = type->apply(TypeConverter(this));
         if (type->name.name != type_name) {
             auto annos = addNameAnnotation(type->name.name, type->annotations);
             type = new IR::Type_Header(type->srcInfo, type_name, annos, type->fields);
         }
-        if (converted.find(type) == converted.end()) {
-            checkHeaderType(type, false);
-            declarations->push_back(type);
-            converted.emplace(type);
-        }
+        checkHeaderType(type, false);
+        declarations->push_back(type);
+        converted.emplace(type);
     }
 }
 
@@ -179,7 +184,7 @@ void ProgramStructure::createStructures() {
         auto ht = type->to<IR::Type_Struct>();
         auto path = new IR::Path(type_name);
         auto tn = new IR::Type_Name(ht->name.srcInfo, path);
-        auto annos = addNameAnnotation(id);
+        auto annos = addNameAnnotation(id, it.first->annotations);
         auto field = new IR::StructField(id.srcInfo, id, annos, tn);
         fields->push_back(field);
     }
@@ -195,7 +200,7 @@ void ProgramStructure::createStructures() {
         auto ht = type->to<IR::Type_Header>();
         auto path = new IR::Path(type_name);
         auto tn = new IR::Type_Name(ht->name.srcInfo, path);
-        auto annos = addNameAnnotation(id);
+        auto annos = addNameAnnotation(id, it.first->annotations);
         auto field = new IR::StructField(id.srcInfo, id, annos, tn);
         fields->push_back(field);
     }
@@ -209,7 +214,7 @@ void ProgramStructure::createStructures() {
         auto path = new IR::Path(type_name);
         auto tn = new IR::Type_Name(ht->name.srcInfo, path);
         auto stack = new IR::Type_Stack(id.srcInfo, tn, new IR::Constant(size));
-        auto annos = addNameAnnotation(id);
+        auto annos = addNameAnnotation(id, it.first->annotations);
         auto field = new IR::StructField(id.srcInfo, id, annos, stack);
         fields->push_back(field);
     }
@@ -357,7 +362,7 @@ const IR::ParserState* ProgramStructure::convertParser(const IR::V1Parser* parse
         BUG("No select or default_return %1%", parser);
     }
     latest = nullptr;
-    auto annos = addNameAnnotation(parser->name);
+    auto annos = addNameAnnotation(parser->name, parser->annotations);
     auto result = new IR::ParserState(parser->srcInfo, parser->name, annos, components, select);
     return result;
 }
@@ -512,7 +517,7 @@ void ProgramStructure::createDeparser() {
         }
     }
 
-    cstring start = IR::ParserState::start.name;
+    cstring start = IR::ParserState::start;
     const IR::Expression* startHeader;
     // find starting point
     if (extracts.count(start) != 0) {
@@ -572,7 +577,7 @@ ProgramStructure::convertTable(const IR::V1Table* table, cstring newName,
     ExpressionConverter conv(this);
 
     auto params = new IR::ParameterList();
-    auto propvec = new IR::IndexedVector<IR::TableProperty>(*table->properties.properties);
+    auto propvec = new IR::IndexedVector<IR::Property>(*table->properties.properties);
 
     auto actVect = new IR::IndexedVector<IR::ActionListElement>();
     auto actionList = new IR::ActionList(Util::SourceInfo(), actVect);
@@ -610,7 +615,7 @@ ProgramStructure::convertTable(const IR::V1Table* table, cstring newName,
     auto nop = new IR::ActionListElement(Util::SourceInfo(), IR::Annotations::empty,
                                          new IR::PathExpression(p4lib.noAction.Id()));
     actVect->push_back(nop);
-    propvec->push_back(new IR::TableProperty(Util::SourceInfo(),
+    propvec->push_back(new IR::Property(Util::SourceInfo(),
                                              IR::ID(IR::TableProperties::actionsPropertyName),
                                              IR::Annotations::empty,
                                              actionList, false));
@@ -648,26 +653,26 @@ ProgramStructure::convertTable(const IR::V1Table* table, cstring newName,
             }
         }
 
-        propvec->push_back(new IR::TableProperty(Util::SourceInfo(),
+        propvec->push_back(new IR::Property(Util::SourceInfo(),
                                                  IR::ID(IR::TableProperties::keyPropertyName),
                                                  IR::Annotations::empty,
                                                  key, false));
     }
 
     if (table->size != 0) {
-        auto prop = new IR::TableProperty(
+        auto prop = new IR::Property(
             Util::SourceInfo(), IR::ID("size"), IR::Annotations::empty,
             new IR::ExpressionValue(Util::SourceInfo(), new IR::Constant(table->size)), false);
         propvec->push_back(prop);
     }
     if (table->min_size != 0) {
-        auto prop = new IR::TableProperty(
+        auto prop = new IR::Property(
             Util::SourceInfo(), IR::ID("min_size"), IR::Annotations::empty,
             new IR::ExpressionValue(Util::SourceInfo(), new IR::Constant(table->min_size)), false);
         propvec->push_back(prop);
     }
     if (table->max_size != 0) {
-        auto prop = new IR::TableProperty(
+        auto prop = new IR::Property(
             Util::SourceInfo(), IR::ID("max_size"), IR::Annotations::empty,
             new IR::ExpressionValue(Util::SourceInfo(), new IR::Constant(table->max_size)), false);
         propvec->push_back(prop);
@@ -684,7 +689,7 @@ ProgramStructure::convertTable(const IR::V1Table* table, cstring newName,
                 table->default_action_args : new IR::Vector<IR::Expression>();
         auto methodCall = new IR::MethodCallExpression(Util::SourceInfo(), act,
                                                        emptyTypeArguments, args);
-        auto prop = new IR::TableProperty(
+        auto prop = new IR::Property(
             Util::SourceInfo(), IR::ID(IR::TableProperties::defaultActionPropertyName),
             IR::Annotations::empty, new IR::ExpressionValue(Util::SourceInfo(), methodCall), false);
         propvec->push_back(prop);
@@ -705,7 +710,7 @@ ProgramStructure::convertTable(const IR::V1Table* table, cstring newName,
         auto constructor = new IR::ConstructorCallExpression(Util::SourceInfo(), type, args);
         auto propvalue = new IR::ExpressionValue(Util::SourceInfo(), constructor);
         auto annos = addNameAnnotation(action_profile->name);
-        auto prop = new IR::TableProperty(
+        auto prop = new IR::Property(
             Util::SourceInfo(), IR::ID(v1model.tableAttributes.tableImplementation.Id()),
             annos, propvalue, false);
         propvec->push_back(prop);
@@ -717,7 +722,7 @@ ProgramStructure::convertTable(const IR::V1Table* table, cstring newName,
         auto constructor = new IR::ConstructorCallExpression(Util::SourceInfo(), type, args);
         auto propvalue = new IR::ExpressionValue(Util::SourceInfo(), constructor);
         auto annos = addNameAnnotation(action_profile->name);
-        auto prop = new IR::TableProperty(
+        auto prop = new IR::Property(
             Util::SourceInfo(), IR::ID(v1model.tableAttributes.tableImplementation.Id()),
             annos, propvalue, false);
         propvec->push_back(prop);
@@ -733,7 +738,7 @@ ProgramStructure::convertTable(const IR::V1Table* table, cstring newName,
         auto constructor = new IR::ConstructorCallExpression(Util::SourceInfo(), type, args);
         auto propvalue = new IR::ExpressionValue(Util::SourceInfo(), constructor);
         auto annos = addNameAnnotation(ctr);
-        auto prop = new IR::TableProperty(
+        auto prop = new IR::Property(
             Util::SourceInfo(), IR::ID(v1model.tableAttributes.directCounter.Id()),
             annos, propvalue, false);
         propvec->push_back(prop);
@@ -742,14 +747,14 @@ ProgramStructure::convertTable(const IR::V1Table* table, cstring newName,
     if (mtr != nullptr) {
         auto meter = new IR::PathExpression(mtr->name);
         auto propvalue = new IR::ExpressionValue(Util::SourceInfo(), meter);
-        auto prop = new IR::TableProperty(
+        auto prop = new IR::Property(
             Util::SourceInfo(), IR::ID(v1model.tableAttributes.directMeter.Id()),
             IR::Annotations::empty, propvalue, false);
         propvec->push_back(prop);
     }
 
     auto props = new IR::TableProperties(Util::SourceInfo(), propvec);
-    auto annos = addNameAnnotation(table->name);
+    auto annos = addNameAnnotation(table->name, table->annotations);
     auto result = new IR::P4Table(table->srcInfo, newName, annos, params, props);
     return result;
 }
@@ -1217,6 +1222,17 @@ const IR::Statement* ProgramStructure::convertPrimitive(const IR::Primitive* pri
         auto mc = new IR::MethodCallExpression(primitive->srcInfo, method,
                                                emptyTypeArguments, args);
         return new IR::MethodCallStatement(mc->srcInfo, mc);
+    } else if (primitive->name == "truncate") {
+        OPS_CK(primitive, 1);
+        auto len = primitive->operands.at(0);
+        auto methodName = p4lib.truncate.Id();
+        auto method = new IR::PathExpression(methodName);
+        auto args = new IR::Vector<IR::Expression>();
+        auto arg0 = new IR::Cast(len->srcInfo, p4lib.truncate.length_type, conv.convert(len));
+        args->push_back(arg0);
+        auto mc = new IR::MethodCallExpression(primitive->srcInfo, method,
+                                               emptyTypeArguments, args);
+        return new IR::MethodCallStatement(mc->srcInfo, mc);
     }
 
     // If everything else failed maybe we are invoking an action
@@ -1360,7 +1376,7 @@ ProgramStructure::convert(const IR::Register* reg, cstring newName) {
     auto spectype = new IR::Type_Specialized(Util::SourceInfo(), type, typeargs);
     auto args = new IR::Vector<IR::Expression>();
     args->push_back(new IR::Constant(v1model.registers.size_type, reg->instance_count));
-    auto annos = addNameAnnotation(reg->name);
+    auto annos = addNameAnnotation(reg->name, reg->annotations);
     auto decl = new IR::Declaration_Instance(
         Util::SourceInfo(), newName, annos, spectype, args, nullptr);
     return decl;
@@ -1380,7 +1396,7 @@ ProgramStructure::convert(const IR::CounterOrMeter* cm, cstring newName) {
     args->push_back(new IR::Constant(v1model.counterOrMeter.size_type, cm->instance_count));
     auto kindarg = counterType(cm);
     args->push_back(kindarg);
-    auto annos = addNameAnnotation(cm->name);
+    auto annos = addNameAnnotation(cm->name, cm->annotations);
     auto decl = new IR::Declaration_Instance(
         Util::SourceInfo(), newName, annos, type, args, nullptr);
     return decl;
@@ -1406,7 +1422,7 @@ ProgramStructure::convertDirectMeter(const IR::Meter* m, cstring newName) {
     auto args = new IR::Vector<IR::Expression>();
     auto kindarg = counterType(m);
     args->push_back(kindarg);
-    auto annos = addNameAnnotation(m->name);
+    auto annos = addNameAnnotation(m->name, m->annotations);
     auto decl = new IR::Declaration_Instance(
         Util::SourceInfo(), newName, annos, specType, args, nullptr);
     return decl;
@@ -1546,7 +1562,7 @@ ProgramStructure::convertControl(const IR::V1Control* control, cstring newName) 
         components->push_back(s);
     }
 
-    auto body = new IR::BlockStatement(Util::SourceInfo(), IR::Annotations::empty, components);
+    auto body = new IR::BlockStatement(Util::SourceInfo(), control->annotations, components);
     auto result = new IR::P4Control(Util::SourceInfo(), name, type,
                                            new IR::ParameterList(), stateful, body);
     conversionContext.clear();
@@ -1646,7 +1662,7 @@ ProgramStructure::checksumUnit(const IR::FieldListCalculation* flc) {
     auto extType = new IR::Type_Name(typePath);
     auto newName = field_list_calculations.get(flc);
     auto inst = new IR::Declaration_Instance(
-        flc->srcInfo, newName, IR::Annotations::empty, extType,
+        flc->srcInfo, newName, flc->annotations, extType,
         new IR::Vector<IR::Expression>(), nullptr);
     return inst;
 }
@@ -1673,6 +1689,7 @@ const IR::FieldList* ProgramStructure::getFieldLists(const IR::FieldListCalculat
             return nullptr;
         }
         result->fields.insert(result->fields.end(), fl->fields.begin(), fl->fields.end());
+        /* FIXME -- do something with fl->annotations? */
     }
     return result;
 }
@@ -1705,6 +1722,7 @@ void ProgramStructure::createChecksumVerifications() {
     std::map<const IR::FieldListCalculation*, const IR::Declaration_Instance*> map;
     auto stateful = new IR::IndexedVector<IR::Declaration>();
     for (auto cf : calculated_fields) {
+        // FIXME -- do something with cf->annotations?
         for (auto uov : cf->specs) {
             if (uov.update) continue;
             auto flc = field_list_calculations.get(uov.name.name);

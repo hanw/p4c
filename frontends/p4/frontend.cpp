@@ -44,6 +44,7 @@ limitations under the License.
 #include "simplifyParsers.h"
 #include "specialize.h"
 #include "inferArchitecture.h"
+#include "parserControlFlow.h"
 
 namespace P4 {
 
@@ -70,6 +71,11 @@ class PrettyPrint : public Inspector {
 }  // namespace
 
 InferArchitecture *InferArchitecture::instance = nullptr;
+
+class FrontEndLast : public PassManager {
+ public:
+    FrontEndLast() { setName("FrontEndLast"); }
+};
 
 const IR::P4Program*
 FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program) {
@@ -115,6 +121,8 @@ FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program) {
         new SimplifyDefUse(&refMap, &typeMap),
         new SimplifyControlFlow(&refMap, &typeMap),
         new SpecializeAll(&refMap, &typeMap),
+        new RemoveParserControlFlow(&refMap, &typeMap),
+        new FrontEndLast(),
         InferArchitecture::instance,
     };
 

@@ -190,18 +190,25 @@ class FindUninitialized : public Inspector {
 
     bool preorder(const IR::IfStatement* statement) override {
         visit(statement->condition);
+        auto saveCurrent = currentPoint;
         visit(statement->ifTrue);
-        if (statement->ifFalse != nullptr)
+        if (statement->ifFalse != nullptr) {
+            currentPoint = saveCurrent;
             visit(statement->ifFalse);
+        }
         return setCurrent(statement);
     }
 
     bool preorder(const IR::SwitchStatement* statement) override {
         LOG1("Visiting " << dbp(statement));
         visit(statement->expression);
+        auto saveCurrent = currentPoint;
         for (auto c : statement->cases) {
-            LOG1("Visiting " << dbp(c));
-            visit(c);
+            if (c->statement != nullptr) {
+                LOG1("Visiting " << dbp(c));
+                currentPoint = saveCurrent;
+                visit(c);
+            }
         }
         return setCurrent(statement);
     }
@@ -314,6 +321,7 @@ class FindUninitialized : public Inspector {
                 visit(expr);
             }
         }
+        reads(expression, LocationSet::empty);
         return false;
     }
 
@@ -349,6 +357,18 @@ class FindUninitialized : public Inspector {
         auto fields = storage->getField(expression->member);
         reads(expression, fields);
         registerUses(expression);
+    }
+
+    bool preorder(const IR::Slice* expression) override {
+        LOG1("Visiting " << dbp(expression));
+        bool save = lhs;
+        lhs = false;  // slices on the LHS also read the data
+        visit(expression->e0);
+        auto storage = getReads(expression->e0, true);
+        reads(expression, storage);   // true even in LHS
+        registerUses(expression->e0);
+        lhs = save;
+        return false;
     }
 
     bool preorder(const IR::ArrayIndex* expression) override {
@@ -389,7 +409,7 @@ class RemoveUnused : public Transform {
     const HasUses* hasUses;
  public:
     explicit RemoveUnused(const HasUses* hasUses) : hasUses(hasUses)
-    { CHECK_NULL(hasUses); }
+    { CHECK_NULL(hasUses); setName("RemoveUnused"); }
     const IR::Node* postorder(IR::AssignmentStatement* statement) override {
         if (!hasUses->hasUses(getOriginal())) {
             LOG1("Removing statement " << dbp(getOriginal()) << " " << statement);

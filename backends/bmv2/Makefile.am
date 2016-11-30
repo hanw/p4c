@@ -23,8 +23,6 @@ p4c_bm2_ss_SOURCES = \
 	backends/bmv2/bmv2.cpp \
 	backends/bmv2/analyzer.h \
 	backends/bmv2/analyzer.cpp \
-	backends/bmv2/copyStructures.h \
-	backends/bmv2/copyStructures.cpp \
 	backends/bmv2/jsonconverter.h \
 	backends/bmv2/jsonconverter.cpp \
 	backends/bmv2/inlining.h \
@@ -33,8 +31,8 @@ p4c_bm2_ss_SOURCES = \
 	backends/bmv2/midend.cpp \
 	backends/bmv2/lower.h \
 	backends/bmv2/lower.cpp \
-	backends/bmv2/validateProperties.h \
-	backends/bmv2/validateProperties.cpp
+	backends/bmv2/eliminateVerify.h \
+	backends/bmv2/eliminateVerify.cpp
 
 cpplint_FILES += $(p4c_bm2_ss_SOURCES)
 
@@ -53,8 +51,3 @@ bmv2tests.mk: $(GENTESTS) $(srcdir)/%reldir%/Makefile.am \
 	      $(srcdir)/testdata/p4_16_samples $(srcdir)/testdata/p4_14_samples
 	@$(GENTESTS) $(srcdir) bmv2 $(srcdir)/backends/bmv2/run-bmv2-test.py $^ >$@
 
-# These exhibit P4_14 features still unimplemented
-XFAIL_TESTS += \
-    bmv2/testdata/p4_14_samples/09-IPv4OptionsUnparsed.p4.test \
-    bmv2/testdata/p4_14_samples/TLV_parsing.p4.test \
-    bmv2/testdata/p4_14_samples/truncate.p4.test

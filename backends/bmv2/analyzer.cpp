@@ -30,8 +30,8 @@ cstring nameFromAnnotation(const IR::Annotations* annotations,
     CHECK_NULL(annotations); CHECK_NULL(defaultValue);
     auto anno = annotations->getSingle(IR::Annotation::nameAnnotation);
     if (anno != nullptr) {
-        CHECK_NULL(anno->expr);
-        auto str = anno->expr->to<IR::StringLiteral>();
+        BUG_CHECK(anno->expr.size() == 1, "name annotation must be a string");
+        auto str = anno->expr[0]->to<IR::StringLiteral>();
         CHECK_NULL(str);
         return str->value;
     }
@@ -84,6 +84,40 @@ void CFG::dbprint(std::ostream& out) const {
 void CFG::Node::computeSuccessors() {
     for (auto e : predecessors.edges)
         e->getNode()->successors.emplace(e->clone(this));
+}
+
+bool CFG::dfs(Node* node, std::set<Node*> &visited, std::set<const IR::P4Table*> &stack) const {
+    const IR::P4Table* table = nullptr;
+    if (node->is<TableNode>()) {
+        table = node->to<TableNode>()->table;
+        if (stack.find(table) != stack.end()) {
+            ::error("Program cannot be implemented since it requires a cycle containing %1%",
+                    table);
+            return false;
+        }
+    }
+    if (visited.find(node) != visited.end())
+        return true;
+    if (table != nullptr)
+        stack.emplace(table);
+    for (auto e : node->successors.edges) {
+        bool success = dfs(e->endpoint, visited, stack);
+        if (!success) return false;
+    }
+    if (table != nullptr)
+        stack.erase(table);
+    visited.emplace(node);
+    return true;
+}
+
+bool CFG::checkForCycles() const {
+    std::set<Node*> visited;
+    std::set<const IR::P4Table*> stack;
+    for (auto n : allNodes) {
+        bool success = dfs(n, visited, stack);
+        if (!success) return false;
+    }
+    return true;
 }
 
 namespace {

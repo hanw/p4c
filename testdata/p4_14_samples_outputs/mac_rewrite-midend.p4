@@ -85,12 +85,9 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    headers hdr_1;
-    metadata meta_1;
-    standard_metadata_t standard_metadata_1;
-    @name("NoAction_1") action NoAction() {
+    @name("NoAction_1") action NoAction_0() {
     }
-    @name("NoAction_2") action NoAction_0() {
+    @name("NoAction_2") action NoAction_3() {
     }
     @name("do_setup") action do_setup_0(bit<9> idx, bit<1> routed) {
         meta.egress_metadata.mac_da = hdr.ethernet.dstAddr;
@@ -100,34 +97,34 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
     @name("setup") table setup() {
         actions = {
             do_setup_0();
-            NoAction();
+            NoAction_0();
         }
         key = {
             hdr.ethernet.isValid(): exact;
         }
-        default_action = NoAction();
+        default_action = NoAction_0();
     }
     @name("process_mac_rewrite.nop") action process_mac_rewrite_nop() {
     }
     @name("process_mac_rewrite.rewrite_ipv4_unicast_mac") action process_mac_rewrite_rewrite_ipv4_unicast_mac(bit<48> smac) {
-        hdr_1.ethernet.srcAddr = smac;
-        hdr_1.ethernet.dstAddr = meta_1.egress_metadata.mac_da;
-        hdr_1.ipv4.ttl = hdr_1.ipv4.ttl + 8w255;
+        hdr.ethernet.srcAddr = smac;
+        hdr.ethernet.dstAddr = meta.egress_metadata.mac_da;
+        hdr.ipv4.ttl = hdr.ipv4.ttl + 8w255;
     }
     @name("process_mac_rewrite.rewrite_ipv4_multicast_mac") action process_mac_rewrite_rewrite_ipv4_multicast_mac(bit<48> smac) {
-        hdr_1.ethernet.srcAddr = smac;
-        hdr_1.ethernet.dstAddr[47:23] = 25w0x0;
-        hdr_1.ipv4.ttl = hdr_1.ipv4.ttl + 8w255;
+        hdr.ethernet.srcAddr = smac;
+        hdr.ethernet.dstAddr[47:23] = 25w0x0;
+        hdr.ipv4.ttl = hdr.ipv4.ttl + 8w255;
     }
     @name("process_mac_rewrite.rewrite_ipv6_unicast_mac") action process_mac_rewrite_rewrite_ipv6_unicast_mac(bit<48> smac) {
-        hdr_1.ethernet.srcAddr = smac;
-        hdr_1.ethernet.dstAddr = meta_1.egress_metadata.mac_da;
-        hdr_1.ipv6.hopLimit = hdr_1.ipv6.hopLimit + 8w255;
+        hdr.ethernet.srcAddr = smac;
+        hdr.ethernet.dstAddr = meta.egress_metadata.mac_da;
+        hdr.ipv6.hopLimit = hdr.ipv6.hopLimit + 8w255;
     }
     @name("process_mac_rewrite.rewrite_ipv6_multicast_mac") action process_mac_rewrite_rewrite_ipv6_multicast_mac(bit<48> smac) {
-        hdr_1.ethernet.srcAddr = smac;
-        hdr_1.ethernet.dstAddr[47:32] = 16w0x0;
-        hdr_1.ipv6.hopLimit = hdr_1.ipv6.hopLimit + 8w255;
+        hdr.ethernet.srcAddr = smac;
+        hdr.ethernet.dstAddr[47:32] = 16w0x0;
+        hdr.ipv6.hopLimit = hdr.ipv6.hopLimit + 8w255;
     }
     @name("process_mac_rewrite.mac_rewrite") table process_mac_rewrite_mac_rewrite_0() {
         actions = {
@@ -136,44 +133,20 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             process_mac_rewrite_rewrite_ipv4_multicast_mac();
             process_mac_rewrite_rewrite_ipv6_unicast_mac();
             process_mac_rewrite_rewrite_ipv6_multicast_mac();
-            NoAction_0();
+            NoAction_3();
         }
         key = {
-            meta_1.egress_metadata.smac_idx: exact;
-            hdr_1.ipv4.isValid()           : exact;
-            hdr_1.ipv6.isValid()           : exact;
+            meta.egress_metadata.smac_idx: exact;
+            hdr.ipv4.isValid()           : exact;
+            hdr.ipv6.isValid()           : exact;
         }
         size = 512;
-        default_action = NoAction_0();
-    }
-    action act() {
-        hdr_1 = hdr;
-        meta_1 = meta;
-        standard_metadata_1 = standard_metadata;
-    }
-    action act_0() {
-        hdr = hdr_1;
-        meta = meta_1;
-        standard_metadata = standard_metadata_1;
-    }
-    table tbl_act() {
-        actions = {
-            act();
-        }
-        const default_action = act();
-    }
-    table tbl_act_0() {
-        actions = {
-            act_0();
-        }
-        const default_action = act_0();
+        default_action = NoAction_3();
     }
     apply {
         setup.apply();
-        tbl_act.apply();
-        if (meta_1.egress_metadata.routed == 1w1) 
+        if (meta.egress_metadata.routed == 1w1) 
             process_mac_rewrite_mac_rewrite_0.apply();
-        tbl_act_0.apply();
     }
 }
 

@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "lib/cstring.h"
 #include "frontends/common/model.h"
+#include "ir/ir.h"
 
 namespace P4 {
 enum class StandardExceptions {
@@ -28,7 +29,8 @@ enum class StandardExceptions {
     EmptyStack,
     FullStack,
     OverwritingHeader,
-    HeaderTooShort
+    HeaderTooShort,
+    ParserTimeout,
 };
 }  // namespace P4
 
@@ -54,6 +56,9 @@ inline std::ostream& operator<<(std::ostream &out, P4::StandardExceptions e) {
             break;
         case P4::StandardExceptions::HeaderTooShort:
             out << "HeaderTooShort";
+            break;
+        case P4::StandardExceptions::ParserTimeout:
+            out << "ParserTimeout";
             break;
         default:
             BUG("Unhandled case");
@@ -81,6 +86,12 @@ class PacketOut : public Model::Extern_Model {
     Model::Elem emit;
 };
 
+class Truncate : public Model::Extern_Model {
+ public:
+    Truncate() : Extern_Model("truncate"), length_type(IR::Type::Bits::get(32)) {}
+    const IR::Type* length_type;
+};
+
 class P4Exception_Model : public ::Model::Elem {
  public:
     const StandardExceptions exc;
@@ -91,8 +102,8 @@ class P4Exception_Model : public ::Model::Elem {
     }
 };
 
-// Model of P4 standard library
-// To be kept in sync with corelib.p4
+// Model of P4 core library
+// To be kept in sync with core.p4
 class P4CoreLibrary : public ::Model::Model {
  protected:
     P4CoreLibrary() :
@@ -115,6 +126,7 @@ class P4CoreLibrary : public ::Model::Model {
 
     PacketIn    packetIn;
     PacketOut   packetOut;
+    Truncate    truncate;
 
     P4Exception_Model noError;
     P4Exception_Model packetTooShort;

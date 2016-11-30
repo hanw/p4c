@@ -20,56 +20,20 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    headers hdr_2;
-    metadata meta_2;
-    standard_metadata_t standard_metadata_2;
-    headers hdr_3;
-    metadata meta_3;
-    standard_metadata_t standard_metadata_3;
-    @name("NoAction_1") action NoAction() {
+    @name("NoAction_1") action NoAction_0() {
     }
     @name("d.c.x") action d_c_x() {
     }
     @name("d.c.t") table d_c_t_0() {
         actions = {
             d_c_x();
-            NoAction();
+            NoAction_0();
         }
-        default_action = NoAction();
-    }
-    action act() {
-        hdr_2 = hdr;
-        meta_2 = meta;
-        standard_metadata_2 = standard_metadata;
-        hdr_3 = hdr_2;
-        meta_3 = meta_2;
-        standard_metadata_3 = standard_metadata_2;
-    }
-    action act_0() {
-        hdr_2 = hdr_3;
-        meta_2 = meta_3;
-        standard_metadata_2 = standard_metadata_3;
-        hdr = hdr_2;
-        meta = meta_2;
-        standard_metadata = standard_metadata_2;
-    }
-    table tbl_act() {
-        actions = {
-            act();
-        }
-        const default_action = act();
-    }
-    table tbl_act_0() {
-        actions = {
-            act_0();
-        }
-        const default_action = act_0();
+        default_action = NoAction_0();
     }
     apply {
-        tbl_act.apply();
-        if (meta_3.m.b == 1w1) 
+        if (meta.m.b == 1w1) 
             d_c_t_0.apply();
-        tbl_act_0.apply();
     }
 }
 

@@ -40,15 +40,15 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_1") action NoAction() {
+    @name("NoAction_1") action NoAction_0() {
     }
-    @name("NoAction_2") action NoAction_0() {
+    @name("NoAction_2") action NoAction_6() {
     }
-    @name("NoAction_3") action NoAction_6() {
+    @name("NoAction_3") action NoAction_7() {
     }
-    @name("NoAction_4") action NoAction_7() {
+    @name("NoAction_4") action NoAction_8() {
     }
-    @name("NoAction_5") action NoAction_8() {
+    @name("NoAction_5") action NoAction_9() {
     }
     @name("set0b1") action set0b1_0(bit<8> val) {
         hdr.extra[0].b1 = val;
@@ -92,28 +92,17 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             act2_0();
             act3_0();
             noop_0();
-            NoAction();
+            NoAction_0();
         }
         key = {
             hdr.extra[0].h: ternary;
         }
-        default_action = NoAction();
+        default_action = NoAction_0();
     }
     @name("tbl1") table tbl1() {
         actions = {
             setb2_0();
             noop_5();
-            NoAction_0();
-        }
-        key = {
-            hdr.data.f2: ternary;
-        }
-        default_action = NoAction_0();
-    }
-    @name("tbl2") table tbl2() {
-        actions = {
-            set1b1_0();
-            noop_6();
             NoAction_6();
         }
         key = {
@@ -121,10 +110,10 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         }
         default_action = NoAction_6();
     }
-    @name("tbl3") table tbl3() {
+    @name("tbl2") table tbl2() {
         actions = {
-            set2b2_0();
-            noop_7();
+            set1b1_0();
+            noop_6();
             NoAction_7();
         }
         key = {
@@ -132,16 +121,27 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         }
         default_action = NoAction_7();
     }
+    @name("tbl3") table tbl3() {
+        actions = {
+            set2b2_0();
+            noop_7();
+            NoAction_8();
+        }
+        key = {
+            hdr.data.f2: ternary;
+        }
+        default_action = NoAction_8();
+    }
     @name("test1") table test1() {
         actions = {
             setb1_0();
             noop_8();
-            NoAction_8();
+            NoAction_9();
         }
         key = {
             hdr.data.f1: ternary;
         }
-        default_action = NoAction_8();
+        default_action = NoAction_9();
     }
     apply {
         test1.apply();
