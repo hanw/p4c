@@ -634,6 +634,7 @@ class ExpressionConverter : public Inspector {
       } else {
         BUG("%1%: type not yet handled", type);
       }
+      map.emplace(expression, result);
     }
   }
 
@@ -1474,7 +1475,6 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
 }
 
 Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block, cstring name,
-<<<<<<< HEAD
                        Util::JsonArray *counters, Util::JsonArray* meters,
                        Util::JsonArray* registers) {
   const IR::P4Control* cont = block->container;
@@ -1788,7 +1788,6 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
   toplevel.emplace("program", options.file);
 
   headerTypesCreated.clear();
-  tupleTypesCreated.clear();
 
   for (auto p : *InferArchitecture::instance->getModel()->parsers) {
     auto parserBlock = package->getParameterValue(p->toString());
@@ -2126,7 +2125,7 @@ Util::IJson* JsonConverter::toJson(const IR::P4Parser* parser) {
   auto result = new Util::JsonObject();
   result->emplace("name", parser->getName());  // at least in simple_router this name is hardwired
   result->emplace("id", nextId("parser"));
-  result->emplace("init_state", IR::ParserState::start.name);
+  result->emplace("init_state", IR::ParserState::start);
   auto states = mkArrayField(result, "parse_states");
 
   for (auto state : *parser->states) {
