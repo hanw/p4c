@@ -113,9 +113,9 @@ bool DoSynthesizeActions::mustMove(const IR::MethodCallStatement* statement) {
             return true;
         auto em = mi->to<ExternMethod>();
         auto &corelib = P4::P4CoreLibrary::instance;
-//        if (em->originalExternType->name.name == corelib.packetOut.name &&
-//            em->method->name.name == corelib.packetOut.emit.name)
-//            return false;
+        if (em->originalExternType->name.name == corelib.packetOut.name &&
+            em->method->name.name == corelib.packetOut.emit.name)
+            return false;
     }
     return true;
 }

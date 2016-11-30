@@ -108,7 +108,7 @@ class JsonConverter final {
     cstring createJsonType(const IR::Type_Tuple *type);
     unsigned nextId(cstring group);
     void addLocals();
-    void addTypesAndInstances(const IR::Type_Struct *type);
+    void addTypesAndInstances(const IR::Parameter *param, const IR::Type_Struct *type);
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                            Util::JsonArray* result, Util::JsonArray* fieldLists,
                            Util::JsonArray* calculations, Util::JsonArray* learn_lists);

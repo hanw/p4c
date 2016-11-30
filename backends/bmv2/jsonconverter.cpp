@@ -730,7 +730,7 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
       continue;
     } else if (s->is<IR::BlockStatement>()) {
       convertActionBody(s->to<IR::BlockStatement>()->components, result,
-              fieldLists, calculations, learn_lists);
+                        fieldLists, calculations, learn_lists);
       continue;
     } else if (s->is<IR::ReturnStatement>()) {
       break;
@@ -797,7 +797,7 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
         continue;
       } else if (mi->is<P4::ExternMethod>()) {
         auto em = mi->to<P4::ExternMethod>();
-    // TODO(pierce): this code will go away once externs are solved in bmv2
+        // TODO(pierce): this code will go away once externs are solved in bmv2
         if (em->originalExternType->name == v1model.counter.name) {
           if (em->method->name == v1model.counter.increment.name) {
             BUG_CHECK(mc->arguments->size() == 1, "Expected 1 argument for %1%", mc);
@@ -1763,9 +1763,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
       auto paramVal = parser->type->applyParams->getParameter(parserParam.index);
       auto paramValType = typeMap->getType(paramVal->getNode(), true);
       auto pvt = paramValType->to<IR::Type_Struct>();
-      if (pvt != nullptr) {
-        addTypesAndInstances(pvt);
-      }
+      addTypesAndInstances(paramVal, pvt);
     }
     auto parserJson = toJson(parser);
     prsrs->append(parserJson);
@@ -1801,68 +1799,101 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
   auto pipelines = mkArrayField(&toplevel, "pipelines");
 
   for (auto c : *InferArchitecture::instance->getModel()->controls) {
+    // TODO: remove once checksums are done in bmv2
+    if (c->toString() == "dep"
+        || c->toString() == "vr" 
+        || c->toString() == "ck") continue;
+
     auto controlBlock = package->getParameterValue(c->toString())->to<IR::ControlBlock>();
-    auto control = convertControl(controlBlock, controlBlock->container->getName(),
-                    counters, meters, registers);
+    auto control = convertControl(controlBlock, c->toString(),
+                                  counters, meters, registers);
     if (::errorCount() > 0) {
       return; 
     }
     pipelines->append(control);
   }
 
+  // TODO(pierce): can get rid of once checksums are done in bmv2
+  auto deparserBlock = package->getParameterValue(v1model.sw.deparser.name);
+  CHECK_NULL(deparserBlock);
+  auto deparser = deparserBlock->to<IR::ControlBlock>()->container;
+
+  auto dprs = mkArrayField(&toplevel, "deparsers");
+  auto deparserJson = convertDeparser(deparser);
+  if (::errorCount() > 0)
+      return;
+  dprs->append(deparserJson);
+
 }
 
-void JsonConverter::addTypesAndInstances(const IR::Type_Struct *type) {
-  // TODO(pierce): generalize for different header/metadata structures
-  for (auto f : *type->fields) {
-  auto ft = typeMap->getType(f, true);
-  if (ft->is<IR::Type_Header>()) {
-    createJsonType(ft->to<IR::Type_StructLike>());
-    auto json = new Util::JsonObject();
-    json->emplace("name", nameFromAnnotation(f->annotations, f->name));
-    json->emplace("id", nextId("headers"));
-    json->emplace("header_type", ft->to<IR::Type_StructLike>()->name.name);
-    json->emplace("metadata", false);
-    headerInstances->append(json);
-  } else if (ft->is<IR::Type_Struct>()) {
-    createJsonType(ft->to<IR::Type_StructLike>());
-    auto json = new Util::JsonObject();
-    json->emplace("name", nameFromAnnotation(f->annotations, f->name));
-    json->emplace("id", nextId("headers"));
-    json->emplace("header_type", ft->to<IR::Type_StructLike>()->name.name);
-    json->emplace("metadata", true);
-    headerInstances->append(json);
-  } else if (ft->is<IR::Type_Stack>()) {
-    auto stack = ft->to<IR::Type_Stack>();
-    LOG1("Creating " << stack);
-    auto json = new Util::JsonObject();
-    json->emplace("name", nameFromAnnotation(f->annotations, f->name.name));
-    json->emplace("id", nextId("stack"));
-    json->emplace("size", stack->getSize());
-    auto type = typeMap->getTypeType(stack->elementType, true);
-    BUG_CHECK(type->is<IR::Type_Header>(),
-        "%1% not a header type",
-        stack->elementType);
-    auto ht = type->to<IR::Type_Header>();
-    createJsonType(ht);
-
-    cstring header_type = stack->elementType->to<IR::Type_Header>()->name;
-    json->emplace("header_type", header_type);
-    auto stackMembers = mkArrayField(json, "header_ids");
-    for (unsigned i=0; i < stack->getSize(); i++) {
-      unsigned id = nextId("headers");
-      stackMembers->append(id);
-      auto header = new Util::JsonObject();
-      cstring name = nameFromAnnotation(f->annotations, f->name.name) +
-          "[" + Util::toString(i) + "]";
-      header->emplace("name", name);
-      header->emplace("id", id);
-      header->emplace("header_type", header_type);
-      header->emplace("metadata", false);
-      headerInstances->append(header);
-    }
-    headerStacks->append(json);
+// TODO(pierce): what about the arguments to controls?
+void JsonConverter::addTypesAndInstances(const IR::Parameter *param,
+                                         const IR::Type_Struct *type) {
+  if (!type) {
+    return;
   }
+
+  // TODO(pierce): right now this only accepts structs of one type, ie
+  // structs of structs, structs of headers, or structs of bitfields
+  for (auto f : *type->fields) {
+    auto ft = typeMap->getType(f, true);
+    if (ft->is<IR::Type_Header>()) {
+      createJsonType(ft->to<IR::Type_StructLike>());
+      auto json = new Util::JsonObject();
+      json->emplace("name", nameFromAnnotation(f->annotations, f->name));
+      json->emplace("id", nextId("headers"));
+      json->emplace("header_type", ft->to<IR::Type_StructLike>()->name.name);
+      json->emplace("metadata", false);
+      headerInstances->append(json);
+    } else if (ft->is<IR::Type_Struct>()) {
+      createJsonType(ft->to<IR::Type_StructLike>());
+      auto json = new Util::JsonObject();
+      json->emplace("name", nameFromAnnotation(f->annotations, f->name));
+      json->emplace("id", nextId("headers"));
+      json->emplace("header_type", ft->to<IR::Type_StructLike>()->name.name);
+      json->emplace("metadata", true);
+      headerInstances->append(json);
+    } else if (ft->is<IR::Type_Stack>()) {
+      auto stack = ft->to<IR::Type_Stack>();
+      LOG1("Creating " << stack);
+      auto json = new Util::JsonObject();
+      json->emplace("name", nameFromAnnotation(f->annotations, f->name.name));
+      json->emplace("id", nextId("stack"));
+      json->emplace("size", stack->getSize());
+      auto type = typeMap->getTypeType(stack->elementType, true);
+      BUG_CHECK(type->is<IR::Type_Header>(),
+               "%1% not a header type",
+                stack->elementType);
+      auto ht = type->to<IR::Type_Header>();
+      createJsonType(ht);
+
+      cstring header_type = stack->elementType->to<IR::Type_Header>()->name;
+      json->emplace("header_type", header_type);
+      auto stackMembers = mkArrayField(json, "header_ids");
+      for (unsigned i=0; i < stack->getSize(); i++) {
+        unsigned id = nextId("headers");
+        stackMembers->append(id);
+        auto header = new Util::JsonObject();
+        cstring name = nameFromAnnotation(f->annotations, f->name.name) +
+            "[" + Util::toString(i) + "]";
+        header->emplace("name", name);
+        header->emplace("id", id);
+        header->emplace("header_type", header_type);
+        header->emplace("metadata", false);
+        headerInstances->append(header);
+      }
+      headerStacks->append(json);
+    } else if (ft->is<IR::Type_Bits>()) {
+      createJsonType(type);
+      auto json = new Util::JsonObject();
+      cstring name = nameFromAnnotation(param->annotations, param->name);
+      json->emplace("name", name);
+      json->emplace("id", nextId("headers"));
+      json->emplace("header_type", type->to<IR::Type_StructLike>()->name.name);
+      json->emplace("metadata", true); // how to know if it's metadata?
+      headerInstances->append(json);
+      return;
+    }
   }
 }
 
