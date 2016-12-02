@@ -838,8 +838,7 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                 // build the primitive name
                 std::stringstream ss;
                 ss << "_"
-                   << (!strcmp(em->actualExternType->toString(), "register")
-                      ? "Register" : em->actualExternType->toString()) // TODO(pierce)
+                   << em->actualExternType->toString()
                    << "_"
                    << em->method->toString();
 
@@ -854,157 +853,15 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                     parameters->append(arg);
                 }
                 continue;
-            // TODO(pierce): this should go away too I think?
             } else if (mi->is<P4::ExternFunction>()) {
                 auto ef = mi->to<P4::ExternFunction>();
-                if (ef->method->name == v1model.clone.name ||
-                    ef->method->name == v1model.clone.clone3.name) {
-                    int id = -1;
-                    if (ef->method->name == v1model.clone.name) {
-                        BUG_CHECK(mc->arguments->size() == 2,
-                                  "Expected 2 arguments for %1%", mc);
-                        cstring name = refMap->newName("fl");
-                        auto emptylist = new IR::ListExpression(
-                            Util::SourceInfo(), new IR::Vector<IR::Expression>());
-                        id = createFieldList(emptylist, "field_lists",
-                                             name, fieldLists);
-                    } else {
-                        BUG_CHECK(mc->arguments->size() == 3,
-                                  "Expected 3 arguments for %1%", mc);
-                        cstring name = refMap->newName("fl");
-                        id = createFieldList(mc->arguments->at(2), "field_lists",
-                                             name, fieldLists);
-                    }
-                    auto cloneType = mc->arguments->at(0);
-                    auto ei = P4::EnumInstance::resolve(cloneType, typeMap);
-                    if (ei == nullptr) {
-                        ::error("%1%: must be a constant on this target", cloneType);
-                    } else {
-                        cstring prim = ei->name == "I2E"
-                                ? "clone_ingress_pkt_to_egress"
-                                : "clone_egress_pkt_to_egress";
-                        auto session = conv->convert(mc->arguments->at(1));
-                        auto primitive = mkPrimitive(prim, result);
-                        auto parameters = mkParameters(primitive);
-                        parameters->append(session);
-
-                        if (id >= 0) {
-                            auto cst = new IR::Constant(id);
-                            typeMap->setType(cst, IR::Type_Bits::get(32));
-                            auto jcst = conv->convert(cst);
-                            parameters->append(jcst);
-                        }
-                    }
-                    continue;
-                } else if (ef->method->name == v1model.hash.name) {
-                    BUG_CHECK(mc->arguments->size() == 5,
-                              "Expected 5 arguments for %1%", mc);
-                    auto primitive = mkPrimitive("modify_field_with_hash_based_offset", 
-                                                 result);
-                    auto parameters = mkParameters(primitive);
-                    auto dest = conv->convert(mc->arguments->at(0));
-                    parameters->append(dest);
-                    auto base = conv->convert(mc->arguments->at(2));
-                    parameters->append(base);
-                    auto calc = new Util::JsonObject();
-                    auto ei = P4::EnumInstance::resolve(mc->arguments->at(1), typeMap);
-                    CHECK_NULL(ei);
-                    cstring algo = convertHashAlgorithm(ei->name);
-                    cstring calcName = createCalculation(algo, mc->arguments->at(3),
-                                                         calculations);
-                    calc->emplace("type", "calculation");
-                    calc->emplace("value", calcName);
-                    parameters->append(calc);
-                    auto max = conv->convert(mc->arguments->at(4));
-                    parameters->append(max);
-                    continue;
-                } else if (ef->method->name == v1model.digest_receiver.name) {
-                    BUG_CHECK(mc->arguments->size() == 2,
-                              "Expected 2 arguments for %1%", mc);
-                    auto primitive = mkPrimitive("generate_digest", result);
-                    auto parameters = mkParameters(primitive);
-                    auto dest = conv->convert(mc->arguments->at(0));
-                    parameters->append(dest);
-                    cstring listName = "digest";
-                    // If we are supplied a type argument that is a named type use
-                    // that for the list name.
-                    if (mc->typeArguments->size() == 1) {
-                        auto typeArg = mc->typeArguments->at(0);
-                        if (typeArg->is<IR::Type_Name>()) {
-                            auto origType = refMap->getDeclaration(
-                                typeArg->to<IR::Type_Name>()->path, true);
-                            BUG_CHECK(origType->is<IR::Type_Struct>(),
-                                      "%1%: expected a struct type", origType);
-                            auto st = origType->to<IR::Type_Struct>();
-                            listName = nameFromAnnotation(st->annotations, st->name);
-                        }
-                    }
-                    int id = createFieldList(mc->arguments->at(1), "learn_lists",
-                                             listName, learn_lists);
-                    auto cst = new IR::Constant(id);
-                    typeMap->setType(cst, IR::Type_Bits::get(32));
-                    auto jcst = conv->convert(cst);
-                    parameters->append(jcst);
-                    continue;
-                } else if (ef->method->name == v1model.resubmit.name ||
-                           ef->method->name == v1model.recirculate.name) {
-                    BUG_CHECK(mc->arguments->size() == 1,
-                              "Expected 1 argument for %1%", mc);
-                    cstring prim = (ef->method->name == v1model.resubmit.name)
-                                   ? "resubmit"
-                                   : "recirculate";
-                    auto primitive = mkPrimitive(prim, result);
-                    auto parameters = mkParameters(primitive);
-                    cstring listName = prim;
-                    // If we are supplied a type argument that is a named type use
-                    // that for the list name.
-                    if (mc->typeArguments->size() == 1) {
-                        auto typeArg = mc->typeArguments->at(0);
-                        if (typeArg->is<IR::Type_Name>()) {
-                            auto origType = refMap->getDeclaration(
-                                typeArg->to<IR::Type_Name>()->path, true);
-                            BUG_CHECK(origType->is<IR::Type_Struct>(),
-                                      "%1%: expected a struct type", origType);
-                            auto st = origType->to<IR::Type_Struct>();
-                            listName = nameFromAnnotation(st->annotations, st->name);
-                        }
-                    }
-                    int id = createFieldList(mc->arguments->at(0), "field_lists",
-                                             listName, fieldLists);
-                    auto cst = new IR::Constant(id);
-                    typeMap->setType(cst, IR::Type_Bits::get(32));
-                    auto jcst = conv->convert(cst);
-                    parameters->append(jcst);
-                    continue;
-                } else if (ef->method->name == v1model.drop.name) {
-                    BUG_CHECK(mc->arguments->size() == 0,
-                              "Expected 0 arguments for %1%", mc);
-                    auto primitive = mkPrimitive("drop", result);
-                    (void)mkParameters(primitive);
-                    continue;
-                } else if (ef->method->name == v1model.random.name) {
-                    BUG_CHECK(mc->arguments->size() == 3,
-                              "Expected 3 arguments for %1%", mc);
-                    auto primitive =
-                            mkPrimitive(v1model.random.modify_field_rng_uniform.name,
-                                        result);
-                    auto params = mkParameters(primitive);
-                    auto dest = conv->convert(mc->arguments->at(0));
-                    auto lo = conv->convert(mc->arguments->at(1));
-                    auto hi = conv->convert(mc->arguments->at(2));
-                    params->append(dest);
-                    params->append(lo);
-                    params->append(hi);
-                    continue;
-                } else if (ef->method->name == corelib.truncate.name) {
-                    BUG_CHECK(mc->arguments->size() == 1,
-                              "Expected 1 arguments for %1%", mc);
-                    auto primitive = mkPrimitive(corelib.truncate.name, result);
-                    auto params = mkParameters(primitive);
-                    auto len = conv->convert(mc->arguments->at(0));
-                    params->append(len);
-                    continue;
+                auto primitive = mkPrimitive(ef->method->name.toString(),
+                                             result);
+                auto params = mkParameters(primitive);
+                for (auto a : *mc->arguments) {
+                    params->append(conv->convert(a));
                 }
+                continue;
             }
         }
         ::error("%1%: not yet supported on this target", s);
@@ -1570,7 +1427,7 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
                 auto j    = new Util::JsonObject();
                 j->emplace("name", c->getName().toString());
                 j->emplace("id", nextId("extern_instances"));
-                j->emplace("type", "Register");//eb->type->getName());
+                j->emplace("type", eb->type->getName());
                 auto attributes = mkArrayField(j, "attributes");
                 for (auto a : *eb->getConstructorParameters()->parameters) {
                     auto aJ = new Util::JsonObject();
