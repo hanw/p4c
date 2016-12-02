@@ -22,6 +22,7 @@ limitations under the License.
 #include "frontends/p4/fromv1.0/v1model.h"
 #include "frontends/common/16model.h"
 #include "analyzer.h"
+#include <iomanip>
 // Currently we are requiring a v1model to be used
 
 // This is based on the specification of the BMv2 JSON input format
@@ -60,7 +61,8 @@ class DirectMeterMap final {
     DirectMeterInfo* createInfo(const IR::IDeclaration* meter);
  public:
     DirectMeterInfo* getInfo(const IR::IDeclaration* meter);
-    void setDestination(const IR::IDeclaration* meter, const IR::Expression* destination);
+    void setDestination(const IR::IDeclaration* meter,
+                        const IR::Expression* destination);
     void setTable(const IR::IDeclaration* meter, const IR::P4Table* table);
     void setSize(const IR::IDeclaration* meter, unsigned size);
 };
@@ -101,7 +103,8 @@ class JsonConverter final {
     friend class ExpressionConverter;
 
  protected:
-    void pushFields(cstring prefix, const IR::Type_StructLike *st, Util::JsonArray *fields);
+    void pushFields(cstring prefix, const IR::Type_StructLike *st,
+                    Util::JsonArray *fields);
     cstring createJsonType(const IR::Type_StructLike *type);
     unsigned nextId(cstring group);
     void addLocals();
@@ -111,16 +114,18 @@ class JsonConverter final {
                            Util::JsonArray* calculations, Util::JsonArray* learn_lists);
     Util::IJson* convertTable(const CFG::TableNode* node, Util::JsonArray* counters);
     Util::IJson* convertIf(const CFG::IfNode* node, cstring parent);
-    Util::JsonArray* createActions(Util::JsonArray* fieldLists, Util::JsonArray* calculations,
+    Util::JsonArray* createActions(Util::JsonArray* fieldLists,
+                                   Util::JsonArray* calculations,
                                    Util::JsonArray* learn_lists);
     Util::IJson* toJson(const IR::P4Parser* cont);
     Util::IJson* toJson(const IR::ParserState* state);
-    void convertDeparserBody(const IR::Vector<IR::StatOrDecl>* body, Util::JsonArray* result);
+    void convertDeparserBody(const IR::Vector<IR::StatOrDecl>* body,
+                             Util::JsonArray* result);
     Util::IJson* convertDeparser(const IR::P4Control* state);
     Util::IJson* convertParserStatement(const IR::StatOrDecl* stat);
     Util::IJson* convertControl(const IR::ControlBlock* block, cstring name,
                                 Util::JsonArray* counters, Util::JsonArray* meters,
-                                Util::JsonArray* registers);
+                                Util::JsonArray* registers, Util::JsonArray *externs);
     cstring createCalculation(cstring algo, const IR::Expression* fields,
                               Util::JsonArray* calculations);
     Util::IJson* nodeName(const CFG::Node* node) const;
@@ -148,7 +153,8 @@ class JsonConverter final {
 
  public:
     explicit JsonConverter(const CompilerOptions& options);
-    void convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap, IR::ToplevelBlock *toplevel);
+    void convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
+                 IR::ToplevelBlock *toplevel);
     void serialize(std::ostream& out) const
     { toplevel.serialize(out); }
 };
