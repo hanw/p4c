@@ -38,7 +38,8 @@ class ArithmeticFixup : public Transform {
     const IR::Expression* fix(const IR::Expression* expr, const IR::Type_Bits* type) {
         unsigned width = type->size;
         if (!type->isSigned) {
-            auto mask = new IR::Constant(Util::SourceInfo(), type, Util::mask(width), 16);
+            auto mask = new IR::Constant(Util::SourceInfo(), type,
+                                         Util::mask(width), 16);
             typeMap->setType(mask, type);
             auto result = new IR::BAnd(expr->srcInfo, expr, mask);
             typeMap->setType(result, type);
@@ -608,15 +609,16 @@ class ExpressionConverter : public Inspector {
             if (type->is<IR::Type_StructLike>()) {
                 result->emplace("type", "header");
                 result->emplace("value", var->name);
-            } else if (type->is<IR::Type_Bits>() ||
-                                 (type->is<IR::Type_Boolean>() && leftValue)) {
+            } else if (type->is<IR::Type_Bits>()
+                       || (type->is<IR::Type_Boolean>() && leftValue)) {
                 // no convertion d2b when writing (leftValue is true) to a boolean
                 result->emplace("type", "field");
                 auto e = mkArrayField(result, "value");
                 e->append(converter->scalarsName);
                 e->append(var->name);
             } else if (type->is<IR::Type_Boolean>()) {
-                // Boolean variables are stored as ints, so we have to insert a conversion when
+                // Boolean variables are stored as ints,
+                // so we have to insert a conversion when
                 // reading such a variable
                 result->emplace("type", "expression");
                 auto e = new Util::JsonObject();
@@ -837,7 +839,7 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                 std::stringstream ss;
                 ss << "_"
                    << (!strcmp(em->actualExternType->toString(), "register")
-                      ? "Register" : em->actualExternType->toString())
+                      ? "Register" : em->actualExternType->toString()) // TODO(pierce)
                    << "_"
                    << em->method->toString();
 
@@ -993,6 +995,14 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                     params->append(dest);
                     params->append(lo);
                     params->append(hi);
+                    continue;
+                } else if (ef->method->name == corelib.truncate.name) {
+                    BUG_CHECK(mc->arguments->size() == 1,
+                              "Expected 1 arguments for %1%", mc);
+                    auto primitive = mkPrimitive(corelib.truncate.name, result);
+                    auto params = mkParameters(primitive);
+                    auto len = conv->convert(mc->arguments->at(0));
+                    params->append(len);
                     continue;
                 }
             }
