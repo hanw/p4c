@@ -407,7 +407,8 @@ class ExpressionConverter : public Inspector {
         } else {
             bool done = false;
             if (expression->expr->is<IR::Member>()) {
-                // array.next.field => type: "stack_field", value: [ array, field ]
+                // array.next.field => type: "stack_field",
+                // value: [ array, field ]
                 auto mem = expression->expr->to<IR::Member>();
                 auto memtype = converter->typeMap->getType(mem->expr, true);
                 if (memtype->is<IR::Type_Stack>()
@@ -427,11 +428,23 @@ class ExpressionConverter : public Inspector {
                 // TODO(pierce): look ahead to skip externs for now,
                 // but do them eventually
                 auto pathExp = expression->expr->to<IR::PathExpression>();
-                auto decl = converter->refMap->getDeclaration(pathExp->path, true);
+                auto decl =
+                    converter->refMap->getDeclaration(pathExp->path, true);
                 if (decl->is<IR::Declaration_Instance>()) {
-                    printf("Got extern path expression: %s\n", expression->toString());
+                    printf("Got extern path expression: %s\n",
+                           expression->toString());
                     done = true;
                 }
+            } else if (expression->expr->is<IR::TypeNameExpression>()) {
+                // the case of enumeration
+                
+                // TODO(pierce): this essentially passes the enum value
+                // to bmv2 without doing anything...we'll see how long it lasts
+
+                auto tne = expression->expr->to<IR::TypeNameExpression>();
+                result->emplace("type", tne->toString());
+                result->emplace("value", expression->member.toString());
+                done = true;
             }
 
             if (!done) {
@@ -442,12 +455,14 @@ class ExpressionConverter : public Inspector {
                 if (l->is<Util::JsonObject>()) {
                     auto lv = l->to<Util::JsonObject>()->get("value");
                     if (lv->is<Util::JsonArray>()) {
-                        // nested struct reference [ ["m", "f"], "x" ] => [ "m", "f.x" ]
+                        // nested struct reference [ ["m", "f"], "x" ] =>
+                        // [ "m", "f.x" ]
                         auto array = lv->to<Util::JsonArray>();
                         BUG_CHECK(array->size() == 2, "expected 2 elements");
                         auto first = array->at(0);
                         auto second = array->at(1);
-                        BUG_CHECK(second->is<Util::JsonValue>(), "expected a value");
+                        BUG_CHECK(second->is<Util::JsonValue>(),
+                                  "expected a value");
                         e->append(first);
                         cstring nestedField =
                             second->to<Util::JsonValue>()->getString();
@@ -1428,16 +1443,24 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
                 j->emplace("name", c->getName().toString());
                 j->emplace("id", nextId("extern_instances"));
                 j->emplace("type", eb->type->getName());
-                auto attributes = mkArrayField(j, "attributes");
+                auto attributes = mkArrayField(j, "attribute_values");
                 for (auto a : *eb->getConstructorParameters()->parameters) {
                     auto aJ = new Util::JsonObject();
                     aJ->emplace("name", a->toString()); 
                     auto val = eb->getParameterValue(a->getName().toString());
-                    auto constVal = val->to<IR::Constant>();
-                    BUG_CHECK(constVal, "%1%: expected a constant", val);
-                    if (a->type->is<IR::Type_Bits>()) {
-                        aJ->emplace("type", "hexstr");
-                        aJ->emplace("value", constVal->value.get_str(16));
+                    if (val->is<IR::Constant>()) {
+                        auto constVal = val->to<IR::Constant>();
+                        if (a->type->is<IR::Type_Bits>()) {
+                            aJ->emplace("type", "hexstr");
+                            aJ->emplace("value", constVal->value.get_str(16));
+                        } else {
+                            BUG("%1%: unhandled constant constructor param",
+                                constVal->toString());
+                        }
+                    } else if (val->is<IR::Declaration_ID>()) {
+                        auto declID = val->to<IR::Declaration_ID>();
+                        aJ->emplace("type", "string");
+                        aJ->emplace("value", declID->toString());
                     } else {
                         BUG("%1%: unknown constructor param type", a->type);
                     }
