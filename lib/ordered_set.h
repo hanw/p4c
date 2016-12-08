@@ -1,5 +1,5 @@
 /*
-Copyright 2013-present Barefoot Networks, Inc. 
+Copyright 2013-present Barefoot Networks, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -113,6 +113,10 @@ class ordered_set {
             data_map.emplace(&*it, it);
             return std::make_pair(it, true); }
         return std::make_pair(it, false); }
+    void insert(ordered_set::const_iterator begin, ordered_set::const_iterator end) {
+        for (auto it = begin; it != end; ++it)
+            insert(*it);
+    }
 
     template <class... Args>
     std::pair<iterator, bool> emplace(Args &&... args) {
@@ -137,5 +141,31 @@ class ordered_set {
             return 1; }
         return 0; }
 };
+
+template<class T, class C1, class A1, class U> inline
+auto operator|=(ordered_set<T, C1, A1> &a, U &b) -> decltype(b.begin(), a) {
+    for (auto &el : b) a.insert(el);
+    return a; }
+template<class T, class C1, class A1, class U> inline
+auto operator-=(ordered_set<T, C1, A1> &a, U &b) -> decltype(b.begin(), a) {
+    for (auto &el : b) a.erase(el);
+    return a; }
+template<class T, class C1, class A1, class U> inline
+auto operator&=(ordered_set<T, C1, A1> &a, U &b) -> decltype(b.begin(), a) {
+    for (auto it = a.begin(); it != a.end();) {
+        if (b.count(*it))
+            ++it;
+        else
+            it = a.erase(it); }
+    return a; }
+
+template<class T, class C1, class A1, class U> inline
+auto contains(ordered_set<T, C1, A1> &a, U &b) -> decltype(b.begin(), true) {
+    for (auto &el : b) if (!a.count(el)) return false;
+    return true; }
+template<class T, class C1, class A1, class U> inline
+auto intersects(ordered_set<T, C1, A1> &a, U &b) -> decltype(b.begin(), true) {
+    for (auto &el : b) if (a.count(el)) return true;
+    return false; }
 
 #endif /* P4C_LIB_ORDERED_SET_H_ */

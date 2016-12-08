@@ -767,8 +767,6 @@ cstring JsonConverter::createCalculation(cstring algo,
     return calcName;
 }
 
-
-// TODO(pierce): maybe break up this function a bit?
 void
 JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                                  Util::JsonArray* result,

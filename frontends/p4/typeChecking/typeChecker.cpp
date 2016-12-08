@@ -131,9 +131,6 @@ bool TypeInference::done() const {
 const IR::Type* TypeInference::getType(const IR::Node* element) const {
     const IR::Type* result = typeMap->getType(element);
     if (result == nullptr) {
-        if (auto field = element->to<IR::StructField>()) {
-            // FIXME -- for some reason, fields aren't in the typeMap?
-            return field->type; }
         typeError("Could not find type of %1%", element);
         return nullptr;
     }
@@ -1567,7 +1564,7 @@ const IR::Node* TypeInference::bitwise(const IR::Operation_Binary* expression) {
 
     const IR::Type* resultType = ltype;
     if (bl != nullptr && br != nullptr) {
-        if (!(*bl == *br)) {
+        if (!TypeMap::equivalent(bl, br)) {
             typeError("%1%: Cannot operate on values with different types %2% and %3%",
                       expression, bl->toString(), br->toString());
             return expression;
@@ -1580,7 +1577,6 @@ const IR::Node* TypeInference::bitwise(const IR::Operation_Binary* expression) {
         setType(e->left, rtype);
         expression = e;
         resultType = rtype;
-        setType(expression, resultType);
     } else if (bl != nullptr && br == nullptr) {
         auto e = expression->clone();
         auto cst = expression->right->to<IR::Constant>();
@@ -1589,10 +1585,8 @@ const IR::Node* TypeInference::bitwise(const IR::Operation_Binary* expression) {
         setType(e->right, ltype);
         expression = e;
         resultType = ltype;
-        setType(expression, resultType);
-    } else {
-        setType(expression, resultType);
     }
+    setType(expression, resultType);
     setType(getOriginal(), resultType);
     if (isCompileTimeConstant(expression->left) && isCompileTimeConstant(expression->right)) {
         setCompileTimeConstant(expression);

@@ -72,6 +72,7 @@ class PrettyPrint : public Inspector {
 
 InferArchitecture *InferArchitecture::instance = nullptr;
 
+// This pass does nothing, it's just here to mark the end of the front-end
 class FrontEndLast : public PassManager {
  public:
     FrontEndLast() { setName("FrontEndLast"); }
@@ -122,8 +123,8 @@ FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program) {
         new SimplifyControlFlow(&refMap, &typeMap),
         new SpecializeAll(&refMap, &typeMap),
         new RemoveParserControlFlow(&refMap, &typeMap),
-        new FrontEndLast(),
         InferArchitecture::instance,
+        new FrontEndLast(),
     };
 
     passes.setName("FrontEnd");
