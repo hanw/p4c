@@ -647,7 +647,7 @@ class ExpressionConverter : public Inspector {
                 f->append(converter->scalarsName);
                 f->append(var->name);
             } else if (type->is<IR::Type_Stack>()) {
-                            // handled specially elsewhere
+                // handled specially elsewhere
             } else {
                 BUG("%1%: type not yet handled", type);
             }
@@ -663,6 +663,10 @@ class ExpressionConverter : public Inspector {
             }
             map.emplace(expression, result);
         }
+    }
+
+    void postorder(const IR::TypeNameExpression* expression) override {
+        printf("Got TypeNameExpression: %s\n", expression->toString());
     }
 
     void postorder(const IR::Expression* expression) override {
@@ -1204,10 +1208,10 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
             } else {
                 auto pe = expr->to<IR::PathExpression>();
                 auto decl = refMap->getDeclaration(pe->path, true);
-                meterMap.setTable(decl, table);
-                meterMap.setSize(decl, size);
+//                meterMap.setTable(decl, table);
+//                meterMap.setSize(decl, size);
                 BUG_CHECK(decl->is<IR::Declaration_Instance>(),
-                         "%1%: expected an instance", decl->getNode());
+                          "%1%: expected an instance", decl->getNode());
                 result->emplace("direct_meters", decl->getName());
             }
         } else {
@@ -1381,7 +1385,7 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
         result->emplace("init_table", Util::JsonValue::null);
     } else {
         BUG_CHECK(cfg->entryPoint->successors.size() == 1,
-                    "Expected 1 start node for %1%", cont);
+                  "Expected 1 start node for %1%", cont);
         auto start = (*(cfg->entryPoint->successors.edges.begin()))->endpoint;
         result->emplace("init_table", start->name);
     }
@@ -1393,8 +1397,8 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
             auto j = convertTable(node->to<CFG::TableNode>(), counters);
             tables->append(j);
         } else if (node->is<CFG::IfNode>()) {
-        auto j = convertIf(node->to<CFG::IfNode>(), cont->name);
-        conditionals->append(j);
+            auto j = convertIf(node->to<CFG::IfNode>(), cont->name);
+            conditionals->append(j);
         }
     }
 
