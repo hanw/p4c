@@ -30,17 +30,43 @@ limitations under the License.
 
 namespace BMV2 {
 
-struct TableAttributes_Model {
-  TableAttributes_Model() : tableImplementation("implementation"),
-                            directCounter("counters"),
-                            directMeter("meters"), size("size"),
-                            supportTimeout("support_timeout") {}
-  ::Model::Elem tableImplementation;
-  ::Model::Elem directCounter;
-  ::Model::Elem directMeter;
-  ::Model::Elem size;
-  ::Model::Elem supportTimeout;
-  const unsigned defaultTableSize = 1024;
+class BMV2_Model : public  ::P4_16::V2Model {
+ private:
+    struct TableAttributes_Model {
+        TableAttributes_Model() : 
+                tableImplementation("implementation"),
+                directCounter("counters"),
+                directMeter("meters"), size("size"),
+                supportTimeout("support_timeout") {}
+        ::Model::Elem tableImplementation;
+        ::Model::Elem directCounter;
+        ::Model::Elem directMeter;
+        ::Model::Elem size;
+        ::Model::Elem supportTimeout;
+        const unsigned defaultTableSize = 1024;
+    };
+    
+    struct TableImplementation_Model {
+        TableImplementation_Model() :
+                actionProfile("action_profile"),
+                actionSelector("action_selector") {}
+        ::Model::Elem actionProfile;
+        ::Model::Elem actionSelector;
+    };
+
+ public:
+    BMV2_Model(::P4_16::V2Model *v2model) :
+            tableAttributes(), tableImplementations(),
+            selectorMatchType("selector"), rangeMatchType("range") {
+        this->parsers = v2model->parsers;
+        this->controls = v2model->controls;
+        this->externs = v2model->externs;
+    }
+    
+    ::Model::Elem             selectorMatchType;
+    ::Model::Elem             rangeMatchType;
+    TableAttributes_Model     tableAttributes;
+    TableImplementation_Model tableImplementations;
 };
 
 class ExpressionConverter;
@@ -75,10 +101,7 @@ class JsonConverter final {
     // TODO(pierce): going away
     P4V1::V1Model&         v1model;
 
-    // TODO(pierce): can I add these here?
-    TableAttributes_Model  tableAttributes;
-    ::Model::Elem          rangeMatchType;
-    ::Model::Elem          selectorMatchType;
+    BMV2_Model             model;
 
     P4::P4CoreLibrary&     corelib;
     P4::ReferenceMap*      refMap;
@@ -112,7 +135,7 @@ class JsonConverter final {
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                            Util::JsonArray* result, Util::JsonArray* fieldLists,
                            Util::JsonArray* calculations, Util::JsonArray* learn_lists);
-    Util::IJson* convertTable(const CFG::TableNode* node, Util::JsonArray* counters);
+    Util::IJson* convertTable(const CFG::TableNode* node, Util::JsonArray* counters, Util::JsonArray* meters);
     Util::IJson* convertIf(const CFG::IfNode* node, cstring parent);
     Util::JsonArray* createActions(Util::JsonArray* fieldLists,
                                    Util::JsonArray* calculations,
@@ -152,7 +175,7 @@ class JsonConverter final {
     void buildCfg(IR::P4Control* cont);
 
  public:
-    explicit JsonConverter(const CompilerOptions& options);
+    explicit JsonConverter(const CompilerOptions& options, ::P4_16::V2Model *v2model);
     void convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
                  IR::ToplevelBlock *toplevel);
     void serialize(std::ostream& out) const

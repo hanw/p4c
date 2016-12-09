@@ -733,9 +733,8 @@ class ExpressionConverter : public Inspector {
     }
 };
 
-JsonConverter::JsonConverter(const CompilerOptions& options) :
-    options(options), v1model(P4V1::V1Model::instance), tableAttributes(),
-    rangeMatchType("range"), selectorMatchType("selector"),
+JsonConverter::JsonConverter(const CompilerOptions& options, ::P4_16::V2Model *v2model) :
+    options(options), v1model(P4V1::V1Model::instance), model(v2model),
     corelib(P4::P4CoreLibrary::instance),
     refMap(nullptr), typeMap(nullptr), dropActionId(0), toplevelBlock(nullptr),
     conv(new ExpressionConverter(this)),
@@ -1026,7 +1025,7 @@ bool JsonConverter::handleTableImplementation(const IR::Property* implementation
 
     bool isSimpleTable = true;
     auto ecc = cc->to<P4::ExternConstructorCall>();
-    if (ecc->type->name == v1model.action_selector.name) {
+    if (ecc->type->name == model.tableImplementations.actionSelector.name) {
         BUG_CHECK(ecc->cce->arguments->size() == 3,
                   "%1%: expected 3 arguments", cc->cce);
         isSimpleTable = false;
@@ -1046,14 +1045,14 @@ bool JsonConverter::handleTableImplementation(const IR::Property* implementation
             auto decl = refMap->getDeclaration(ke->matchType->path, true);
             auto mt = decl->to<IR::Declaration_ID>();
             BUG_CHECK(mt != nullptr, "%1%: could not find declaration", ke->matchType);
-            if (mt->name.name != v1model.selectorMatchType.name)
+            if (mt->name.name != model.selectorMatchType.name)
                 continue;
 
             auto expr = ke->expression;
             auto jk = conv->convert(expr);
             input->append(jk);
         }
-    } else if (ecc->type->name == v1model.action_profile.name) {
+    } else if (ecc->type->name == model.tableImplementations.actionProfile.name) {
             isSimpleTable = false;
             table->emplace("type", "indirect");
     } else {
@@ -1067,7 +1066,8 @@ cstring JsonConverter::convertHashAlgorithm(cstring algorithm) const {
 }
 
 Util::IJson*
-JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counters) {
+JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counters,
+                            Util::JsonArray* meters) {
     auto table = node->table;
     LOG1("Processing " << table);
     auto result = new Util::JsonObject();
@@ -1124,9 +1124,9 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
                 if (table_match_type != "lpm") {
                     table_match_type = "lpm";
                 }
-            } else if (mt->name.name == rangeMatchType.name) {
+            } else if (mt->name.name == model.rangeMatchType.name) {
                 continue;
-            } else if (mt->name.name == selectorMatchType.name) {
+            } else if (mt->name.name == model.selectorMatchType.name) {
                 continue;
             } else {
                 ::error("%1%: match type not supported on this target", mt);
@@ -1147,11 +1147,11 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
     conv->simpleExpressionsOnly = false;
 
     auto impl =
-        table->properties->getProperty(tableAttributes.tableImplementation.name);
+        table->properties->getProperty(model.tableAttributes.tableImplementation.name);
     bool simple = handleTableImplementation(impl, key, result);
 
     unsigned size = 0;
-    auto sz = table->properties->getProperty(tableAttributes.size.name);
+    auto sz = table->properties->getProperty(model.tableAttributes.size.name);
     if (sz != nullptr) {
         if (sz->value->is<IR::ExpressionValue>()) {
             auto expr = sz->value->to<IR::ExpressionValue>()->expression;
@@ -1166,10 +1166,10 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
         }
     }
     if (size == 0)
-        size = tableAttributes.defaultTableSize;
+        size = model.tableAttributes.defaultTableSize;
 
     result->emplace("max_size", size);
-    auto ctrs = table->properties->getProperty(tableAttributes.directCounter.name);
+    auto ctrs = table->properties->getProperty(model.tableAttributes.directCounter.name);
     if (ctrs != nullptr) {
         result->emplace("with_counters", true);
         auto jctr = new Util::JsonObject();
@@ -1184,7 +1184,7 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
     }
 
     bool sup_to = false;
-    auto timeout = table->properties->getProperty(tableAttributes.supportTimeout.name);
+    auto timeout = table->properties->getProperty(model.tableAttributes.supportTimeout.name);
     if (timeout != nullptr) {
         if (timeout->value->is<IR::ExpressionValue>()) {
             auto expr = timeout->value->to<IR::ExpressionValue>()->expression;
@@ -1199,20 +1199,21 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
     }
     result->emplace("support_timeout", sup_to);
 
-    auto dm = table->properties->getProperty(tableAttributes.directMeter.name);
+    auto dm = table->properties->getProperty(model.tableAttributes.directMeter.name);
     if (dm != nullptr) {
         if (dm->value->is<IR::ExpressionValue>()) {
             auto expr = dm->value->to<IR::ExpressionValue>()->expression;
             if (!expr->is<IR::PathExpression>()) {
                 ::error("%1%: expected a reference to a meter declaration", expr);
             } else {
+                // add meter to direct_meter field
                 auto pe = expr->to<IR::PathExpression>();
                 auto decl = refMap->getDeclaration(pe->path, true);
-//                meterMap.setTable(decl, table);
-//                meterMap.setSize(decl, size);
                 BUG_CHECK(decl->is<IR::Declaration_Instance>(),
                           "%1%: expected an instance", decl->getNode());
                 result->emplace("direct_meters", decl->getName());
+
+                // add the meter to the meter_arrays list
             }
         } else {
             ::error("%1%: expected a Boolean", timeout);
@@ -1394,7 +1395,7 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
 
     for (auto node : cfg->allNodes) {
         if (node->is<CFG::TableNode>()) {
-            auto j = convertTable(node->to<CFG::TableNode>(), counters);
+            auto j = convertTable(node->to<CFG::TableNode>(), counters, meters);
             tables->append(j);
         } else if (node->is<CFG::IfNode>()) {
             auto j = convertIf(node->to<CFG::IfNode>(), cont->name);
@@ -1576,8 +1577,6 @@ void JsonConverter::addLocals() {
     }
 }
 
-using ::P4::InferArchitecture;
-
 void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
                             IR::ToplevelBlock* toplevelBlock) {
     this->toplevelBlock = toplevelBlock;
@@ -1610,7 +1609,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
 
     headerTypesCreated.clear();
 
-    for (auto p : *InferArchitecture::instance->getModel()->parsers) {
+    for (auto p : *model.parsers) {
         auto parserBlock = package->getParameterValue(p->toString());
         CHECK_NULL(parserBlock);
         auto parser = parserBlock->to<IR::ParserBlock>()->container;
@@ -1661,10 +1660,10 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
 
     auto pipelines = mkArrayField(&toplevel, "pipelines");
 
-    for (auto c : *InferArchitecture::instance->getModel()->controls) {
+    for (auto c : *model.controls) {
         // TODO: remove once checksums are done in bmv2
         if (c->toString() == "dep"
-            || c->toString() == "vr" 
+//            || c->toString() == "vr" 
             || c->toString() == "ck") continue;
 
         auto controlBlock =

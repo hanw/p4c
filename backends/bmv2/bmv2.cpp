@@ -26,6 +26,7 @@ limitations under the License.
 #include "lib/nullstream.h"
 #include "frontends/common/parseInput.h"
 #include "frontends/p4/frontend.h"
+#include "frontends/p4/inferArchitecture.h"
 #include "midend.h"
 #include "jsonconverter.h"
 
@@ -61,7 +62,9 @@ int main(int argc, char *const argv[]) {
     if (::errorCount() > 0 || toplevel == nullptr)
         return 1;
 
-    BMV2::JsonConverter converter(options);
+    ::P4_16::V2Model *v2model = ::P4::InferArchitecture::instance->getModel();
+
+    BMV2::JsonConverter converter(options, v2model);
     converter.convert(&midEnd.refMap, &midEnd.typeMap, toplevel);
     if (::errorCount() > 0)
         return 1;
