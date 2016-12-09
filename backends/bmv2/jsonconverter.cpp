@@ -88,27 +88,6 @@ class ArithmeticFixup : public Transform {
 };
 } // namespace
 
-DirectMeterMap::DirectMeterInfo* DirectMeterMap::createInfo(const IR::IDeclaration* meter) {
-    auto prev = ::get(directMeter, meter);
-    BUG_CHECK(prev == nullptr, "Already created");
-    auto result = new DirectMeterMap::DirectMeterInfo();
-    directMeter.emplace(meter, result);
-    return result;
-}
-
-DirectMeterMap::DirectMeterInfo* DirectMeterMap::getInfo(const IR::IDeclaration* meter) {
-    return ::get(directMeter, meter);
-}
-
-void DirectMeterMap::setTable(const IR::IDeclaration* meter, const IR::P4Table* table) {
-    auto info = getInfo(meter);
-    CHECK_NULL(info);
-    if (info->table != nullptr)
-        ::error("%1%: Direct meters cannot be attached to multiple tables %2% and %3%",
-                meter, table, info->table);
-    info->table = table;
-}
-
 static bool checkSame(const IR::Expression* expr0, const IR::Expression* expr1) {
     if (expr0->node_type_name() != expr1->node_type_name())
         return false;
@@ -121,28 +100,6 @@ static bool checkSame(const IR::Expression* expr0, const IR::Expression* expr1) 
         return checkSame(mem0->expr, mem1->expr) && mem0->member == mem1->member;
     }
     BUG("%1%: unexpected expression for meter destination", expr0);
-}
-
-void DirectMeterMap::setDestination(const IR::IDeclaration* meter,
-                                    const IR::Expression* destination) {
-    auto info = getInfo(meter);
-    if (info == nullptr)
-        info = createInfo(meter);
-    if (info->destinationField == nullptr) {
-        info->destinationField = destination;
-    } else {
-        bool same = checkSame(destination, info->destinationField);
-        if (!same)
-            ::error("On this target all meter operations must write to the same "
-                    "destination but %1% and %2% are different",
-                    destination, info->destinationField);
-    }
-}
-
-void DirectMeterMap::setSize(const IR::IDeclaration* meter, unsigned size) {
-    auto info = getInfo(meter);
-    CHECK_NULL(info);
-    info->tableSize = size;
 }
 
 static cstring stringRepr(mpz_class value, unsigned bytes = 0) {
@@ -658,6 +615,7 @@ class ExpressionConverter : public Inspector {
             auto result = new Util::JsonObject();
             auto type = converter->typeMap->getType(inst, true);
             if (type->is<IR::Type_Extern>()) {
+                printf("Got extern PathExpression: %s\n", expression);
             } else {
                 BUG("%1%: type not yet handled", type);
             }
@@ -1212,8 +1170,6 @@ JsonConverter::convertTable(const CFG::TableNode* node, Util::JsonArray* counter
                 BUG_CHECK(decl->is<IR::Declaration_Instance>(),
                           "%1%: expected an instance", decl->getNode());
                 result->emplace("direct_meters", decl->getName());
-
-                // add the meter to the meter_arrays list
             }
         } else {
             ::error("%1%: expected a Boolean", timeout);
@@ -1455,7 +1411,7 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
                         auto constVal = val->to<IR::Constant>();
                         if (a->type->is<IR::Type_Bits>()) {
                             aJ->emplace("type", "hexstr");
-                            aJ->emplace("value", constVal->value.get_str(16));
+                            aJ->emplace("value", stringRepr(constVal->value));
                         } else {
                             BUG("%1%: unhandled constant constructor param",
                                 constVal->toString());

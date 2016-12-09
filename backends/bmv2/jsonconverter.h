@@ -71,28 +71,6 @@ class BMV2_Model : public  ::P4_16::V2Model {
 
 class ExpressionConverter;
 
-class DirectMeterMap final {
- public:
-    struct DirectMeterInfo {
-        const IR::Expression* destinationField;
-        const IR::P4Table* table;
-        unsigned tableSize;
-
-        DirectMeterInfo() : destinationField(nullptr), table(nullptr), tableSize(0) {}
-    };
-
- private:
-    // key is declaration of direct meter
-    std::map<const IR::IDeclaration*, DirectMeterInfo*> directMeter;
-    DirectMeterInfo* createInfo(const IR::IDeclaration* meter);
- public:
-    DirectMeterInfo* getInfo(const IR::IDeclaration* meter);
-    void setDestination(const IR::IDeclaration* meter,
-                        const IR::Expression* destination);
-    void setTable(const IR::IDeclaration* meter, const IR::P4Table* table);
-    void setSize(const IR::IDeclaration* meter, unsigned size);
-};
-
 class JsonConverter final {
  public:
     const CompilerOptions& options;
@@ -112,7 +90,6 @@ class JsonConverter final {
     unsigned               dropActionId;
     IR::ToplevelBlock*     toplevelBlock;
     ExpressionConverter*   conv;
-    DirectMeterMap         meterMap;
     const IR::Parameter*   headerParameter;
     const IR::Parameter*   userMetadataParameter;
     const IR::Parameter*   stdMetadataParameter;
