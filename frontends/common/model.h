@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+        http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,17 +26,17 @@ namespace Model {
 
 // Model element
 struct Elem {
-  explicit Elem(cstring name) : name(name) {}
-  Elem() = delete;
+    explicit Elem(cstring name) : name(name) {}
+    Elem() = delete;
 
-  cstring name;
-  IR::ID Id() const { return IR::ID(name); }
-  const char* str() const { return name.c_str(); }
-  cstring toString() const { return name; }
+    cstring name;
+    IR::ID Id() const { return IR::ID(name); }
+    const char* str() const { return name.c_str(); }
+    cstring toString() const { return name; }
 };
 
 struct Type_Model : public Elem {
-  explicit Type_Model(cstring name) : Elem(name) {}
+    explicit Type_Model(cstring name) : Elem(name) {}
 };
 
 struct Enum_Model : public Type_Model {
@@ -48,18 +48,18 @@ struct Extern_Model : public Type_Model {
 };
 
 struct Param_Model : public Elem {
-  Type_Model type;
-  unsigned   index;
-  Param_Model(cstring name, Type_Model type, unsigned index) :
-      Elem(name), type(type), index(index) {}
+    Type_Model type;
+    unsigned   index;
+    Param_Model(cstring name, Type_Model type, unsigned index) :
+            Elem(name), type(type), index(index) {}
 };
 
 class Model {
  public:
-  cstring version;
-  explicit Model(cstring version) : version(version) {}
+    cstring version;
+    explicit Model(cstring version) : version(version) {}
 };
 
-}  // namespace Model
+}    // namespace Model
 
 #endif /* P4C_FRONTENDS_COMMON_MODEL_H_ */

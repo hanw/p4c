@@ -12,30 +12,30 @@ namespace P4 {
 
 class InferArchitecture : public Inspector {
  private:
-  ::P4_16::V2Model *archModel;
-  TypeMap *typeMap;
+    ::P4_16::V2Model *archModel;
+    TypeMap *typeMap;
 
  public:
-  InferArchitecture(TypeMap *tm) {
-    this->archModel = new ::P4_16::V2Model();
-    this->typeMap = tm;
-  }
+    InferArchitecture(TypeMap *tm) {
+        this->archModel = new ::P4_16::V2Model();
+        this->typeMap = tm;
+    }
 
-  ::P4_16::V2Model *getModel() { return this->archModel; }
+    ::P4_16::V2Model *getModel() { return this->archModel; }
 
-  // Control bock will need to "infer" if it is a deparser
-  bool preorder(const IR::Type_Control *node) override;
-  bool preorder(const IR::Type_Parser *node) override;
-  bool preorder(const IR::Type_Extern *node) override;
-  bool preorder(const IR::Type_Package *node) override;
+    // Control bock will need to "infer" if it is a deparser
+    bool preorder(const IR::Type_Control *node) override;
+    bool preorder(const IR::Type_Parser *node) override;
+    bool preorder(const IR::Type_Extern *node) override;
+    bool preorder(const IR::Type_Package *node) override;
 
-  // Needed just to start the traversal
-  bool preorder(const IR::P4Program* program) override;
+    // Needed just to start the traversal
+    bool preorder(const IR::P4Program* program) override;
 
-  // don't care
-  bool preorder(const IR::Node *node) override;
+    // don't care
+    bool preorder(const IR::Node *node) override;
 
-  static InferArchitecture *instance;
+    static InferArchitecture *instance;
 };
 
 } // namespace P4
