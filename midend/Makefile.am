@@ -51,6 +51,8 @@ midend_SOURCES = \
 	midend/simplifySelect.cpp \
 	midend/simplifySelect.h \
 	midend/validateProperties.cpp \
-	midend/validateProperties.h
+	midend/validateProperties.h \
+	midend/isolateMethodCalls.cpp \
+	midend/isolateMethodsCalls.h
 
 cpplint_FILES += $(midend_SOURCES)

@@ -67,7 +67,7 @@ class SideEffects : public Inspector {
     }
 };
 
-// convert expresions so that each expression contains at most one side-effect
+// convert expressions so that each expression contains at most one side-effect
 // left-values are converted to contain no side-effects
 // i.e. a[f(x)] = b
 // is converted to
@@ -111,7 +111,6 @@ class DoSimplifyExpressions : public Transform {
     }
 
     const IR::Node* preorder(IR::P4Program* program) override {
-        if (refMap->isV1()) prune();  // skip for P4 v1
         return program;
     }
     const IR::Node* postorder(IR::P4Parser* parser) override;
