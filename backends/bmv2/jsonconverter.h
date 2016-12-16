@@ -19,7 +19,6 @@ limitations under the License.
 
 #include "lib/json.h"
 #include "frontends/common/options.h"
-#include "frontends/p4/fromv1.0/v1model.h"
 #include "frontends/common/16model.h"
 #include "analyzer.h"
 #include <iomanip>
@@ -76,10 +75,14 @@ class JsonConverter final {
     const CompilerOptions& options;
     Util::JsonObject       toplevel;  // output is constructed here
 
-    // TODO(pierce): going away
-    P4V1::V1Model&         v1model;
-
     BMV2_Model             model;
+
+    Util::JsonArray *meters;
+    Util::JsonArray *counters;
+    Util::JsonArray *calculations;
+    Util::JsonArray *learn_lists;
+    Util::JsonArray *externs;
+    Util::JsonArray *fieldLists;
 
     P4::P4CoreLibrary&     corelib;
     P4::ReferenceMap*      refMap;
@@ -91,9 +94,6 @@ class JsonConverter final {
     IR::ToplevelBlock*     toplevelBlock;
     ExpressionConverter*   conv;
     const IR::Parameter*   headerParameter;
-    const IR::Parameter*   userMetadataParameter;
-    const IR::Parameter*   stdMetadataParameter;
-    cstring                jsonMetadataParameterName = "standard_metadata";
 
  private:
     Util::JsonArray *headerTypes;
@@ -112,7 +112,8 @@ class JsonConverter final {
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                            Util::JsonArray* result, Util::JsonArray* fieldLists,
                            Util::JsonArray* calculations, Util::JsonArray* learn_lists);
-    Util::IJson* convertTable(const CFG::TableNode* node, Util::JsonArray* counters, Util::JsonArray* meters);
+    Util::IJson* convertTable(const CFG::TableNode* node, const IR::ControlBlock* block,
+                              Util::JsonArray* counters, Util::JsonArray* meters);
     Util::IJson* convertIf(const CFG::IfNode* node, cstring parent);
     Util::JsonArray* createActions(Util::JsonArray* fieldLists,
                                    Util::JsonArray* calculations,
@@ -125,7 +126,7 @@ class JsonConverter final {
     Util::IJson* convertParserStatement(const IR::StatOrDecl* stat);
     Util::IJson* convertControl(const IR::ControlBlock* block, cstring name,
                                 Util::JsonArray* counters, Util::JsonArray* meters,
-                                Util::JsonArray* registers, Util::JsonArray *externs);
+                                Util::JsonArray *externs);
     cstring createCalculation(cstring algo, const IR::Expression* fields,
                               Util::JsonArray* calculations);
     Util::IJson* nodeName(const CFG::Node* node) const;
