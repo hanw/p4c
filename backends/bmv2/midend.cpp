@@ -92,6 +92,8 @@ void MidEnd::setup_for_P4_16(CompilerOptions&) {
     addPasses({
         new P4::ConvertEnums(&refMap, &typeMap,
                              new EnumOn32Bits()),
+        // TODO: position this pass correctly
+        new P4::IsolateMethodCalls(&refMap, &typeMap),
         new P4::RemoveReturns(&refMap),
         new P4::MoveConstructors(&refMap),
         new P4::RemoveAllUnusedDeclarations(&refMap),
@@ -127,7 +129,6 @@ void MidEnd::setup_for_P4_16(CompilerOptions&) {
                                           "meters", "size", "support_timeout" }),
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::CompileTimeOperations(),
-        new P4::IsolateMethodCalls(&refMap, &typeMap),
         new P4::SynthesizeActions(&refMap, &typeMap),
         new P4::MoveActionsToTables(&refMap, &typeMap),
      });
@@ -144,7 +145,7 @@ MidEnd::MidEnd(CompilerOptions& options) {
         setup_for_P4_14(options);
     else
 #endif
-        setup_for_P4_16(options);
+    setup_for_P4_16(options);
 
     // BMv2-specific passes
     auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
