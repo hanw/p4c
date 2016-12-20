@@ -20,6 +20,7 @@ limitations under the License.
 #include "frontends/p4/typeMap.h"
 #include "frontends/p4/coreLibrary.h"
 #include "frontends/common/resolveReferences/referenceMap.h"
+#include "frontends/p4/typeChecking/typeChecker.h"
 
 
 namespace P4 {
@@ -70,6 +71,7 @@ class ConvertToVoid : public Transform {
 class IsolateMethodCalls : public PassManager {
   public:
     IsolateMethodCalls(ReferenceMap *refMap, TypeMap *typeMap) {
+        passes.push_back(new TypeChecking(refMap, typeMap));
         passes.push_back(new ConvertToVoid(refMap, typeMap));
         setName("IsolateMethodCalls");
     }
