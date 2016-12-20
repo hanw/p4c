@@ -1543,7 +1543,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
             auto pvt = paramValType->to<IR::Type_Struct>();
             addTypesAndInstances(paramVal, pvt);
         }
-        auto parserJson = toJson(parser);
+        auto parserJson = toJson(parser, p->toString());
         prsrs->append(parserJson);
     }
     addLocals();
@@ -1778,9 +1778,9 @@ Util::IJson* JsonConverter::convertDeparser(const IR::P4Control* ctrl) {
     return result;
 }
 
-Util::IJson* JsonConverter::toJson(const IR::P4Parser* parser) {
+Util::IJson* JsonConverter::toJson(const IR::P4Parser* parser, cstring name) {
     auto result = new Util::JsonObject();
-    result->emplace("name", parser->getName());
+    result->emplace("name", name);
     result->emplace("id", nextId("parser"));
     result->emplace("init_state", IR::ParserState::start);
     auto states = mkArrayField(result, "parse_states");
