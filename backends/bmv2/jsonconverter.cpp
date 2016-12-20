@@ -1523,8 +1523,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     headerTypes = mkArrayField(&toplevel, "header_types");
     headerInstances = mkArrayField(&toplevel, "headers");
     headerStacks = mkArrayField(&toplevel, "header_stacks");
-    meters = mkArrayField(&toplevel, "meter_arrays");
-    prsrs = mkArrayField(&toplevel, "parsers");
+    auto prsrs = mkArrayField(&toplevel, "parsers");
 
     (void)nextId("field_lists");    // field list IDs must start at 1; 0 is reserved
     (void)nextId("learn_lists");    // idem
@@ -1550,7 +1549,10 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     addLocals();
 
 
-    acts = createActions(field_lists, calculations, learn_lists);
+    field_lists = mkArrayField(&toplevel, "field_lists");
+    auto calculations = mkArrayField(&toplevel, "calculations");
+    auto learn_lists = mkArrayField(&toplevel, "learn_lists");
+    auto acts = createActions(field_lists, calculations, learn_lists);
     if (::errorCount() > 0) {
         return;
     }
@@ -1570,12 +1572,10 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
         acts->append(drop);
     }
 
-    pipelines = mkArrayField(&toplevel, "pipelines");
-    counters = mkArrayField(&toplevel, "counter_arrays");
-    calculations = mkArrayField(&toplevel, "calculations");
-    learn_lists = mkArrayField(&toplevel, "learn_lists");
-    externs = mkArrayField(&toplevel, "extern_instances");
-    field_lists = mkArrayField(&toplevel, "field_lists");
+    auto pipelines = mkArrayField(&toplevel, "pipelines");
+    auto counters = mkArrayField(&toplevel, "counter_arrays");
+    auto meters = mkArrayField(&toplevel, "meter_arrays");
+    auto externs = mkArrayField(&toplevel, "extern_instances");
 
     for (auto c : *model.controls) {
         // TODO: remove once checksums are done in bmv2

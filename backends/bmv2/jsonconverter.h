@@ -78,17 +78,6 @@ class JsonConverter final {
 
     BMV2_Model             model;
 
-    Util::JsonArray *headerTypes;
-    Util::JsonArray *headers;
-    Util::JsonArray *prsrs;
-    Util::JsonArray *acts;
-    Util::JsonArray *pipelines;
-    Util::JsonArray *meters;
-    Util::JsonArray *counters;
-    Util::JsonArray *calculations;
-    Util::JsonArray *learn_lists;
-    Util::JsonArray *externs;
-    Util::JsonArray *field_lists;
 
     P4::P4CoreLibrary&     corelib;
     P4::ReferenceMap*      refMap;
@@ -106,6 +95,8 @@ class JsonConverter final {
     std::map<cstring, cstring> headerTypesCreated;
     Util::JsonArray *headerInstances;
     Util::JsonArray *headerStacks;
+    Util::JsonArray *field_lists;
+
     friend class ExpressionConverter;
 
  protected:
