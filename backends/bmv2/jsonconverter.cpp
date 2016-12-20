@@ -508,7 +508,7 @@ class ExpressionConverter : public Inspector {
         if (createFieldLists) {
             int id = converter->createFieldList(expression, "field_lists",
                                                 converter->refMap->newName("fl"),
-                                                converter->fieldLists);
+                                                converter->field_lists);
             auto cst = new IR::Constant(id);
             converter->typeMap->setType(cst, IR::Type_Bits::get(32));
             auto conv = new ExpressionConverter(converter);
@@ -680,12 +680,6 @@ JsonConverter::JsonConverter(const CompilerOptions& options, ::P4_16::V2Model *v
         options(options), model(v2model), corelib(P4::P4CoreLibrary::instance),
         refMap(nullptr), typeMap(nullptr), dropActionId(0), toplevelBlock(nullptr),
         conv(new ExpressionConverter(this)), headerParameter(nullptr) {
-    meters = mkArrayField(&toplevel, "meter_arrays");
-    counters = mkArrayField(&toplevel, "counter_arrays");
-    calculations = mkArrayField(&toplevel, "calculations");
-    learn_lists = mkArrayField(&toplevel, "learn_lists");
-    externs = mkArrayField(&toplevel, "extern_instances");
-    fieldLists = mkArrayField(&toplevel, "field_lists");
 }
 
 // return calculation name
@@ -720,7 +714,7 @@ cstring JsonConverter::createCalculation(cstring algo,
 void
 JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                                  Util::JsonArray* result,
-                                 Util::JsonArray* fieldLists,
+                                 Util::JsonArray* field_lists,
                                  Util::JsonArray* calculations,
                                  Util::JsonArray* learn_lists) {
     conv->createFieldLists = true;
@@ -729,7 +723,7 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
             continue;
         } else if (s->is<IR::BlockStatement>()) {
             convertActionBody(s->to<IR::BlockStatement>()->components, result,
-                              fieldLists, calculations, learn_lists);
+                              field_lists, calculations, learn_lists);
             continue;
         } else if (s->is<IR::ReturnStatement>()) {
             break;
@@ -861,9 +855,9 @@ void JsonConverter::addToFieldList(const IR::Expression* expr, Util::JsonArray* 
 
 // returns id of created field list
 int JsonConverter::createFieldList(const IR::Expression* expr, cstring group,
-                                   cstring listName, Util::JsonArray* fieldLists) {
+                                   cstring listName, Util::JsonArray* field_lists) {
     auto fl = new Util::JsonObject();
-    fieldLists->append(fl);
+    field_lists->append(fl);
     int id = nextId(group);
     fl->emplace("id", id);
     fl->emplace("name", listName);
@@ -872,14 +866,12 @@ int JsonConverter::createFieldList(const IR::Expression* expr, cstring group,
     return id;
 }
 
-Util::JsonArray* JsonConverter::createActions(Util::JsonArray* fieldLists,
+Util::JsonArray* JsonConverter::createActions(Util::JsonArray* field_lists,
                                               Util::JsonArray* calculations,
                                               Util::JsonArray* learn_lists) {
     auto result = new Util::JsonArray();
     for (auto it : structure.actions) {
         auto action = it.first;
-        auto control = it.second;
-
         cstring name = nameFromAnnotation(action->annotations, action->name);
         auto jact = new Util::JsonObject();
         jact->emplace("name", name);
@@ -907,7 +899,7 @@ Util::JsonArray* JsonConverter::createActions(Util::JsonArray* fieldLists,
             }
             auto body = mkArrayField(jact, "primitives");
             convertActionBody(action->body->components, body, 
-                              fieldLists, calculations, learn_lists);
+                              field_lists, calculations, learn_lists);
             result->append(jact);
     }
     return result;
@@ -1374,10 +1366,10 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
             CHECK_NULL(bl);
             if (bl->is<IR::ExternBlock>()) {
                 auto eb = bl->to<IR::ExternBlock>();
-                auto j    = new Util::JsonObject();
-                j->emplace("name", c->getName().toString());
+                auto j = new Util::JsonObject();
+                j->emplace("name", c->getName());
                 j->emplace("id", nextId("extern_instances"));
-                j->emplace("type", eb->type->getName());
+                j->emplace("type", eb->type->getName().toString());
                 auto attributes = mkArrayField(j, "attribute_values");
                 for (auto a : *eb->getConstructorParameters()->parameters) {
                     auto aJ = new Util::JsonObject();
@@ -1531,7 +1523,8 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     headerTypes = mkArrayField(&toplevel, "header_types");
     headerInstances = mkArrayField(&toplevel, "headers");
     headerStacks = mkArrayField(&toplevel, "header_stacks");
-    auto prsrs = mkArrayField(&toplevel, "parsers");
+    meters = mkArrayField(&toplevel, "meter_arrays");
+    prsrs = mkArrayField(&toplevel, "parsers");
 
     (void)nextId("field_lists");    // field list IDs must start at 1; 0 is reserved
     (void)nextId("learn_lists");    // idem
@@ -1557,7 +1550,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     addLocals();
 
 
-    auto acts = createActions(fieldLists, calculations, learn_lists);
+    acts = createActions(field_lists, calculations, learn_lists);
     if (::errorCount() > 0) {
         return;
     }
@@ -1577,13 +1570,21 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
         acts->append(drop);
     }
 
-    auto pipelines = mkArrayField(&toplevel, "pipelines");
+    pipelines = mkArrayField(&toplevel, "pipelines");
+    counters = mkArrayField(&toplevel, "counter_arrays");
+    calculations = mkArrayField(&toplevel, "calculations");
+    learn_lists = mkArrayField(&toplevel, "learn_lists");
+    externs = mkArrayField(&toplevel, "extern_instances");
+    field_lists = mkArrayField(&toplevel, "field_lists");
 
     for (auto c : *model.controls) {
         // TODO: remove once checksums are done in bmv2
-        if (c->toString() == "dep"
+        if (
+            c->toString() == "dep"
 //            || c->toString() == "vr" 
-            || c->toString() == "ck") continue;
+//            || c->toString() == "ck"
+            )
+            continue;
 
         auto controlBlock =
             package->getParameterValue(c->toString())->to<IR::ControlBlock>();

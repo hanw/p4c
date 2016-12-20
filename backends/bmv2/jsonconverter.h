@@ -20,6 +20,7 @@ limitations under the License.
 #include "lib/json.h"
 #include "frontends/common/options.h"
 #include "frontends/common/16model.h"
+#include "frontends/p4/coreLibrary.h"
 #include "analyzer.h"
 #include <iomanip>
 // Currently we are requiring a v1model to be used
@@ -77,12 +78,17 @@ class JsonConverter final {
 
     BMV2_Model             model;
 
+    Util::JsonArray *headerTypes;
+    Util::JsonArray *headers;
+    Util::JsonArray *prsrs;
+    Util::JsonArray *acts;
+    Util::JsonArray *pipelines;
     Util::JsonArray *meters;
     Util::JsonArray *counters;
     Util::JsonArray *calculations;
     Util::JsonArray *learn_lists;
     Util::JsonArray *externs;
-    Util::JsonArray *fieldLists;
+    Util::JsonArray *field_lists;
 
     P4::P4CoreLibrary&     corelib;
     P4::ReferenceMap*      refMap;
