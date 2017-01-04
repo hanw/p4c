@@ -240,7 +240,7 @@ class V1Model : public ::Model::Model {
             tableAttributes(), rangeMatchType("range"), selectorMatchType("selector"),
             verify("verifyChecksum", headersType), update("computeChecksum", headersType),
             ck16(), digest_receiver(), hash(), algorithm(),
-            directCounter("direct_counter"), registers(), drop("drop"),
+            directCounter("direct_counter"), registers(), drop("mark_to_drop"),
             recirculate("recirculate"), directMeter()
     {}
 

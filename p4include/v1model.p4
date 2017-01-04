@@ -95,7 +95,7 @@ enum HashAlgorithm {
     identity
 }
 
-extern void drop();
+extern void mark_to_drop();
 extern void hash<O, T, D, M>(out O result, in HashAlgorithm algo, in T base, in D data, in M max);
 
 extern action_selector {
