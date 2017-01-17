@@ -792,7 +792,7 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                 continue;
             } else if (mi->is<P4::ExternMethod>()) {
                 auto em = mi->to<P4::ExternMethod>();
-                
+
                 // build the primitive name
                 std::stringstream ss;
                 ss << "_"
@@ -802,14 +802,23 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
 
                 auto primitive = mkPrimitive(ss.str().c_str(), result);
                 auto parameters = mkParameters(primitive);
-                auto self = new Util::JsonObject();
-                self->emplace("type", "extern");
-                self->emplace("value", em->object->getName().toString());
-                parameters->append(self);
+
+                if (em->originalExternType->name.name == corelib.packetOut.name) {
+                    if (em->method->name.name == corelib.packetOut.emit.name) {
+                        conv->simpleExpressionsOnly = true;
+                    }
+                } else {
+                    auto self = new Util::JsonObject();
+                    self->emplace("type", "extern");
+                    self->emplace("value", em->object->getName().toString());
+                    parameters->append(self);
+                }
+
                 for (auto a : *mc->arguments) {
                     auto arg = conv->convert(a);
                     parameters->append(arg);
                 }
+                conv->simpleExpressionsOnly = false;
                 continue;
             } else if (mi->is<P4::ExternFunction>()) {
                 auto ef = mi->to<P4::ExternFunction>();
@@ -1578,14 +1587,6 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     auto externs = mkArrayField(&toplevel, "extern_instances");
 
     for (auto c : *model.controls) {
-        // TODO: remove once checksums are done in bmv2
-        if (
-            c->toString() == "dep"
-//            || c->toString() == "vr" 
-//            || c->toString() == "ck"
-            )
-            continue;
-
         auto controlBlock =
             package->getParameterValue(c->toString())->to<IR::ControlBlock>();
         auto control = convertControl(controlBlock, c->toString(),
