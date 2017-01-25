@@ -272,6 +272,7 @@ class ExpressionConverter : public Inspector {
         cstring repr = stringRepr(expression->value,
                                     ROUNDUP(expression->type->width_bits(), 8));
         result->emplace("value", repr);
+        result->emplace("bitwidth", expression->type->width_bits());
         map.emplace(expression, result);
     }
 
@@ -375,13 +376,13 @@ class ExpressionConverter : public Inspector {
                 }
             } else if (expression->expr->is<IR::TypeNameExpression>()) {
                 // the case of enumeration
-                
-                // TODO(pierce): this essentially passes the enum value
-                // to bmv2 without doing anything...we'll see how long it lasts
-
                 auto tne = expression->expr->to<IR::TypeNameExpression>();
-                result->emplace("type", tne->toString());
-                result->emplace("value", expression->member.toString());
+                result->emplace("type", "string");
+
+                std::stringstream ss;
+                ss << expression->toString();
+
+                result->emplace("value", ss.str().c_str());
                 done = true;
             }
 
@@ -599,6 +600,8 @@ class ExpressionConverter : public Inspector {
                 f->append(var->name);
             } else if (type->is<IR::Type_Stack>()) {
                 // handled specially elsewhere
+                result->emplace("type", "header_stack");
+                result->emplace("value", expression->path->name);
             } else {
                 BUG("%1%: type not yet handled", type);
             }
@@ -810,7 +813,7 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                 } else {
                     auto self = new Util::JsonObject();
                     self->emplace("type", "extern");
-                    self->emplace("value", em->object->getName().toString());
+                    self->emplace("value", em->object->getName());
                     parameters->append(self);
                 }
 
@@ -1141,27 +1144,27 @@ JsonConverter::convertTable(const CFG::TableNode* node,
     }
     result->emplace("support_timeout", sup_to);
 
-    auto dm =
-        table->properties->getProperty(model.tableAttributes.directMeter.name);
-    if (dm != nullptr) {
-        if (dm->value->is<IR::ExpressionValue>()) {
-            auto expr = dm->value->to<IR::ExpressionValue>()->expression;
-            if (!expr->is<IR::PathExpression>()) {
-                ::error("%1%: expected a reference to a meter declaration", expr);
-            } else {
-                // add meter to direct_meter field
-                auto pe = expr->to<IR::PathExpression>();
-                auto decl = refMap->getDeclaration(pe->path, true);
-                BUG_CHECK(decl->is<IR::Declaration_Instance>(),
-                          "%1%: expected an instance", decl->getNode());
-                result->emplace("direct_meters", decl->getName());
-            }
-        } else {
-            ::error("%1%: expected a Boolean", timeout);
-        }
-    } else {
-        result->emplace("direct_meters", Util::JsonValue::null);
-    }
+//    auto dm =
+//        table->properties->getProperty(model.tableAttributes.directMeter.name);
+//    if (dm != nullptr) {
+//        if (dm->value->is<IR::ExpressionValue>()) {
+//            auto expr = dm->value->to<IR::ExpressionValue>()->expression;
+//            if (!expr->is<IR::PathExpression>()) {
+//                ::error("%1%: expected a reference to a meter declaration", expr);
+//            } else {
+//                // add meter to direct_meter field
+//                auto pe = expr->to<IR::PathExpression>();
+//                auto decl = refMap->getDeclaration(pe->path, true);
+//                BUG_CHECK(decl->is<IR::Declaration_Instance>(),
+//                          "%1%: expected an instance", decl->getNode());
+//                result->emplace("direct_meters", decl->getName());
+//            }
+//        } else {
+//            ::error("%1%: expected a Boolean", timeout);
+//        }
+//    } else {
+//        result->emplace("direct_meters", Util::JsonValue::null);
+//    }
 
     auto action_ids = mkArrayField(result, "action_ids");
     auto actions = mkArrayField(result, "actions");
@@ -1541,6 +1544,8 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
 
     headerTypesCreated.clear();
 
+    addLocals();
+
     for (auto p : *model.parsers) {
         auto parserBlock = package->getParameterValue(p->toString());
         CHECK_NULL(parserBlock);
@@ -1555,8 +1560,6 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
         auto parserJson = toJson(parser, p->toString());
         prsrs->append(parserJson);
     }
-    addLocals();
-
 
     field_lists = mkArrayField(&toplevel, "field_lists");
     auto calculations = mkArrayField(&toplevel, "calculations");
@@ -1575,7 +1578,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
         drop->emplace("runtime_data", new Util::JsonArray());
         auto body = mkArrayField(drop, "primitives");
         auto call = new Util::JsonObject();
-        call->emplace("op", "drop");
+        call->emplace("op", "mark_to_drop");
         call->emplace("parameters", new Util::JsonArray());
         body->append(call);
         acts->append(drop);
@@ -1954,7 +1957,7 @@ static Util::IJson* stateName(IR::ID state) {
 Util::IJson* JsonConverter::toJson(const IR::ParserState* state) {
     if (state->name == IR::ParserState::reject
         || state->name == IR::ParserState::accept) {
-    return nullptr;
+        return nullptr;
     }
 
     auto result = new Util::JsonObject();
