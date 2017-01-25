@@ -464,7 +464,7 @@ class RunBMV2(object):
         thriftPort = str(9090 + rand)
 
         try:
-            runswitch = ["simple_switch", "--log-file", self.switchLogFile, "--log-flush",
+            runswitch = ["psa", "--log-file", self.switchLogFile, "--log-flush",
                          "--use-files", str(wait), "--thrift-port", thriftPort,
                          "--device-id", str(rand)] + self.interfaceArgs() + ["../" + self.jsonfile]
             if self.options.verbose:
@@ -490,7 +490,7 @@ class RunBMV2(object):
                 # need to wait if there are none
                 time.sleep(0.5)
 
-            runcli = ["simple_switch_CLI", "--thrift-port", thriftPort]
+            runcli = ["psa_CLI", "--thrift-port", thriftPort]
             if self.options.verbose:
                 print("Running", " ".join(runcli))
             cli = subprocess.Popen(runcli, cwd=self.folder, stdin=subprocess.PIPE)
@@ -513,9 +513,9 @@ class RunBMV2(object):
             # This only works on Unix: negative returncode is
             # minus the signal number that killed the process.
             if sw.returncode != -15:  # 15 is SIGTERM
-                reportError("simple_switch died with return code", sw.returncode);
+                reportError("psa died with return code", sw.returncode);
             elif self.options.verbose:
-                print("simple_switch exit code", sw.returncode)
+                print("psa exit code", sw.returncode)
         finally:
             concurrent.release(rand)
         if self.options.verbose:

@@ -364,7 +364,7 @@ def main(argv):
         print("Error parsing config.h")
         return FAILURE
 
-    options.hasBMv2 = "HAVE_SIMPLE_SWITCH" in config.vars
+    options.hasBMv2 = "HAVE_PSA" in config.vars
     if not options.hasBMv2:
         reportError("config.h indicates that BMv2 is not installed; will skip running BMv2 tests")
 
