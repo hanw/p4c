@@ -12,19 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-irgenerator_SOURCES = \
-	tools/ir-generator/ir-generator.ypp \
+irgenerator_UNIFIED = \
 	tools/ir-generator/generator.cpp \
 	tools/ir-generator/irclass.cpp \
-	tools/ir-generator/irclass.h \
 	tools/ir-generator/methods.cpp \
-	tools/ir-generator/type.cpp \
+	tools/ir-generator/type.cpp
+
+irgenerator_NONUNIFIED = \
+	tools/ir-generator/ir-generator.ypp
+
+noinst_HEADERS += \
+	tools/ir-generator/ir-generator.h \
+	tools/ir-generator/irclass.h \
 	tools/ir-generator/type.h
-irgenerator_LDADD = libp4ctoolkit.a
 
 BUILT_SOURCES += \
 	tools/ir-generator/ir-generator-lex.c
 
+irgenerator_LDADD = libp4ctoolkit.a
+
 noinst_PROGRAMS += irgenerator
 
-cpplint_FILES += $(irgenerator_SOURCES)
+cpplint_FILES += $(irgenerator_UNIFIED) $(irgenerator_NONUNIFIED)

@@ -17,6 +17,7 @@ limitations under the License.
 #include "ir.h"
 #include "dbprint.h"
 #include "lib/gmputil.h"
+#include "lib/bitops.h"
 
 #define SINGLETON_TYPE(NAME)                                    \
 const IR::Type_##NAME *IR::Type_##NAME::get() {                 \
@@ -61,6 +62,7 @@ static const std::map<cstring, primitive_info_t> prim_info = {
     { "bit_orcb",               { 3, 3, 0x1, 0x7 } },
     { "bit_xnor",               { 3, 3, 0x1, 0x7 } },
     { "bit_xor",                { 3, 3, 0x1, 0x7 } },
+    { "bypass_egress",          { 0, 0, 0x0, 0x0 } },
     { "clone_egress_pkt_to_egress",     { 1, 2, 0x0, 0x0 } },
     { "clone_ingress_pkt_to_egress",    { 1, 2, 0x0, 0x0 } },
     { "copy_header",            { 2, 2, 0x1, 0x3 } },
@@ -69,12 +71,19 @@ static const std::map<cstring, primitive_info_t> prim_info = {
     { "drop",                   { 0, 0, 0x0, 0x0 } },
     { "emit",                   { 1, 1, 0x0, 0x0 } },
     { "execute_meter",          { 3, 4, 0x5, 0x0 } },
-    { "execute_stateful_alu",   { 1, 1, 0x0, 0x0 } },
+    { "execute_stateful_alu",   { 1, 2, 0x0, 0x0 } },
+    { "execute_stateful_alu_from_hash", { 1, 2, 0x0, 0x0 } },
+    { "execute_stateful_log",   { 1, 1, 0x0, 0x0 } },
+    { "exit",                   { 0, 0, 0x0, 0x0 } },
     { "extract",                { 1, 1, 0x1, 0x0 } },
+    { "funnel_shift_right",     { 4, 4, 0x1, 0x0 } },
     { "generate_digest",        { 2, 2, 0x0, 0x0 } },
+    { "invalidate",             { 1, 1, 0x0, 0x0 } },
+    { "mark_for_drop",          { 0, 0, 0x0, 0x0 } },
     { "max",                    { 3, 3, 0x1, 0x7 } },
     { "min",                    { 3, 3, 0x1, 0x7 } },
     { "modify_field",           { 2, 3, 0x1, 0x7 } },
+    { "modify_field_conditionally",     { 3, 3, 0x1, 0x5 } },
     { "modify_field_from_rng",  { 2, 3, 0x1, 0x5 } },
     { "modify_field_rng_uniform", { 3, 3, 0x1, 0x5 } },
     { "modify_field_with_hash_based_offset",    { 4, 4, 0x1, 0x0 } },
@@ -86,6 +95,7 @@ static const std::map<cstring, primitive_info_t> prim_info = {
     { "register_write",         { 3, 3, 0x0, 0x0 } },
     { "remove_header",          { 1, 1, 0x1, 0x0 } },
     { "resubmit",               { 1, 1, 0x0, 0x0 } },
+    { "sample_e2e",             { 2, 3, 0x0, 0x0 } },
     { "set_metadata",           { 2, 2, 0x1, 0x3 } },
     { "shift_left",             { 3, 3, 0x1, 0x3 } },
     { "shift_right",            { 3, 3, 0x1, 0x3 } },
@@ -118,8 +128,16 @@ unsigned IR::Primitive::inferOperandTypes() const {
     return 0;
 }
 
-const IR::Type *IR::Primitive::inferOperandType(int) const {
+const IR::Type *IR::Primitive::inferOperandType(int operand) const {
     if (name == "truncate")
         return IR::Type::Bits::get(32);
+    if ((name == "count" || name == "execute_meter") && operand == 1) {
+        if (auto obj = operands[0]->to<IR::GlobalRef>()) {
+            if (auto tbl = obj->obj->to<IR::Stateful>()) {
+                if (tbl->instance_count > 0) {
+                    int width = ceil_log2(tbl->instance_count);
+                    return IR::Type::Bits::get(width); } } } }
+    if (name.startsWith("execute_stateful") && operand == 1) {
+            return IR::Type::Bits::get(32); }
     return IR::Type::Unknown::get();
 }

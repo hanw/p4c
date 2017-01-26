@@ -14,45 +14,53 @@
 
 # Makefile for mid-ends
 
-midend_SOURCES = \
+midend_UNIFIED = \
 	midend/actionsInlining.cpp \
-	midend/actionsInlining.h \
 	midend/actionSynthesis.cpp \
-	midend/actionSynthesis.h \
-	midend/copyStructures.h \
 	midend/copyStructures.cpp \
-	midend/convertEnums.h \
 	midend/convertEnums.cpp \
-	midend/compileTimeOps.h \
-	midend/eliminateTuples.h \
 	midend/eliminateTuples.cpp \
-	midend/nestedStructs.h \
 	midend/nestedStructs.cpp \
 	midend/inlining.cpp \
-	midend/inlining.h \
-	midend/interpreter.h \
 	midend/interpreter.cpp \
 	midend/local_copyprop.cpp \
-	midend/local_copyprop.h \
 	midend/localizeActions.cpp \
-	midend/localizeActions.h \
 	midend/moveConstructors.cpp \
-	midend/moveConstructors.h \
-	midend/parserUnroll.h \
+	midend/predication.cpp \
 	midend/parserUnroll.cpp \
 	midend/removeParameters.cpp \
-	midend/removeParameters.h \
 	midend/removeReturns.cpp \
-	midend/removeReturns.h \
 	midend/removeLeftSlices.cpp \
-	midend/removeLeftSlices.h \
-	midend/simplifyKey.h \
 	midend/simplifyKey.cpp \
 	midend/simplifySelect.cpp \
-	midend/simplifySelect.h \
 	midend/validateProperties.cpp \
-	midend/validateProperties.h \
 	midend/isolateMethodCalls.cpp \
-	midend/isolateMethodsCalls.h
+	midend/noMatch.cpp
 
-cpplint_FILES += $(midend_SOURCES)
+noinst_HEADERS += \
+	midend/actionsInlining.h \
+	midend/actionSynthesis.h \
+	midend/compileTimeOps.h \
+	midend/convertEnums.h \
+	midend/copyStructures.h \
+	midend/eliminateTuples.h \
+	midend/expr_uses.h \
+	midend/has_side_effects.h \
+	midend/inlining.h \
+	midend/interpreter.h \
+	midend/local_copyprop.h \
+	midend/localizeActions.h \
+	midend/moveConstructors.h \
+	midend/predication.h \
+	midend/nestedStructs.h \
+	midend/parserUnroll.h \
+	midend/removeLeftSlices.h \
+	midend/removeParameters.h \
+	midend/removeReturns.h \
+	midend/simplifyKey.h \
+	midend/simplifySelect.h \
+	midend/validateProperties.h \
+	midend/isolateMethodCalls.h \
+	midend/noMatch.h
+
+cpplint_FILES += $(midend_UNIFIED) $(midend_NONUNIFIED)

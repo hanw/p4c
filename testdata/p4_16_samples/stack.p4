@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <core.p4>
+
 header h {}
 
 parser p()
@@ -26,12 +28,24 @@ parser p()
         b = stack.last;
         stack[2] = b;
         b = stack.next;
-        stack.push_front(2);
-        stack.pop_front(2);
+        int<32> e = stack.lastIndex;
         transition accept;
     }
 }
 
+control c() {
+    apply {
+        h[4] stack;
+        stack[3].setValid();
+        h b = stack[3];
+        stack[2] = b;
+        stack.push_front(2);
+        stack.pop_front(2);
+        bit<32> sz = stack.size;
+    }
+}
+
 parser Simple();
-package top(Simple par);
-top(p()) main;
+control Simpler();
+package top(Simple par, Simpler ctr);
+top(p(), c()) main;

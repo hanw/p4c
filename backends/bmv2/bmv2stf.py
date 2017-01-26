@@ -18,6 +18,7 @@
 from __future__ import print_function
 from subprocess import Popen
 from threading import Thread
+import glob
 import json
 import sys
 import re
@@ -52,6 +53,7 @@ class Options(object):
         self.binary = None
         self.verbose = False
         self.preserveTmp = False
+        self.observationLog = None
 
 def nextWord(text, sep = None):
     # Split a text at the indicated separator.
@@ -108,7 +110,7 @@ def run_timeout(options, args, timeout, stderr):
         print("Exit code ", local.process.returncode)
     return local.process.returncode
 
-timeout = 100
+timeout = 10 * 60
 
 class ConcurrentInteger(object):
     # Generates exclusive integers in a range 0-max
@@ -339,6 +341,8 @@ class RunBMV2(object):
             self.tables.append(BMV2Table(t))
     def filename(self, interface, direction):
         return self.folder + "/" + self.pcapPrefix + interface + "_" + direction + ".pcap"
+    def interface_of_filename(self, f):
+        return os.path.basename(f).rstrip('.pcap').lstrip(self.pcapPrefix).rsplit('_', 1)[0]
     def do_cli_command(self, cmd):
         if self.options.verbose:
             print(cmd)
@@ -542,9 +546,9 @@ class RunBMV2(object):
     def checkOutputs(self):
         if self.options.verbose:
             print("Comparing outputs")
-        for interface, expected in self.expected.iteritems():
-            direction = "out"
-            file = self.filename(interface, direction)
+        direction = "out"
+        for file in glob.glob(self.filename('*', direction)):
+            interface = self.interface_of_filename(file)
             if os.stat(file).st_size == 0:
                 packets = []
             else:
@@ -554,6 +558,20 @@ class RunBMV2(object):
                     reportError("Corrupt pcap file", file)
                     self.showLog()
                     return FAILURE
+
+            # Log packets.
+            if self.options.observationLog:
+                observationLog = open(self.options.observationLog, 'w')
+                for pkt in packets:
+                    observationLog.write('%s %s\n' % (
+                        interface,
+                        ''.join(ByteToHex(str(pkt)).split()).upper()))
+                observationLog.close()
+
+            # Check for expected packets.
+            if interface not in self.expected:
+                continue
+            expected = self.expected[interface]
             if len(expected) != len(packets):
                 reportError("Expected", len(expected), "packets on port", interface,
                             "got", len(packets))
@@ -580,7 +598,7 @@ def run_model(options, tmpdir, jsonfile, testfile):
 ######################### main
 
 def usage(options):
-    print("usage:", options.binary, "[-v] <json file> <stf file>");
+    print("usage:", options.binary, "[-v] [-observation-log <file>] <json file> <stf file>");
 
 def main(argv):
     options = Options()
@@ -591,8 +609,15 @@ def main(argv):
             options.preserveTmp = True
         elif argv[0] == "-v":
             options.verbose = True
+        elif argv[0] == '-observation-log':
+            if len(argv) == 1:
+                reportError("Missing argument", argv[0])
+                usage(options)
+                sys.exit(1)
+            options.observationLog = argv[1]
+            argv = argv[1:]
         else:
-            reportError("Uknown option ", argv[0])
+            reportError("Unknown option ", argv[0])
             usage(options)
         argv = argv[1:]
     if len(argv) < 2:

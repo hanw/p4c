@@ -13,50 +13,58 @@
 # limitations under the License.
 
 noinst_LIBRARIES += libp4ctoolkit.a
-libp4ctoolkit_a_SOURCES = \
-	lib/algorithm.h  \
-	lib/alloc.h  \
-	lib/bitops.h  \
+libp4ctoolkit_a_UNIFIED = \
 	lib/bitvec.cpp \
-	lib/bitvec.h  \
 	lib/crash.cpp \
 	lib/cstring.cpp \
-	lib/cstring.h  \
+	lib/error.cpp \
+	lib/gc.cpp \
+	lib/gmputil.cpp \
+	lib/hex.cpp\
+	lib/indent.cpp \
+	lib/json.cpp \
+	lib/log.cpp \
+	lib/match.cpp \
+	lib/nullstream.cpp \
+	lib/options.cpp \
+	lib/path.cpp \
+	lib/source_file.cpp \
+	lib/stringify.cpp
+
+noinst_HEADERS += \
+	lib/algorithm.h \
+	lib/alloc.h \
+	lib/bitops.h \
+	lib/bitrange.h \
+	lib/bitvec.h \
+	lib/crash.h \
+	lib/cstring.h \
 	lib/default.h \
 	lib/enumerator.h \
-	lib/error.cpp \
-	lib/error.h  \
-	lib/exceptions.h  \
-	lib/gc.cpp \
+	lib/error.h \
+	lib/exceptions.h \
 	lib/gc.h \
-	lib/gmputil.cpp \
 	lib/gmputil.h \
-	lib/hex.cpp\
-	lib/hex.h  \
-	lib/indent.cpp \
-	lib/indent.h  \
-	lib/json.cpp \
+	lib/hex.h \
+	lib/indent.h \
 	lib/json.h \
-	lib/log.cpp \
-	lib/log.h  \
-	lib/ltbitmatrix.h  \
-	lib/map.h  \
-	lib/match.cpp \
-	lib/match.h  \
+	lib/log.h \
+	lib/ltbitmatrix.h \
+	lib/map.h \
+	lib/match.h \
+	lib/n4.h \
 	lib/null.h \
-	lib/nullstream.cpp \
-	lib/nullstream.h  \
-	lib/options.cpp \
+	lib/nullstream.h \
 	lib/options.h \
-	lib/ordered_set.h  \
-	lib/path.cpp \
-	lib/path.h  \
-	lib/range.h  \
+	lib/ordered_map.h \
+	lib/ordered_set.h \
+	lib/path.h \
+	lib/range.h \
+	lib/set.h \
+	lib/source_file.h \
 	lib/sourceCodeBuilder.h \
-	lib/source_file.cpp \
-	lib/source_file.h  \
-	lib/stringify.cpp \
-	lib/stringify.h  \
-	lib/stringref.h
+	lib/stringify.h \
+	lib/stringref.h \
+	lib/symbitmatrix.h
 
-cpplint_FILES += $(libp4ctoolkit_a_SOURCES)
+cpplint_FILES += $(libp4ctoolkit_a_UNIFIED) $(libp4ctoolkit_a_NONUNIFIED)

@@ -37,6 +37,7 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
         packet.extract<ethernet_t>(hdr.ethernet);
         transition select(hdr.ethernet.ethertype) {
             16w0x800: ipv4;
+            default: noMatch;
         }
     }
     @name("ipv4") state ipv4 {
@@ -45,6 +46,10 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
     }
     @name("start") state start {
         transition ethernet;
+    }
+    state noMatch {
+        verify(false, error.NoMatch);
+        transition reject;
     }
 }
 
@@ -66,7 +71,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         actions = {
             do_drop_0();
             route_ipv4_0();
-            NoAction_0();
+            @default_only NoAction_0();
         }
         key = {
             hdr.ipv4.dstAddr: lpm;

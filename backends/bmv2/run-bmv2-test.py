@@ -53,6 +53,7 @@ class Options(object):
         self.compilerOptions = []
         self.hasBMv2 = False            # Is the behavioral model installed?
         self.runDebugger = False
+        self.observationLog = None           # Log packets produced by the BMV2 model if path to log is supplied
 
 def nextWord(text, sep = " "):
     # Split a text at the indicated separator.
@@ -108,6 +109,7 @@ def usage(options):
     print("          -b: do not remove temporary results for failing tests")
     print("          -v: verbose operation")
     print("          -f: replace reference outputs with newly generated ones")
+    print("          -observation-log <file>: save packet output to <file>")
 
 def ByteToHex(byteStr):
     return ''.join( [ "%02X " % ord( x ) for x in byteStr ] ).strip()
@@ -156,7 +158,7 @@ def run_timeout(options, args, timeout, stderr):
         print("Exit code ", local.process.returncode)
     return local.process.returncode
 
-timeout = 100
+timeout = 10 * 60
 
 def compare_files(options, produced, expected):
     if options.replace:
@@ -280,7 +282,7 @@ def process_file(options, argv):
     if not os.path.isfile(options.p4filename):
         raise Exception("No such file " + options.p4filename)
     args = ["./p4c-bm2-ss", "-o", jsonfile] + options.compilerOptions
-    if "p4_14_samples" in options.p4filename or "v1_samples" in options.p4filename:
+    if "p4_14" in options.p4filename or "v1_samples" in options.p4filename:
         args.extend(["--p4v", "1.0"]);
     args.extend(argv)  # includes p4filename
     if options.runDebugger:
@@ -350,6 +352,14 @@ def main(argv):
             options.compilerOptions.append(argv[0])
         elif argv[0] == "-gdb":
             options.runDebugger = "gdb --args"
+        elif argv[0] == '-observation-log':
+            if len(argv) == 0:
+                reportError("Missing argument for -observation-log option")
+                usage(options)
+                sys.exit(1)
+            else:
+                options.observationLog = argv[1]
+                argv = argv[1:]
         elif argv[0] == "--pp":
             options.compilerOptions.append(argv[0])
             argv = argv[1:]
@@ -377,6 +387,15 @@ def main(argv):
         if options.testName.endswith('.p4'):
             options.testName = options.testName[:-3]
         options.testName = "bmv2/" + options.testName
+
+    if not options.observationLog:
+        if options.testName:
+            options.observationLog = os.path.join('%s.p4.obs' % options.testName)
+        else:
+            basename = os.path.basename(options.p4filename)
+            base, ext = os.path.splitext(basename)
+            dirname = os.path.dirname(options.p4filename)
+            options.observationLog = os.path.join(dirname, '%s.p4.obs' % base)
 
     result = process_file(options, argv)
     if result != SUCCESS:

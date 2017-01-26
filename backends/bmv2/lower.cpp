@@ -19,6 +19,10 @@ limitations under the License.
 
 namespace BMV2 {
 
+// We make an effort to update the typeMap as we proceed
+// since parent expression trees may need the information
+// when processing in post-order.
+
 const IR::Expression* LowerExpressions::shift(const IR::Operation_Binary* expression) const {
     auto rhs = expression->right;
     auto rhstype = typeMap->getType(rhs, true);
@@ -28,12 +32,14 @@ const IR::Expression* LowerExpressions::shift(const IR::Operation_Binary* expres
         if (cst->value > maxShift)
             ::error("%1%: shift amount limited to %2% on this target", expression, maxShift);
     } else {
-        BUG_CHECK(rhstype->is<IR::Type_Bits>(), "%1%: expected a bit-string type", rhstype);
+        BUG_CHECK(rhstype->is<IR::Type_Bits>(), "%1%: expected a bit<> type", rhstype);
         auto bs = rhstype->to<IR::Type_Bits>();
         if (bs->size > LowerExpressions::maxShiftWidth)
             ::error("%1%: shift amount limited to %2% bits on this target",
                     expression, LowerExpressions::maxShiftWidth);
     }
+    auto ltype = typeMap->getType(getOriginal(), true);
+    typeMap->setType(expression, ltype);
     return expression;
 }
 
@@ -43,6 +49,7 @@ const IR::Node* LowerExpressions::postorder(IR::Neg* expression) {
     auto sub = new IR::Sub(expression->srcInfo, zero, expression->expr);
     typeMap->setType(zero, type);
     typeMap->setType(sub, type);
+    LOG1("Replaced " << expression << " with " << sub);
     return sub;
 }
 
@@ -54,14 +61,25 @@ const IR::Node* LowerExpressions::postorder(IR::Cast* expression) {
         auto zero = new IR::Constant(srcType, 0);
         auto cmp = new IR::Equ(expression->srcInfo, expression->expr, zero);
         typeMap->setType(cmp, destType);
+        LOG1("Replaced " << expression << " with " << cmp);
         return cmp;
     } else if (destType->is<IR::Type_Bits>() && srcType->is<IR::Type_Boolean>()) {
         auto mux = new IR::Mux(expression->srcInfo, expression->expr,
                                new IR::Constant(destType, 1),
                                new IR::Constant(destType, 0));
         typeMap->setType(mux, destType);
+        LOG1("Replaced " << expression << " with " << mux);
         return mux;
     }
+    // This may be a new expression
+    typeMap->setType(expression, destType);
+    return expression;
+}
+
+const IR::Node* LowerExpressions::postorder(IR::Expression* expression) {
+    // Just update the typeMap incrementally.
+    auto type = typeMap->getType(getOriginal(), true);
+    typeMap->setType(expression, type);
     return expression;
 }
 
@@ -103,7 +121,41 @@ const IR::Node* LowerExpressions::postorder(IR::Concat* expression) {
     typeMap->setType(result, resulttype);
     typeMap->setType(sh, resulttype);
     typeMap->setType(and0, resulttype);
+    LOG1("Replaced " << expression << " with " << result);
     return result;
+}
+
+/////////////////////////////////////////////////////////////
+
+const IR::Node* FixupChecksum::preorder(IR::P4Control* control) {
+    if (control->name != *updateBlockName)
+        return control;
+    // Convert
+    // tmp = e;
+    // f = tmp;
+    // into
+    // f = e;
+    auto instrs = control->body->components;
+    if (instrs->size() != 2)
+        return control;
+    if (!instrs->at(0)->is<IR::AssignmentStatement>() ||
+        !instrs->at(1)->is<IR::AssignmentStatement>())
+        return control;
+    auto ass0 = instrs->at(0)->to<IR::AssignmentStatement>();
+    auto ass1 = instrs->at(1)->to<IR::AssignmentStatement>();
+    if (!ass0->left->is<IR::PathExpression>() || !ass1->right->is<IR::PathExpression>())
+        return control;
+    auto pe0 = ass0->left->to<IR::PathExpression>();
+    auto pe1 = ass1->right->to<IR::PathExpression>();
+    if (pe0->path->name != pe1->path->name ||
+        pe0->path->absolute != pe1->path->absolute)
+        return control;
+    auto ass = new IR::AssignmentStatement(ass1->srcInfo, ass1->left, ass0->right);
+    auto vec = new IR::IndexedVector<IR::StatOrDecl>();
+    vec->push_back(ass);
+    auto block = new IR::BlockStatement(control->body->srcInfo, control->body->annotations, vec);
+    control->body = block;
+    return control;
 }
 
 }  // namespace BMV2

@@ -25,19 +25,6 @@ limitations under the License.
 
 namespace BMV2 {
 
-cstring nameFromAnnotation(const IR::Annotations* annotations,
-                           cstring defaultValue) {
-    CHECK_NULL(annotations); CHECK_NULL(defaultValue);
-    auto anno = annotations->getSingle(IR::Annotation::nameAnnotation);
-    if (anno != nullptr) {
-        BUG_CHECK(anno->expr.size() == 1, "name annotation must be a string");
-        auto str = anno->expr[0]->to<IR::StringLiteral>();
-        CHECK_NULL(str);
-        return str->value;
-    }
-    return defaultValue;
-}
-
 unsigned CFG::Node::crtId = 0;
 
 void CFG::EdgeSet::dbprint(std::ostream& out) const {
@@ -266,7 +253,7 @@ void CFG::build(const IR::P4Control* cc,
                 P4::ReferenceMap* refMap, P4::TypeMap* typeMap) {
     container = cc;
     entryPoint = makeNode(cc->name + ".entry");
-    exitPoint = makeNode(cc->name + ".exit");
+    exitPoint = makeNode("");  // the only node with an empty name
 
     CFGBuilder builder(this, refMap, typeMap);
     auto startValue = new CFG::EdgeSet(new CFG::Edge(entryPoint));
@@ -306,7 +293,7 @@ class DiscoverStructure : public Inspector {
 };
 }  // namespace
 
-void ProgramParts::analyze(IR::ToplevelBlock* toplevel) {
+void ProgramParts::analyze(const IR::ToplevelBlock* toplevel) {
     DiscoverStructure disc(this);
     toplevel->getProgram()->apply(disc);
 }

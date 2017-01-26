@@ -17,24 +17,22 @@
 # To be included in the main P4C compiler makefile
 
 bin_PROGRAMS += p4c-bm2-ss
-p4c_bm2_ss_LDADD = libfrontend.a libp4ctoolkit.a
+p4c_bm2_ss_LDADD = libfrontend.la libp4ctoolkit.a
 
-p4c_bm2_ss_SOURCES = \
+p4c_bm2_ss_UNIFIED = \
 	backends/bmv2/bmv2.cpp \
-	backends/bmv2/analyzer.h \
 	backends/bmv2/analyzer.cpp \
-	backends/bmv2/jsonconverter.h \
 	backends/bmv2/jsonconverter.cpp \
-	backends/bmv2/inlining.h \
-	backends/bmv2/inlining.cpp \
-	backends/bmv2/midend.h \
 	backends/bmv2/midend.cpp \
-	backends/bmv2/lower.h \
-	backends/bmv2/lower.cpp \
-	backends/bmv2/eliminateVerify.h \
-	backends/bmv2/eliminateVerify.cpp
+	backends/bmv2/lower.cpp
 
-cpplint_FILES += $(p4c_bm2_ss_SOURCES)
+noinst_HEADERS += \
+	backends/bmv2/analyzer.h \
+	backends/bmv2/jsonconverter.h \
+	backends/bmv2/lower.h \
+	backends/bmv2/midend.h
+
+cpplint_FILES += $(p4c_bm2_ss_UNIFIED) $(p4c_bm2_ss_NONUNIFIED)
 
 ir_DEF_FILES += $(srcdir)/backends/bmv2/bmv2.def
 
@@ -50,4 +48,3 @@ bmv2tests.mk: $(GENTESTS) $(srcdir)/%reldir%/Makefile.am \
 	      $(srcdir)/testdata/p4_14_samples/switch_*/switch.p4 \
 	      $(srcdir)/testdata/p4_16_samples $(srcdir)/testdata/p4_14_samples
 	@$(GENTESTS) $(srcdir) bmv2 $(srcdir)/backends/bmv2/run-bmv2-test.py $^ >$@
-

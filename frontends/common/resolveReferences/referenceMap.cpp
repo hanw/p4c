@@ -26,6 +26,7 @@ void ReferenceMap::clear() {
     pathToDeclaration.clear();
     usedNames.clear();
     used.clear();
+    thisToDeclaration.clear();
     usedNames.insert(P4::reservedWords.begin(), P4::reservedWords.end());
 }
 
@@ -40,6 +41,26 @@ void ReferenceMap::setDeclaration(const IR::Path* path, const IR::IDeclaration* 
     pathToDeclaration.emplace(path, decl);
     usedName(path->name.name);
     used.insert(decl);
+}
+
+void ReferenceMap::setDeclaration(const IR::This* pointer, const IR::IDeclaration* decl) {
+    CHECK_NULL(pointer);
+    CHECK_NULL(decl);
+    LOG1("Resolved " << pointer << " to " << decl);
+    auto previous = get(thisToDeclaration, pointer);
+    if (previous != nullptr && previous != decl)
+        BUG("%1% already resolved to %2% instead of %3%",
+            pointer, previous, decl);
+    thisToDeclaration.emplace(pointer, decl);
+}
+
+const IR::IDeclaration* ReferenceMap::getDeclaration(const IR::This* pointer, bool notNull) const {
+    CHECK_NULL(pointer);
+    auto result = get(thisToDeclaration, pointer);
+    LOG1("Looking up " << pointer << " found " << result->getNode());
+    if (notNull)
+        BUG_CHECK(result != nullptr, "Cannot find declaration for %1%", pointer);
+    return result;
 }
 
 const IR::IDeclaration* ReferenceMap::getDeclaration(const IR::Path* path, bool notNull) const {

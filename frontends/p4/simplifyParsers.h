@@ -23,7 +23,6 @@ limitations under the License.
 
 namespace P4 {
 
-// Invokes two optimizations:
 // - remove unreachable parser states
 // - collapse simple chains of states
 class DoSimplifyParsers : public Transform {

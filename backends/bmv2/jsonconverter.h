@@ -83,12 +83,21 @@ class JsonConverter final {
     P4::ReferenceMap*      refMap;
     P4::TypeMap*           typeMap;
     ProgramParts           structure;
-    cstring                dropAction = ".drop";
     cstring                scalarsName;  // name of struct in JSON holding all scalars
-    unsigned               dropActionId;
-    IR::ToplevelBlock*     toplevelBlock;
+    const IR::ToplevelBlock* toplevelBlock;
     ExpressionConverter*   conv;
     const IR::Parameter*   headerParameter;
+
+    const unsigned         boolWidth = 1;
+    // We place scalar user metadata fields (i.e., bit<>, bool)
+    // in the "scalars" metadata object, so we may need to rename
+    // these fields.  This map holds the new names.
+    std::map<const IR::StructField*, cstring> scalarMetadataFields;
+    // we map error codes to numerical values for bmv2
+    using ErrorValue = unsigned int;
+    using ErrorCodesMap = std::unordered_map<const IR::IDeclaration *, ErrorValue>;
+    ErrorCodesMap errorCodesMap{};
+    P4::ConvertEnums::EnumMapping* enumMap;
 
  private:
     Util::JsonArray *headerTypes;
@@ -97,7 +106,12 @@ class JsonConverter final {
     Util::JsonArray *headerStacks;
     Util::JsonArray *field_lists;
 
+    Util::JsonObject *scalarsStruct;
+    unsigned scalars_width = 0;
     friend class ExpressionConverter;
+
+ private:
+    void padScalars();
 
  protected:
     void pushFields(cstring prefix, const IR::Type_StructLike *st,
@@ -109,8 +123,9 @@ class JsonConverter final {
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                            Util::JsonArray* result, Util::JsonArray* fieldLists,
                            Util::JsonArray* calculations, Util::JsonArray* learn_lists);
-    Util::IJson* convertTable(const CFG::TableNode* node, const IR::ControlBlock* block,
-                              Util::JsonArray* counters, Util::JsonArray* meters);
+    Util::IJson* convertTable(const CFG::TableNode* node,
+                              Util::JsonArray* counters,
+                              Util::JsonArray* action_profiles);
     Util::IJson* convertIf(const CFG::IfNode* node, cstring parent);
     Util::JsonArray* createActions(Util::JsonArray* fieldLists,
                                    Util::JsonArray* calculations,
@@ -131,7 +146,8 @@ class JsonConverter final {
     // Return 'true' if the table is 'simple'
     bool handleTableImplementation(const IR::Property* implementation,
                                    const IR::Key* key,
-                                   Util::JsonObject* table);
+                                   Util::JsonObject* table,
+                                   Util::JsonArray* action_profiles);
     void addToFieldList(const IR::Expression* expr, Util::JsonArray* fl);
     // returns id of created field list
     int createFieldList(const IR::Expression* expr, cstring group,
@@ -149,12 +165,24 @@ class JsonConverter final {
                      mpz_class& value, mpz_class& mask) const;
     void buildCfg(IR::P4Control* cont);
 
+    // Adds meta information (such as version) to the json
+    void addMetaInformation();
+
+    // Adds declared errors to json
+    void addErrors();
+    // Retrieve assigned numerical value for given error constant
+    ErrorValue retrieveErrorValue(const IR::Member* mem) const;
+
+    // Adds declared enums to json
+    void addEnums();
+
  public:
-    explicit JsonConverter(const CompilerOptions& options, ::P4_16::V2Model *v2model);
+    explicit JsonConverter(const CompilerOptions& options,
+                           ::P4_16::V2Model *v2model);
     void convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
-                 IR::ToplevelBlock *toplevel);
-    void serialize(std::ostream& out) const
-    { toplevel.serialize(out); }
+                 const IR::ToplevelBlock *toplevel,
+                 P4::ConvertEnums::EnumMapping* enumMap);
+    void serialize(std::ostream& out) const { toplevel.serialize(out); }
 };
 
 }  // namespace BMV2

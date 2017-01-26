@@ -144,10 +144,10 @@ void ProgramStructure::createTypes() {
 }
 
 const IR::Type_Struct* ProgramStructure::createFieldListType(const IR::Expression* expression) {
-    if (!expression->is<IR::NamedRef>())
+    if (!expression->is<IR::PathExpression>())
         ::error("%1%: expected a field list", expression);
-    auto nr = expression->to<IR::NamedRef>();
-    auto fl = field_lists.get(nr->name);
+    auto nr = expression->to<IR::PathExpression>();
+    auto fl = field_lists.get(nr->path->name);
     if (fl == nullptr)
         ::error("%1%: Expected a field list", expression);
     auto fields = new IR::IndexedVector<IR::StructField>();
@@ -168,8 +168,8 @@ const IR::Type_Struct* ProgramStructure::createFieldListType(const IR::Expressio
         fields->push_back(sf);
     }
 
-    auto name = makeUniqueName(nr->name);
-    auto annos = addNameAnnotation(nr->name);
+    auto name = makeUniqueName(nr->path->name);
+    auto annos = addNameAnnotation(nr->path->name);
     auto result = new IR::Type_Struct(expression->srcInfo, name, annos, fields);
     return result;
 }
@@ -228,10 +228,20 @@ void ProgramStructure::createStructures() {
 void ProgramStructure::createExterns() {
     for (auto it : extern_types) {
         auto type = it.first;
+        IR::Type_Extern *modified_type = nullptr;
         if (type->name != it.second) {
             auto annos = addNameAnnotation(type->name.name, type->annotations);
-            type = new IR::Type_Extern(type->srcInfo, it.second, type->methods,
-                                       type->attributes, annos); }
+            type = modified_type = new IR::Type_Extern(type->srcInfo, it.second, type->methods,
+                                                       type->attributes, annos); }
+        // FIXME -- should create ctors based on attributes?  For now just create a
+        // FIXME -- 0-arg one if needed
+        if (!type->lookupMethod(type->name, 0)) {
+            if (!modified_type)
+                type = modified_type = type->clone();
+            auto methods = type->methods->clone();
+            modified_type->methods = methods;
+            methods->push_back(new IR::Method(type->name, new IR::Type_Method(
+                                                new IR::ParameterList()))); }
         declarations->push_back(type);
     }
 }
@@ -417,6 +427,9 @@ void ProgramStructure::createParser() {
         auto ps = convertParser(p.first);
         states->push_back(ps);
     }
+
+    if (states->empty())
+        ::error("No parsers specified");
     auto result = new IR::P4Parser(Util::SourceInfo(), v1model.parser.Id(), type,
                                           new IR::ParameterList(), stateful, states);
     declarations->push_back(result);
@@ -470,7 +483,7 @@ class HeaderRepresentation {
         } else if (expression->is<IR::HeaderStackItemRef>()) {
             auto hsir = expression->to<IR::HeaderStackItemRef>();
             auto hdr = getHeader(hsir->base_);
-            if (hsir->index_->is<IR::NamedRef>())
+            if (hsir->index_->is<IR::PathExpression>())
                 // This is most certainly 'next'.
                 return hdr;
             BUG_CHECK(hsir->index_->is<IR::Constant>(), "%1%: expected a constant", hsir->index_);
@@ -624,13 +637,21 @@ ProgramStructure::convertTable(const IR::V1Table* table, cstring newName,
                                              new IR::PathExpression(newname));
         actVect->push_back(ale);
     }
-    auto nop = new IR::ActionListElement(Util::SourceInfo(), IR::Annotations::empty,
-                                         new IR::PathExpression(p4lib.noAction.Id()));
-    actVect->push_back(nop);
+    if (!table->default_action) {
+        actVect->push_back(
+            new IR::ActionListElement(
+                new IR::Annotations({new IR::Annotation("default_only", {})}),
+                new IR::PathExpression(p4lib.noAction.Id())));
+    } else if (!actVect->getDeclaration(table->default_action)) {
+        actVect->push_back(
+            new IR::ActionListElement(
+                new IR::Annotations({new IR::Annotation("default_only", {})}),
+                new IR::PathExpression(table->default_action))); }
     propvec->push_back(new IR::Property(Util::SourceInfo(),
-                                             IR::ID(IR::TableProperties::actionsPropertyName),
-                                             IR::Annotations::empty,
-                                             actionList, false));
+                                        IR::ID(IR::TableProperties::actionsPropertyName),
+                                        IR::Annotations::empty,
+                                        actionList, false));
+
     if (table->reads != nullptr) {
         auto keyVec = new IR::Vector<IR::KeyElement>();
         auto key = new IR::Key(Util::SourceInfo(), keyVec);
@@ -786,7 +807,7 @@ const IR::Expression* ProgramStructure::convertHashAlgorithm(IR::ID algorithm) {
     } else if (algorithm == "identity") {
         result = v1model.algorithm.identity.Id();
     } else {
-        ::error("%1%: unexpected algorithm", algorithm);
+        ::warning("%1%: unexpected algorithm", algorithm);
         result = algorithm;
     }
     auto pe = new IR::TypeNameExpression(v1model.algorithm.Id());
@@ -841,10 +862,10 @@ const IR::Statement* ProgramStructure::sliceAssign(
 const IR::Expression* ProgramStructure::convertFieldList(const IR::Expression* expression) {
     ExpressionConverter conv(this);
 
-    if (!expression->is<IR::NamedRef>())
+    if (!expression->is<IR::PathExpression>())
         ::error("%1%: expected a field list", expression);
-    auto nr = expression->to<IR::NamedRef>();
-    auto fl = field_lists.get(nr->name);
+    auto nr = expression->to<IR::PathExpression>();
+    auto fl = field_lists.get(nr->path->name);
     if (fl == nullptr)
         ::error("%1%: Expected a field list", expression);
     auto result = conv.convert(fl);
@@ -951,13 +972,15 @@ const IR::Statement* ProgramStructure::convertPrimitive(const IR::Primitive* pri
     } else if (primitive->name == "add_to_field" || primitive->name == "subtract_from_field") {
         OPS_CK(primitive, 2);
         auto left = conv.convert(primitive->operands.at(0));
+        auto left2 = conv.convert(primitive->operands.at(0));
+        // convert twice, so we have different expression trees on RHS and LHS
         auto right = conv.convert(primitive->operands.at(1));
         const IR::Expression* op;
         if (primitive->name == "add_to_field")
             op = new IR::Add(primitive->srcInfo, left, right);
         else
             op = new IR::Sub(primitive->srcInfo, left, right);
-        return new IR::AssignmentStatement(primitive->srcInfo, left, op);
+        return new IR::AssignmentStatement(primitive->srcInfo, left2, op);
     } else if (primitive->name == "remove_header") {
         OPS_CK(primitive, 1);
         auto hdr = conv.convert(primitive->operands.at(0));
@@ -1003,8 +1026,8 @@ const IR::Statement* ProgramStructure::convertPrimitive(const IR::Primitive* pri
         const IR::Counter *counter = nullptr;
         if (auto gr = ref->to<IR::GlobalRef>())
             counter = gr->obj->to<IR::Counter>();
-        else if (auto nr = ref->to<IR::NamedRef>())
-            counter = counters.get(nr->name);
+        else if (auto nr = ref->to<IR::PathExpression>())
+            counter = counters.get(nr->path->name);
         if (counter == nullptr) {
             ::error("Expected a counter reference %1%", ref);
             return nullptr; }
@@ -1130,8 +1153,8 @@ const IR::Statement* ProgramStructure::convertPrimitive(const IR::Primitive* pri
         const IR::Meter *meter = nullptr;
         if (auto gr = ref->to<IR::GlobalRef>())
             meter = gr->obj->to<IR::Meter>();
-        else if (auto nr = ref->to<IR::NamedRef>())
-            meter = meters.get(nr->name);
+        else if (auto nr = ref->to<IR::PathExpression>())
+            meter = meters.get(nr->path->name);
         if (!meter) {
             ::error("Expected a meter reference %1%", ref);
             return nullptr; }
@@ -1158,8 +1181,8 @@ const IR::Statement* ProgramStructure::convertPrimitive(const IR::Primitive* pri
         auto max = conv.convert(primitive->operands.at(3));
         auto args = new IR::Vector<IR::Expression>();
 
-        auto nr = primitive->operands.at(2)->to<IR::NamedRef>();
-        auto flc = field_list_calculations.get(nr->name);
+        auto nr = primitive->operands.at(2)->to<IR::PathExpression>();
+        auto flc = field_list_calculations.get(nr->path->name);
         if (flc == nullptr)
             ::error("%1%: Expected a field_list_calculation", primitive->operands.at(1));
         auto ttype = IR::Type_Bits::get(flc->output_width);
@@ -1206,8 +1229,8 @@ const IR::Statement* ProgramStructure::convertPrimitive(const IR::Primitive* pri
         const IR::Register *reg = nullptr;
         if (auto gr = ref->to<IR::GlobalRef>())
             reg = gr->obj->to<IR::Register>();
-        else if (auto nr = ref->to<IR::NamedRef>())
-            reg = registers.get(nr->name);
+        else if (auto nr = ref->to<IR::PathExpression>())
+            reg = registers.get(nr->path->name);
         if (!reg) {
             ::error("Expected a register reference %1%", ref);
             return nullptr; }
@@ -1229,8 +1252,8 @@ const IR::Statement* ProgramStructure::convertPrimitive(const IR::Primitive* pri
         const IR::Register *reg = nullptr;
         if (auto gr = ref->to<IR::GlobalRef>())
             reg = gr->obj->to<IR::Register>();
-        else if (auto nr = ref->to<IR::NamedRef>())
-            reg = registers.get(nr->name);
+        else if (auto nr = ref->to<IR::PathExpression>())
+            reg = registers.get(nr->path->name);
         if (!reg) {
             ::error("Expected a register reference %1%", ref);
             return nullptr; }
@@ -1434,6 +1457,17 @@ ProgramStructure::convert(const IR::CounterOrMeter* cm, cstring newName) {
 }
 
 const IR::Declaration_Instance*
+ProgramStructure::convertExtern(const IR::Declaration_Instance *ext, cstring newName) {
+    LOG1("Synthesizing " << ext);
+    auto *rv = ext->clone();
+    auto *et = rv->type->to<IR::Type_Extern>();
+    BUG_CHECK(et, "Extern %s is not extern type, but %s", ext, ext->type);
+    rv->name = newName;
+    rv->type = new IR::Type_Name(new IR::Path(extern_types.get(et)));
+    return rv->apply(TypeConverter(this))->to<IR::Declaration_Instance>();;
+}
+
+const IR::Declaration_Instance*
 ProgramStructure::convertDirectMeter(const IR::Meter* m, cstring newName) {
     LOG1("Synthesizing " << m);
     auto meterOutput = m->result;
@@ -1490,12 +1524,12 @@ ProgramStructure::convertControl(const IR::V1Control* control, cstring newName) 
         if (c.first->direct) {
             if (c.first->table.name.isNullOrEmpty()) {
                 ::error("%1%: Direct counter with no table", c.first);
-                continue;
+                return nullptr;
             }
             auto tbl = tables.get(c.first->table.name);
             if (tbl == nullptr) {
                 ::error("Cannot locate table %1%", c.first->table.name);
-                continue;
+                return nullptr;
             }
             if (std::find(usedTables.begin(), usedTables.end(), tbl) != usedTables.end())
                 directCounters.emplace(c.first->table.name, c.first->name);
@@ -1511,12 +1545,12 @@ ProgramStructure::convertControl(const IR::V1Control* control, cstring newName) 
         if (m.first->direct) {
             if (m.first->table.name.isNullOrEmpty()) {
                 ::error("%1%: Direct meter with no table", m.first);
-                continue;
+                return nullptr;
             }
             auto tbl = tables.get(m.first->table.name);
             if (tbl == nullptr) {
                 ::error("Cannot locate table %1%", m.first->table.name);
-                continue;
+                return nullptr;
             }
             if (std::find(usedTables.begin(), usedTables.end(), tbl) != usedTables.end()) {
                 auto meter = meters.get(m.second);
@@ -1552,7 +1586,7 @@ ProgramStructure::convertControl(const IR::V1Control* control, cstring newName) 
 
     for (auto c : externsToDo) {
         auto ext = externs.get(c);
-        // auto e = convert(ext, externs.get(ext));  -- no conversion needed?
+        ext = convertExtern(ext, externs.get(ext));
         stateful->push_back(ext);
     }
 
@@ -1560,7 +1594,7 @@ ProgramStructure::convertControl(const IR::V1Control* control, cstring newName) 
         auto act = actions.get(a);
         if (act == nullptr) {
             ::error("Cannot locate action %1%", a);
-            continue;
+            return nullptr;
         }
         auto action = convertAction(act, actions.get(act), nullptr);
         stateful->push_back(action);
@@ -1614,11 +1648,18 @@ void ProgramStructure::createControls() {
 
     for (auto it : controls)
         knownControls.push_back(it.second);
-    calledControls.sort(knownControls, controlsToDo);
+    bool cycles = calledControls.sort(knownControls, controlsToDo);
+    if (cycles) {
+        // TODO: give a better error message
+        ::error("Program contains recursive control blocks");
+        return;
+    }
 
     for (auto c : controlsToDo) {
         auto ct = controls.get(c);
         auto ctrl = convertControl(ct, controls.get(ct));
+        if (ctrl == nullptr)
+            return;
         declarations->push_back(ctrl);
     }
 
@@ -1908,7 +1949,11 @@ const IR::P4Program* ProgramStructure::create(Util::SourceInfo info) {
     createStructures();
     createExterns();
     createParser();
+    if (::errorCount())
+        return nullptr;
     createControls();
+    if (::errorCount())
+        return nullptr;
     createDeparser();
     createChecksumVerifications();
     createChecksumUpdates();

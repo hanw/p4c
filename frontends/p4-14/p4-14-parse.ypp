@@ -66,6 +66,8 @@ static const IR::Annotations *getPragmas() {
     IR::Annotations             *Annotations;
     IR::Apply                   *Apply;
     IR::Attribute               *Attribute;
+    IR::AttribLocal             *AttribLocal;
+    IR::AttribLocals            *AttribLocals;
     IR::CalculatedField         *CalculatedField;
     IR::CaseEntry               *CaseEntry;
     IR::Vector<IR::CaseEntry>   *CaseEntryList;
@@ -139,6 +141,8 @@ static const IR::Annotations *getPragmas() {
 %type<Annotations>      blackbox_method
 %type<Apply>            apply_case_list
 %type<Attribute>        blackbox_attribute
+%type<AttribLocal>      local_var
+%type<AttribLocals>     locals_list opt_locals_list
 %type<BBox>             blackbox_config
 %type<BBoxType>         blackbox_body
 %type<CalculatedField>  update_verify_spec_list
@@ -650,10 +654,6 @@ field_match_list: /* epsilon */ { $$ = new IR::Vector<IR::Expression>(); }
       { ($$=$1)->push_back(new IR::Primitive(@2+@4, $4, $2));
         $$->srcInfo += @2 + @4;
         $<Table>-2->reads_types.push_back(IR::ID(@4, $4)); }
-    | field_match_list header_ref '.' VALID ':' name ';'
-      { ($$=$1)->push_back(new IR::Primitive(@2+@4, $4, $2));
-        $$->srcInfo += @2 + @6;
-        $<Table>-2->reads_types.push_back(IR::ID(@6, $6)); }
     | field_match_list error ';' { $$ = $1; }
     | field_match_list error { $$ = $1; }
 ;
@@ -662,6 +662,10 @@ field_or_masked_ref:
       field_ref { $$ = $1; }
     | field_ref MASK const_expression
       { $$ = new IR::Mask(@2, $1, $3); }
+    | header_ref '.' VALID
+      { $$ = new IR::Primitive(@1+@3, $3, $1); }
+    | header_ref '.' VALID MASK const_expression
+      { $$ = new IR::Mask(@4, new IR::Primitive(@1+@3, $3, $1), $5); }
 ;
 
 action_list: /* epsilon */ { $$ = new IR::NameList(); }
@@ -730,7 +734,7 @@ blackbox_body: /* epsilon */ {
 
 blackbox_attribute: /* epsilon */ { $$ = new IR::Attribute(@-1, $<str>-1); }
     | blackbox_attribute TYPE ':' type ';' { ($$=$1)->type = $4; }
-    | blackbox_attribute EXPRESSION_LOCAL_VARIABLES '{' opt_name_list '}'
+    | blackbox_attribute EXPRESSION_LOCAL_VARIABLES '{' opt_locals_list '}'
         { ($$=$1)->locals = $4; }
     | blackbox_attribute OPTIONAL ';'
         { ($$=$1)->optional = true; }
@@ -763,6 +767,16 @@ argument:
 ;
 
 inout: IN { $$ = IR::Direction::In; } | OUT { $$ = IR::Direction::Out; } ;
+
+opt_locals_list: { $$ = nullptr; } | locals_list ;
+locals_list:
+      local_var  { ($$ = new IR::AttribLocals())->locals[$1->name] = $1; }
+    | locals_list ',' local_var  { ($$ = $1)->locals[$3->name] = $3; }
+;
+local_var:
+      name              { $$ = new IR::AttribLocal(@1, $1); }
+    | type name         { $$ = new IR::AttribLocal(@1+@2, $1, $2); }
+;
 
 blackbox_instantiation:
       BLACKBOX name name ';'
@@ -821,7 +835,9 @@ expression:
         { $$ = new IR::Primitive(@1+@6, $1, $3, $5); }
     | field_ref { $$ = $1; }
     | header_ref
-    | LATEST '.' name   { $$ = new IR::Member(@1+@3, new IR::NamedRef(@1, $1), IR::ID(@3, $3)); }
+    | header_ref '.' VALID              { $$ = new IR::Primitive(@1+@3, $3, $1); }
+    | LATEST '.' name   { $$ = new IR::Member(@1+@3,
+            new IR::PathExpression(IR::ID(@1, $1)), IR::ID(@3, $3)); }
     | INTEGER           { $$ = $1; }
     | '(' expression ')'                { $$ = $2; }
     | NOT expression %prec PREFIX       { $$ = new IR::LNot(@1, $2); }
@@ -857,7 +873,7 @@ header_or_field_ref:
 ;
 
 header_ref:
-      name      { $$ = new IR::NamedRef(@1, IR::ID(@1, $1)); }
+      name      { $$ = new IR::PathExpression(IR::ID(@1, $1)); }
     | header_ref '[' expression ']'     { $$ = new IR::HeaderStackItemRef(@1+@4, $1, $3); }
 ;
 
@@ -908,8 +924,7 @@ void yyerror(const char *msg) {
 }
 
 const IR::V1Program *parse_P4_14_file(const CompilerOptions &options, FILE *in) {
-    extern int verbose;
-    if (verbose)
+    if (Log::verbose())
         std::cout << "Parsing P4-14 program " << options.file << std::endl;
 #ifdef YYDEBUG
     if (const char *p = getenv("YYDEBUG"))

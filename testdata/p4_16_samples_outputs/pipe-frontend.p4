@@ -1,3 +1,5 @@
+#include <core.p4>
+
 match_kind {
     ternary,
     exact
@@ -32,8 +34,6 @@ extern bs {
 struct Packet_data {
 }
 
-action NoAction() {
-}
 control P_pipe_0(inout TArg1 pArg1, inout TArg2 pArg2) {
     TArg1 tmp;
     TArg2 tmp_0;
@@ -43,7 +43,6 @@ control P_pipe_0(inout TArg1 pArg1, inout TArg2 pArg2) {
         barg = (bit<9>)bData;
     }
     @name("C_action") action C_action_0(bit<9> cData) {
-        pArg1.field1 = cData;
     }
     @name("T") table T_0(inout TArg1 tArg1, in TArg2 aArg2) {
         key = {

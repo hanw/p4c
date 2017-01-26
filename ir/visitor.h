@@ -1,5 +1,5 @@
 /*
-Copyright 2013-present Barefoot Networks, Inc. 
+Copyright 2013-present Barefoot Networks, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -106,9 +106,10 @@ class Visitor {
     template <class T>
     const T* getOriginal() const {
         CHECK_NULL(ctxt->original);
-        auto result = ctxt->original->to<T>();
-        CHECK_NULL(result);
-        return result; }
+        BUG_CHECK(ctxt->original->is<T>(), "%1% does not have the expected type %2%",
+                  ctxt->original, typeid(T).name());
+        return ctxt->original->to<T>();
+    }
     const Context *getContext() const { return ctxt->parent; }
     template <class T>
     const T* getParent() const {
@@ -147,6 +148,10 @@ class Visitor {
     virtual bool join_flows(const IR::Node *) { return false; }
     void visit_children(const IR::Node *, std::function<void()> fn) { fn(); }
     class ChangeTracker;  // used by Modifier and Transform -- private to them
+#ifndef NDEBUG
+    virtual  // making this non-virtual for NDEBUG builds turns it into a noop
+#endif
+    void check_clone(const Visitor *) {}
 
  private:
     virtual void visitor_const_error();
@@ -160,6 +165,7 @@ class Visitor {
 class Modifier : public virtual Visitor {
     ChangeTracker       *visited = nullptr;
     void visitor_const_error() override;
+    void check_clone(const Visitor *) override;
  public:
     profile_t init_apply(const IR::Node *root) override;
     const IR::Node *apply_visitor(const IR::Node *n, const char *name = 0) override;
@@ -178,6 +184,7 @@ class Modifier : public virtual Visitor {
 class Inspector : public virtual Visitor {
     typedef unordered_map<const IR::Node *, bool>       visited_t;
     visited_t   *visited = nullptr;
+    void check_clone(const Visitor *) override;
  public:
     profile_t init_apply(const IR::Node *root) override;
     const IR::Node *apply_visitor(const IR::Node *, const char *name = 0) override;
@@ -197,6 +204,8 @@ class Transform : public virtual Visitor {
     ChangeTracker       *visited = nullptr;
     bool prune_flag = false;
     void visitor_const_error() override;
+    void check_clone(const Visitor *) override;
+
  public:
     profile_t init_apply(const IR::Node *root) override;
     const IR::Node *apply_visitor(const IR::Node *, const char *name = 0) override;
@@ -210,6 +219,7 @@ class Transform : public virtual Visitor {
     IRNODE_ALL_SUBCLASSES(DECLARE_VISIT_FUNCTIONS)
 #undef DECLARE_VISIT_FUNCTIONS
     void revisit_visited();
+
  protected:
     // can only be called usefully from 'preorder' function
     void prune() { prune_flag = true; }
@@ -226,7 +236,7 @@ class ControlFlowVisitor : public virtual Visitor {
     void init_join_flows(const IR::Node *root) override;
     bool join_flows(const IR::Node *n) override;
     virtual bool filter_join_point(const IR::Node *) { return false; }
-    ControlFlowVisitor &flow_clone() override { return *clone(); }
+    ControlFlowVisitor &flow_clone() override;
 };
 
 class Backtrack : public virtual Visitor {

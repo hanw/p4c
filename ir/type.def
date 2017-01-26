@@ -133,6 +133,10 @@ class ParameterList : ISimpleNamespace {
         }
         return result;
     }
+#emit
+    decltype(parameters->begin()) begin() const { return parameters->begin(); }
+    decltype(parameters->end()) end() const { return parameters->end(); }
+#end
 }
 
 // Represents a type variable written by the user
@@ -258,6 +262,10 @@ class Type_Set : Type {
     dbprint{ Node::dbprint(out); out << "<" << elementType << ">"; }
     toString { return cstring("set<") + elementType->toString() + ">"; }
     const Type* getP4Type() const override { return nullptr; }
+    int width_bits() const override {
+        // returning the width of the set elements, not the set itself, which doesn't
+        // really have a sensible size
+        return elementType->width_bits(); }
 }
 
 // The type of an expressionList
@@ -314,10 +322,10 @@ class Type_Stack : Type {
     unsigned getSize() const;
     static const cstring next;
     static const cstring last;
+    static const cstring arraySize;
+    static const cstring lastIndex;
     static const cstring push_front;
     static const cstring pop_front;
-    static const cstring full;
-    static const cstring empty;
     const Type* getP4Type() const override
     { return new IR::Type_Stack(srcInfo, elementType->getP4Type(), size); }
 }
@@ -401,7 +409,8 @@ abstract Type_MethodBase : Type, IMayBeGenericType {
     // nullptr for constructors or functors; nullptr is not void
     ParameterList parameters;
 
-    size_t getParameterCount() const { return parameters->size(); }
+    size_t maxParameterCount() const { return parameters->size(); }
+    size_t minParameterCount() const;
     virtual TypeParameters getTypeParameters() const override { return typeParameters; }
     void dbprint(std::ostream& out) const override;
     toString {
@@ -453,7 +462,8 @@ class Method : Declaration {
     Type_Method type;
     optional bool isAbstract = false;
     optional Annotations annotations = Annotations::empty;
-    size_t getParameterCount() const { return type->getParameterCount(); }
+    size_t maxParameterCount() const { return type->maxParameterCount(); }
+    size_t minParameterCount() const { return type->minParameterCount(); }
     void setAbstract() { isAbstract = true; }
 }
 
@@ -472,7 +482,8 @@ class Type_Extern : Type_Declaration, IGeneralNamespace, IMayBeGenericType {
     optional Annotations annotations = Annotations::empty;
 
     Util::Enumerator<IDeclaration>* getDeclarations() const override {
-        return methods->getEnumerator()->as<const IDeclaration*>(); }
+        return methods->getEnumerator()->as<const IDeclaration*>()
+            ->concat(attributes.valueEnumerator()->as<const IDeclaration*>()); }
     virtual TypeParameters getTypeParameters() const override { return typeParameters; }
     Method lookupMethod(cstring name, int argCount) const;
     validate{ methods->check_null(); }

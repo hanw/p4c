@@ -90,7 +90,7 @@ def run_timeout(options, args, timeout, stderr):
         print("Exit code ", local.process.returncode)
     return local.process.returncode
 
-timeout = 300  # seconds
+timeout = 10 * 60
 
 def compare_files(options, produced, expected):
     if options.replace:
@@ -186,7 +186,7 @@ def process_file(options, argv):
     # We rely on the fact that these keys are in alphabetical order.
     rename = { "FrontEnd_11_SimplifyControlFlow": "first",
                "FrontEnd_25_FrontEndLast": "frontend",
-               "MidEnd_28_Evaluator": "midend" }
+               "MidEnd_33_Evaluator": "midend" }
 
     if options.verbose:
         print("Writing temporary files into ", tmpdir)
@@ -204,7 +204,7 @@ def process_file(options, argv):
     args = ["./p4test", "--pp", ppfile, "--dump", tmpdir, "--top4", referenceOutputs,
             "--testJson"] + options.compilerOptions
 
-    if "14_samples" in options.p4filename or "v1_samples" in options.p4filename:
+    if "p4_14" in options.p4filename or "v1_samples" in options.p4filename:
         args.extend(["--p4-14"]);
     args.extend(argv)
     if options.runDebugger:

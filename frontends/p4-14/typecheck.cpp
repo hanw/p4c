@@ -27,13 +27,20 @@ limitations under the License.
 class TypeCheck::Pass1 : public Transform {
     const IR::V1Program   *global = nullptr;
     const IR::Node *preorder(IR::V1Program *glob) override { global = glob; return glob; }
-    const IR::Node *preorder(IR::NamedRef *ref) override {
+    const IR::Node *preorder(IR::PathExpression *ref) override {
         if (auto af = findContext<IR::ActionFunction>())
-            if (auto arg = af->arg(ref->name))
+            if (auto arg = af->arg(ref->path->name))
                 return arg;
+        const Visitor::Context *prop_ctxt = nullptr;
+        if (auto prop = findContext<IR::Property>(prop_ctxt)) {
+            if (auto bbox = prop_ctxt->parent->node->to<IR::Declaration_Instance>()) {
+                auto bbox_type = bbox->type->to<IR::Type_Extern>();
+                auto attr = bbox_type->attributes.get<IR::Attribute>(prop->name);
+                if (attr->locals && attr->locals->locals.count(ref->path->name)) {
+                    return attr->locals->locals.at(ref->path->name); } } }
         if (auto bbox = findContext<IR::Declaration_Instance>()) {
             if (auto bbox_type = bbox->type->to<IR::Type_Extern>()) {
-                if (auto attr = bbox_type->attributes.get<IR::Attribute>(ref->name))
+                if (auto attr = bbox_type->attributes.get<IR::Attribute>(ref->path->name))
                     return new IR::AttributeRef(ref->srcInfo, attr->type,
                                                 bbox->name, bbox_type, attr);
             } else {
@@ -56,41 +63,68 @@ class TypeCheck::Pass1 : public Transform {
         else
             error("%s: No header type %s defined", hm->srcInfo, hm->type_name);
         return hm; }
-    const IR::Node *postorder(IR::NamedRef *ref) override {
+    const IR::Node *preorder(IR::ActionSelector *sel) override {
+        if (!global) return sel;
+        if (sel->key_fields != nullptr) return sel;
+        const IR::FieldListCalculation *kf = nullptr;
+        if (sel->key.name && (kf = global->get<IR::FieldListCalculation>(sel->key)))
+            sel->key_fields = kf;
+        else
+            error("%s: Key must coordinate to a field_list_calculation", sel->srcInfo);
+        return sel; }
+    const IR::Node *preorder(IR::FieldListCalculation *flc) override {
+        if (!global) return flc;
+        if (flc->input_fields != nullptr) return flc;
+        if (!flc->input || flc->input->names.empty()) {
+            error("%s: no input in field_list_calculation", flc->srcInfo);
+            return flc; }
+        const IR::FieldList *in_f = nullptr;
+        if (flc->input->names.size() == 1 &&
+            (in_f = global->get<IR::FieldList>(flc->input->names[0]))) {
+            flc->input_fields = in_f;
+        } else {
+            auto fl = new IR::FieldList();
+            for (auto &name : flc->input->names) {
+                fl->fields.push_back(new IR::PathExpression(name));
+                fl->srcInfo += name.srcInfo; } }
+        return flc; }
+    const IR::Node *preorder(IR::Property *prop) override {
+        if (auto di = findContext<IR::Declaration_Instance>()) {
+            auto ext = di->type->to<IR::Type_Extern>();
+            BUG_CHECK(ext, "%s is not an extern", di);
+            if (auto attr = ext->attributes[prop->name]) {
+                if (attr->type->is<IR::Type::String>())
+                    prune();
+            } else {
+                error("No property name %s in extern %s", prop->name, ext->name); } }
+        return prop; }
+    const IR::Node *postorder(IR::PathExpression *ref) override {
         if (!global) return ref;
-        const Visitor::Context *prop_ctxt = nullptr;
-        if (auto prop = findContext<IR::Property>(prop_ctxt)) {
-            if (auto bbox = prop_ctxt->parent->node->to<IR::Declaration_Instance>()) {
-                auto bbox_type = bbox->type->to<IR::Type_Extern>();
-                auto attr = bbox_type->attributes.get<IR::Attribute>(prop->name);
-                if (attr->locals && contains(attr->locals->names, ref->name)) {
-                    /* ref to local of property -- do something with it? */
-                    return ref; } } }
         IR::Node *new_node = ref;
-        if (auto hdr = global->get<IR::HeaderOrMetadata>(ref->name)) {
+        if (auto hdr = global->get<IR::HeaderOrMetadata>(ref->path->name)) {
             visit(hdr);
             new_node = new IR::ConcreteHeaderRef(ref->srcInfo, hdr);
-        } else if (auto obj = global->get<IR::IInstance>(ref->name)) {
+        } else if (auto obj = global->get<IR::IInstance>(ref->path->name)) {
             const IR::Node *tmp = obj->getNode();  // FIXME -- can't visit an interface directly
             visit(tmp);
             obj = tmp->to<IR::IInstance>();
             new_node = new IR::GlobalRef(ref->srcInfo, obj->getType(), tmp);
-        } else if (/*auto obj = */global->get<IR::Node>(ref->name)) {
+        } else if (/*auto obj = */global->get<IR::Node>(ref->path->name)) {
             /* FIXME -- is something, should probably be typechecked */
         } else if (getParent<IR::Member>()) {
-            if (ref->name != "latest")
-                error("%s: No header or metadata named %s", ref->srcInfo, ref->name);
+            if (ref->path->name != "latest")
+                error("%s: No header or metadata named %s", ref->srcInfo, ref->path->name);
         } else {
             if (getParent<IR::HeaderStackItemRef>()) {
-                if (ref->name == "next" || ref->name == "last")
+                if (ref->path->name == "next" || ref->path->name == "last")
                     return ref; }
             if (auto hdr = findContext<IR::Type_StructLike>()) {
-                if (auto field = hdr->getField(ref->name)) {
+                if (auto field = hdr->getField(ref->path->name)) {
                     /* FIXME --  Should this be converted to something else? */
                     ref->type = field->type;
                     visit(ref->type);
                     return ref; } }
-            error("%s: No defintion for %s", ref->srcInfo, ref->name); }
+            error("%s: No defintion for %s", ref->srcInfo, ref->path->name); }
         return new_node; }
     const IR::Node *postorder(IR::Type_Name *ref) override {
         if (!global) return ref;
@@ -147,15 +181,35 @@ class TypeCheck::Pass2 : public Modifier {
         self.iterCounter++;
         return Modifier::init_apply(root); }
     void postorder(IR::Member *) override {}
-    void postorder(IR::Operation_Unary *op) override {
-        op->type = op->expr->type; }
     void postorder(IR::Operation_Binary *op) override {
-        if (op->left->type->is<IR::Type_InfInt>())
+        if (op->left->type->is<IR::Type_InfInt>()) {
             op->type = op->right->type;
-        else if (op->right->type->is<IR::Type_InfInt>())
+        } else if (op->right->type->is<IR::Type_InfInt>()) {
             op->type = op->left->type;
-        else if (op->left->type == op->right->type)
-            op->type = op->left->type; }
+        } else if (op->left->type == op->right->type) {
+            op->type = op->left->type;
+        } else {
+            auto *lt = op->left->type->to<IR::Type::Bits>();
+            auto *rt = op->right->type->to<IR::Type::Bits>();
+            if (lt && rt) {
+                if (lt->size < rt->size)
+                    op->left = new IR::Cast(rt, op->left);
+                else if (rt->size < lt->size)
+                    op->right = new IR::Cast(lt, op->right); } } }
+    void logic_operand(const IR::Expression *&op) {
+        if (auto *bit = op->type->to<IR::Type::Bits>())
+            op = new IR::Neq(IR::Type::Boolean::get(), op, new IR::Constant(bit, 0)); }
+    void postorder(IR::LAnd *op) override {
+        logic_operand(op->left);
+        logic_operand(op->right);
+        op->type = IR::Type::Boolean::get(); }
+    void postorder(IR::LOr *op) override {
+        logic_operand(op->left);
+        logic_operand(op->right);
+        op->type = IR::Type::Boolean::get(); }
+    void postorder(IR::LNot *op) override {
+        logic_operand(op->expr);
+        op->type = IR::Type::Boolean::get(); }
     void postorder(IR::Operation_Relation *op) override {
         op->type = IR::Type::Boolean::get(); }
     void postorder(IR::Primitive *prim) override {

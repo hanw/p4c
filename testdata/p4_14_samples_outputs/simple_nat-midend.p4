@@ -146,7 +146,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
         actions = {
             do_rewrites_0();
             _drop_0();
-            NoAction_0();
+            @default_only NoAction_0();
         }
         key = {
             standard_metadata.egress_port: exact;
@@ -157,7 +157,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
     @name("send_to_cpu") table send_to_cpu() {
         actions = {
             do_cpu_encap_0();
-            NoAction_1();
+            @default_only NoAction_1();
         }
         default_action = NoAction_1();
     }
@@ -231,7 +231,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         actions = {
             set_dmac_0();
             _drop_1();
-            NoAction_8();
+            @default_only NoAction_8();
         }
         key = {
             meta.meta.nhop_ipv4: exact;
@@ -243,7 +243,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         actions = {
             _drop_6();
             set_if_info_0();
-            NoAction_9();
+            @default_only NoAction_9();
         }
         key = {
             meta.meta.if_index: exact;
@@ -254,7 +254,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         actions = {
             set_nhop_0();
             _drop_7();
-            NoAction_10();
+            @default_only NoAction_10();
         }
         key = {
             meta.meta.ipv4_da: lpm;
@@ -270,7 +270,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             nat_hit_int_to_ext_0();
             nat_hit_ext_to_int_0();
             nat_no_nat_0();
-            NoAction_11();
+            @default_only NoAction_11();
         }
         key = {
             meta.meta.is_ext_if: exact;
@@ -337,29 +337,11 @@ struct tuple_2 {
 control verifyChecksum(in headers hdr, inout metadata meta) {
     @name("ipv4_checksum") Checksum16() ipv4_checksum;
     @name("tcp_checksum") Checksum16() tcp_checksum;
-    action act() {
-        mark_to_drop();
-    }
-    action act_0() {
-        mark_to_drop();
-    }
-    table tbl_act() {
-        actions = {
-            act();
-        }
-        const default_action = act();
-    }
-    table tbl_act_0() {
-        actions = {
-            act_0();
-        }
-        const default_action = act_0();
-    }
     apply {
         if (hdr.ipv4.hdrChecksum == (ipv4_checksum.get<tuple_1>({ hdr.ipv4.version, hdr.ipv4.ihl, hdr.ipv4.diffserv, hdr.ipv4.totalLen, hdr.ipv4.identification, hdr.ipv4.flags, hdr.ipv4.fragOffset, hdr.ipv4.ttl, hdr.ipv4.protocol, hdr.ipv4.srcAddr, hdr.ipv4.dstAddr }))) 
-            tbl_act.apply();
+            mark_to_drop();
         if (hdr.tcp.isValid() && hdr.tcp.checksum == (tcp_checksum.get<tuple_2>({ hdr.ipv4.srcAddr, hdr.ipv4.dstAddr, 8w0, hdr.ipv4.protocol, meta.meta.tcpLength, hdr.tcp.srcPort, hdr.tcp.dstPort, hdr.tcp.seqNo, hdr.tcp.ackNo, hdr.tcp.dataOffset, hdr.tcp.res, hdr.tcp.flags, hdr.tcp.window, hdr.tcp.urgentPtr }))) 
-            tbl_act_0.apply();
+            mark_to_drop();
     }
 }
 

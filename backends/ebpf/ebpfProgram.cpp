@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "ebpfObject.h"
+#include "ebpfProgram.h"
 #include "ebpfType.h"
 #include "ebpfControl.h"
 #include "ebpfParser.h"
@@ -22,19 +22,6 @@ limitations under the License.
 #include "frontends/p4/coreLibrary.h"
 
 namespace EBPF {
-
-cstring nameFromAnnotation(const IR::Annotations* annotations,
-                           cstring defaultValue) {
-    CHECK_NULL(annotations); CHECK_NULL(defaultValue);
-    auto anno = annotations->getSingle(IR::Annotation::nameAnnotation);
-    if (anno != nullptr) {
-        BUG_CHECK(anno->expr.size() == 1, "name annotation must be a string");
-        auto str = anno->expr[0]->to<IR::StringLiteral>();
-        CHECK_NULL(str);
-        return str->value;
-    }
-    return defaultValue;
-}
 
 bool EBPFProgram::build() {
     auto pack = toplevel->getMain();
@@ -54,7 +41,7 @@ bool EBPFProgram::build() {
     auto cb = pack->getParameterValue(model.filter.filter.name)
                       ->to<IR::ControlBlock>();
     BUG_CHECK(cb != nullptr, "No control block found");
-    control = new EBPFControl(this, cb);
+    control = new EBPFControl(this, cb, parser->headers);
     success = control->build();
     if (!success)
         return success;
@@ -70,9 +57,9 @@ void EBPFProgram::emit(CodeBuilder *builder) {
 
     builder->newline();
     builder->emitIndent();
-    builder->target->emitCodeSection(builder);
+    builder->target->emitCodeSection(builder, functionName);
     builder->emitIndent();
-    builder->appendFormat("int %s(struct __sk_buff* %s) ", functionName, model.CPacketName.str());
+    builder->target->emitMain(builder, functionName, model.CPacketName.str());
     builder->blockStart();
 
     emitHeaderInstances(builder);
@@ -144,6 +131,14 @@ void EBPFProgram::emitPreamble(CodeBuilder* builder) {
     builder->newline();
     builder->appendLine("#define EBPF_MASK(t, w) ((((t)(1)) << (w)) - (t)1)");
     builder->appendLine("#define BYTES(w) ((w + 7) / 8)");
+    builder->appendLine(
+        "#define WRITE_PARTIAL(a, s, v) do "
+        "{ u8 mask = EBPF_MASK(u8, s); "
+        "*((u8*)a) = ((*((u8*)a)) & ~mask) | (((v) >> (8 - (s))) & mask); "
+        "} while (0)");
+    builder->appendLine("#define write_byte(base, offset, v) do { "
+                        "*(u8*)((base) + (offset)) = (v); "
+                        "} while (0)");
     builder->newline();
 }
 
@@ -158,11 +153,24 @@ void EBPFProgram::createLocalVariables(CodeBuilder* builder) {
     builder->newline();
 
     builder->emitIndent();
+    builder->appendFormat("void* %s = %s;",
+                          packetStartVar, builder->target->dataOffset(model.CPacketName.str()));
+    builder->newline();
+    builder->emitIndent();
+    builder->appendFormat("void* %s = %s;",
+                          packetEndVar, builder->target->dataEnd(model.CPacketName.str()));
+    builder->newline();
+
+    builder->emitIndent();
     builder->appendFormat("u8 %s = 0;", control->accept->name.name);
     builder->newline();
 
     builder->emitIndent();
     builder->appendFormat("u32 %s = 0;", zeroKey);
+    builder->newline();
+
+    builder->emitIndent();
+    builder->appendFormat("unsigned char %s;", byteVar);
     builder->newline();
 }
 
@@ -176,7 +184,10 @@ void EBPFProgram::emitPipeline(CodeBuilder* builder) {
     builder->append(IR::ParserState::accept);
     builder->append(":");
     builder->newline();
+    builder->emitIndent();
+    builder->blockStart();
     control->emit(builder);
+    builder->blockEnd(true);
 }
 
 }  // namespace EBPF

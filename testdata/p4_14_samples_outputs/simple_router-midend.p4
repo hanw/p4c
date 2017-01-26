@@ -68,7 +68,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
         actions = {
             rewrite_mac_0();
             _drop_0();
-            NoAction_0();
+            @default_only NoAction_0();
         }
         key = {
             standard_metadata.egress_port: exact;
@@ -104,7 +104,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         actions = {
             set_dmac_0();
             _drop_1();
-            NoAction_1();
+            @default_only NoAction_1();
         }
         key = {
             meta.routing_metadata.nhop_ipv4: exact;
@@ -116,7 +116,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         actions = {
             set_nhop_0();
             _drop_4();
-            NoAction_5();
+            @default_only NoAction_5();
         }
         key = {
             hdr.ipv4.dstAddr: lpm;
@@ -155,18 +155,9 @@ struct tuple_0 {
 
 control verifyChecksum(in headers hdr, inout metadata meta) {
     @name("ipv4_checksum") Checksum16() ipv4_checksum;
-    action act() {
-        mark_to_drop();
-    }
-    table tbl_act() {
-        actions = {
-            act();
-        }
-        const default_action = act();
-    }
     apply {
         if (hdr.ipv4.hdrChecksum == (ipv4_checksum.get<tuple_0>({ hdr.ipv4.version, hdr.ipv4.ihl, hdr.ipv4.diffserv, hdr.ipv4.totalLen, hdr.ipv4.identification, hdr.ipv4.flags, hdr.ipv4.fragOffset, hdr.ipv4.ttl, hdr.ipv4.protocol, hdr.ipv4.srcAddr, hdr.ipv4.dstAddr }))) 
-            tbl_act.apply();
+            mark_to_drop();
     }
 }
 

@@ -16,8 +16,9 @@ limitations under the License.
 
 #include "midend.h"
 #include "lower.h"
+#if 0
 #include "inlining.h"
-#include "eliminateVerify.h"
+#endif
 #include "frontends/common/constantFolding.h"
 #include "frontends/common/resolveReferences/resolveReferences.h"
 #include "frontends/p4/evaluator/evaluator.h"
@@ -47,6 +48,7 @@ limitations under the License.
 #include "midend/validateProperties.h"
 #include "midend/compileTimeOps.h"
 #include "midend/isolateMethodCalls.h"
+#include "midend/predication.h"
 
 namespace BMV2 {
 
@@ -85,25 +87,59 @@ class EnumOn32Bits : public P4::ChooseEnumRepresentation {
     { return 32; }
 };
 
+class SkipControls : public P4::ActionSynthesisPolicy {
+    const std::set<cstring> *skip;
 
-void MidEnd::setup_for_P4_16(CompilerOptions&) {
-    // we may come through this path even if the program is actually a P4 v1.0 program
+ public:
+    explicit SkipControls(const std::set<cstring> *skip) : skip(skip) { CHECK_NULL(skip); }
+    bool convert(const IR::P4Control* control) const {
+        if (skip->find(control->name) != skip->end())
+            return false;
+        return true;
+    }
+};
+
+MidEnd::MidEnd(CompilerOptions& options) {
+    bool isv1 = options.isv1();
+    setName("MidEnd");
+    refMap.setIsV1(isv1);  // must be done BEFORE creating passes
     auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
+    auto convertEnums = new P4::ConvertEnums(&refMap, &typeMap, new EnumOn32Bits());
+    auto v1controls = new std::set<cstring>();
+
     addPasses({
-        new P4::ConvertEnums(&refMap, &typeMap,
-                             new EnumOn32Bits()),
-        // TODO: position this pass correctly
+        convertEnums,
+        // TODO(pierce): position this pass correctly
         new P4::IsolateMethodCalls(&refMap, &typeMap),
+        new VisitFunctor([this, convertEnums]() { enumMap = convertEnums->getEnumMapping(); }),
         new P4::RemoveReturns(&refMap),
         new P4::MoveConstructors(&refMap),
         new P4::RemoveAllUnusedDeclarations(&refMap),
         new P4::ClearTypeMap(&typeMap),
         evaluator,
-        new VisitFunctor([evaluator](const IR::Node *root) -> const IR::Node * {
+        new VisitFunctor([this, v1controls, evaluator](const IR::Node *root) -> const IR::Node* {
             auto toplevel = evaluator->getToplevelBlock();
-            if (toplevel->getMain() == nullptr)
+            auto main = toplevel->getMain();
+            if (main == nullptr)
                 // nothing further to do
                 return nullptr;
+            // We save the names of some control blocks for special processing later
+            if (main->getConstructorParameters()->size() != 6)
+                ::error("%1%: Expected 6 arguments for main package", main);
+            auto verify = main->getParameterValue(P4V1::V1Model::instance.sw.verify.name);
+            auto update = main->getParameterValue(P4V1::V1Model::instance.sw.update.name);
+            auto deparser = main->getParameterValue(P4V1::V1Model::instance.sw.deparser.name);
+            if (verify == nullptr || update == nullptr || deparser == nullptr ||
+                !verify->is<IR::ControlBlock>() || !update->is<IR::ControlBlock>() ||
+                !deparser->is<IR::ControlBlock>()) {
+                ::error("%1%: main package does not match the expected model %2%",
+                        main, P4V1::V1Model::instance.file.toString());
+                return nullptr;
+            }
+            updateControlBlockName = update->to<IR::ControlBlock>()->container->name;
+            v1controls->emplace(verify->to<IR::ControlBlock>()->container->name);
+            v1controls->emplace(updateControlBlockName);
+            v1controls->emplace(deparser->to<IR::ControlBlock>()->container->name);
             return root; }),
         new P4::Inline(&refMap, &typeMap, evaluator),
         new P4::InlineActions(&refMap, &typeMap),
@@ -123,40 +159,25 @@ void MidEnd::setup_for_P4_16(CompilerOptions&) {
         new P4::EliminateTuples(&refMap, &typeMap),
         new P4::CopyStructures(&refMap, &typeMap),
         new P4::NestedStructs(&refMap, &typeMap),
+        new P4::Predication(&refMap),
+        new P4::ConstantFolding(&refMap, &typeMap),
         new P4::LocalCopyPropagation(&refMap, &typeMap),
+        new P4::ConstantFolding(&refMap, &typeMap),
         new P4::MoveDeclarations(),
         new P4::ValidateTableProperties({ "implementation", "size", "counters",
                                           "meters", "size", "support_timeout" }),
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::CompileTimeOperations(),
-        new P4::SynthesizeActions(&refMap, &typeMap),
+        new P4::SynthesizeActions(&refMap, &typeMap, new SkipControls(v1controls)),
         new P4::MoveActionsToTables(&refMap, &typeMap),
-     });
-}
-
-
-MidEnd::MidEnd(CompilerOptions& options) {
-    bool isv1 = options.isv1();
-    setName("MidEnd");
-    refMap.setIsV1(isv1);  // must be done BEFORE creating passes
-#if 0
-    if (isv1)
-        // TODO: This path should be eventually deprecated
-        setup_for_P4_14(options);
-    else
-#endif
-    setup_for_P4_16(options);
-
-    // BMv2-specific passes
-    auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
-    addPasses({
+        // Proper back-end
         new P4::TypeChecking(&refMap, &typeMap),
-        new EliminateVerify(&refMap, &typeMap),
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::RemoveLeftSlices(&refMap, &typeMap),
         new P4::TypeChecking(&refMap, &typeMap),
         new LowerExpressions(&typeMap),
         new P4::ConstantFolding(&refMap, &typeMap, false),
+        new FixupChecksum(&updateControlBlockName),
         evaluator,
         new VisitFunctor([this, evaluator]() { toplevel = evaluator->getToplevelBlock(); })
     });

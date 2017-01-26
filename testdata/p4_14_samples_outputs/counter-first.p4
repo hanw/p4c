@@ -47,7 +47,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
     @name("my_indirect_counter") counter(32w16384, CounterType.packets) my_indirect_counter;
-    @name("m_action") action m_action(bit<8> idx) {
+    @name("m_action") action m_action(bit<14> idx) {
         my_indirect_counter.count((bit<32>)idx);
         mark_to_drop();
     }
@@ -57,7 +57,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         actions = {
             m_action();
             _nop();
-            NoAction();
+            @default_only NoAction();
         }
         key = {
             hdr.ethernet.srcAddr: exact;

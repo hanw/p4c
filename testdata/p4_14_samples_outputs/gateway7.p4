@@ -35,7 +35,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         actions = {
             output;
             noop;
-            NoAction;
+            @default_only NoAction;
         }
         key = {
             hdr.data.f1: exact;
@@ -46,7 +46,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         actions = {
             output;
             noop;
-            NoAction;
+            @default_only NoAction;
         }
         key = {
             hdr.data.f2: exact;
@@ -54,7 +54,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         default_action = NoAction();
     }
     apply {
-        if (hdr.data.b2 > 8w50) {
+        if (hdr.data.b2 > 8w49) {
             test1.apply();
         }
         else {

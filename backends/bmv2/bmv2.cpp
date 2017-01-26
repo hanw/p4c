@@ -65,7 +65,7 @@ int main(int argc, char *const argv[]) {
     ::P4_16::V2Model *v2model = ::P4::InferArchitecture::instance->getModel();
 
     BMV2::JsonConverter converter(options, v2model);
-    converter.convert(&midEnd.refMap, &midEnd.typeMap, toplevel);
+    converter.convert(&midEnd.refMap, &midEnd.typeMap, toplevel, &midEnd.enumMap);
     if (::errorCount() > 0)
         return 1;
 

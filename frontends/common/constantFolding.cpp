@@ -49,8 +49,9 @@ const IR::Expression* DoConstantFolding::getConstant(const IR::Expression* expr)
 // This has to be called from a visitor method - it calls getOriginal()
 void DoConstantFolding::setConstant(const IR::Node* node, const IR::Expression* result) {
     LOG1("Folding " << node << " to " << result << " (" << result->id << ")");
+    auto orig = getOriginal();
     constants.emplace(node, result);
-    constants.emplace(getOriginal(), result);
+    constants.emplace(orig, result);
 }
 
 const IR::Node* DoConstantFolding::postorder(IR::PathExpression* e) {
@@ -262,6 +263,17 @@ DoConstantFolding::compare(const IR::Operation_Binary* e) {
         auto result = new IR::BoolLiteral(e->srcInfo, bresult);
         setConstant(e, result);
         return result;
+    } else if (typesKnown) {
+        auto le = EnumInstance::resolve(eleft, typeMap);
+        auto re = EnumInstance::resolve(eright, typeMap);
+        if (le != nullptr && re != nullptr) {
+            BUG_CHECK(le->type == re->type,
+                      "%1%: different enum types in comparison", e);
+            bool bresult = (le->name == re->name) == eqTest;
+            auto result = new IR::BoolLiteral(e->srcInfo, bresult);
+            setConstant(e, result);
+            return result;
+        }
     }
 
     if (eqTest)
@@ -272,7 +284,7 @@ DoConstantFolding::compare(const IR::Operation_Binary* e) {
 
 const IR::Node*
 DoConstantFolding::binary(const IR::Operation_Binary* e,
-                        std::function<mpz_class(mpz_class, mpz_class)> func) {
+                          std::function<mpz_class(mpz_class, mpz_class)> func) {
     auto eleft = getConstant(e->left);
     auto eright = getConstant(e->right);
     if (eleft == nullptr || eright == nullptr)
@@ -447,32 +459,41 @@ const IR::Node* DoConstantFolding::postorder(IR::Slice* e) {
 const IR::Node* DoConstantFolding::postorder(IR::Member* e) {
     if (!typesKnown)
         return e;
-    auto expr = getConstant(e->expr);
-    if (expr == nullptr)
-        return e;
-    auto type = typeMap->getType(e->expr, true);
-    if (!type->is<IR::Type_StructLike>())
-        BUG("Expected a struct type, got %1%", type);
-    if (!expr->is<IR::ListExpression>())
-        BUG("Expected a list of constants, got %1%", expr);
+    auto orig = getOriginal<IR::Member>();
+    auto type = typeMap->getType(orig->expr, true);
+    auto origtype = typeMap->getType(orig);
 
-    auto list = expr->to<IR::ListExpression>();
-    auto structType = type->to<IR::Type_StructLike>();
+    const IR::Expression* result;
+    if (type->is<IR::Type_Stack>() && e->member == IR::Type_Stack::arraySize) {
+        auto st = type->to<IR::Type_Stack>();
+        auto size = st->getSize();
+        result = new IR::Constant(st->size->srcInfo, size);
+    } else {
+        auto expr = getConstant(e->expr);
+        if (expr == nullptr)
+            return e;
+        if (!type->is<IR::Type_StructLike>())
+            BUG("Expected a struct type, got %1%", type);
+        if (!expr->is<IR::ListExpression>())
+            BUG("Expected a list of constants, got %1%", expr);
 
-    bool found = false;
-    int index = 0;
-    for (auto f : *structType->fields) {
-        if (f->name.name == e->member.name) {
-            found = true;
-            break;
+        auto list = expr->to<IR::ListExpression>();
+        auto structType = type->to<IR::Type_StructLike>();
+
+        bool found = false;
+        int index = 0;
+        for (auto f : *structType->fields) {
+            if (f->name.name == e->member.name) {
+                found = true;
+                break;
+            }
+            index++;
         }
-        index++;
-    }
 
-    if (!found)
-        BUG("Could not find field %1% in type %2%", e->member, type);
-    auto result = list->components->at(index)->clone();
-    auto origtype = typeMap->getType(getOriginal());
+        if (!found)
+            BUG("Could not find field %1% in type %2%", e->member, type);
+        result = list->components->at(index)->clone();
+    }
     typeMap->setType(result, origtype);
     typeMap->setCompileTimeConstant(result);
     setConstant(e, result);
@@ -502,11 +523,6 @@ const IR::Node* DoConstantFolding::postorder(IR::Concat* e) {
         ::error("%1%: both operand widths must be known", e);
         return e;
     }
-    if (!lt->operator==(*rt)) {
-        ::error("%1%: operands have different types: %2% and %3%",
-                e, lt->toString(), rt->toString());
-        return e;
-    }
 
     auto resultType = IR::Type_Bits::get(Util::SourceInfo(), lt->size + rt->size, lt->isSigned);
     mpz_class value = Util::shift_left(left->value, static_cast<unsigned>(lt->size)) + right->value;
@@ -529,6 +545,19 @@ const IR::Node* DoConstantFolding::postorder(IR::LNot* e) {
     auto result = new IR::BoolLiteral(cst->srcInfo, !cst->value);
     setConstant(e, result);
     return result;
+}
+
+const IR::Node* DoConstantFolding::postorder(IR::Mux* e) {
+    auto cond = getConstant(e->e0);
+    if (cond == nullptr)
+        return e;
+    auto b = cond->to<IR::BoolLiteral>();
+    if (b == nullptr)
+        ::error("%1%: expected a Boolean", cond);
+    if (b->value)
+        return e->e1;
+    else
+        return e->e2;
 }
 
 const IR::Node* DoConstantFolding::shift(const IR::Operation_Binary* e) {
@@ -737,8 +766,6 @@ const IR::Node* DoConstantFolding::postorder(IR::SelectExpression* expression) {
 
     if (changes) {
         if (cases.size() == 0 && result == expression && warnings)
-            // TODO: this is the same as verify(false, error.NoMatch),
-            // but we cannot replace the selectExpression with a method call.
             ::warning("%1%: no case matches", expression);
         expression->selectCases = std::move(cases);
     }

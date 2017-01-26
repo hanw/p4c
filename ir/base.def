@@ -13,6 +13,7 @@ abstract Type {
     typedef Type_Unknown        Unknown;
     typedef Type_Boolean        Boolean;
     typedef Type_Bits           Bits;
+    typedef Type_String         String;
     typedef Type_Varbits        Varbits;
     typedef Type_Void           Void;
 #end
@@ -116,6 +117,7 @@ abstract Expression {
     // It is not visited by the visitors by default (can be visited explicitly in preorder)
     optional Type type = Type::Unknown::get();
     visit_children { (void)v; }
+#apply
 }
 
 abstract Operation : Expression {
@@ -147,6 +149,7 @@ class Path {
         return name;
     }
     dbprint { out << name; }
+    validate { BUG_CHECK(!name.name.isNullOrEmpty(), "Empty path"); }
 }
 
 class Annotation {
@@ -161,7 +164,6 @@ class Annotation {
     // Predefined annotations used by the compiler
     static const cstring nameAnnotation;
     toString{ return cstring("@") + name; }
-    dbprint { out << '@' << name << expr; }
     validate{ BUG_CHECK(!name.name.isNullOrEmpty(), "empty annotation name"); }
 }
 

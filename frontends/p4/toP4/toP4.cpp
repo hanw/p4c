@@ -479,13 +479,11 @@ bool ToP4::preorder(const IR::Constant* c) {
 }
 
 bool ToP4::preorder(const IR::BoolLiteral* b) {
-    dump(1);
     builder.append(b->toString());
     return false;
 }
 
 bool ToP4::preorder(const IR::StringLiteral* s) {
-    dump(1);
     builder.append(s->toString());
     return false;
 }
@@ -686,11 +684,6 @@ bool ToP4::preorder(const IR::Member* e) {
     builder.append(".");
     builder.append(e->member);
     expressionPrecedence = prec;
-    return false;
-}
-
-bool ToP4::preorder(const IR::NamedRef* e) {
-    builder.append(e->name);
     return false;
 }
 

@@ -1,5 +1,5 @@
 /*
-Copyright 2013-present Barefoot Networks, Inc. 
+Copyright 2013-present Barefoot Networks, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,21 +24,24 @@ namespace EBPF {
 
 class EBPFControl : public EBPFObject {
  public:
-    const EBPFProgram*            program;
-    const IR::ControlBlock*       controlBlock;
-    const IR::Parameter*          headers;
-    const IR::Parameter*          accept;
+    const EBPFProgram*      program;
+    const IR::ControlBlock* controlBlock;
+    const IR::Parameter*    headers;
+    const IR::Parameter*    accept;
+    const IR::Parameter*    parserHeaders;
+    // replace references to headers with references to parserHeaders
+    cstring                 hitVariable;
 
     std::set<const IR::Parameter*> toDereference;
     std::map<cstring, EBPFTable*>  tables;
     std::map<cstring, EBPFCounterTable*>  counters;
 
-    explicit EBPFControl(const EBPFProgram* program, const IR::ControlBlock* block);
-    virtual ~EBPFControl() {}
-    void emit(CodeBuilder* builder);
+    EBPFControl(const EBPFProgram* program, const IR::ControlBlock* block,
+                const IR::Parameter* parserHeaders);
+    virtual void emit(CodeBuilder* builder);
     void emitDeclaration(const IR::Declaration* decl, CodeBuilder *builder);
     void emitTables(CodeBuilder* builder);
-    bool build();
+    virtual bool build();
     EBPFTable* getTable(cstring name) const {
         auto result = get(tables, name);
         BUG_CHECK(result != nullptr, "No table named %1%", name);
@@ -47,6 +50,9 @@ class EBPFControl : public EBPFObject {
         auto result = get(counters, name);
         BUG_CHECK(result != nullptr, "No counter named %1%", name);
         return result; }
+
+ protected:
+    void scanConstants();
 };
 
 }  // namespace EBPF

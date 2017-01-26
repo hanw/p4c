@@ -64,6 +64,7 @@ parser TopParser(packet_in b, out Parsed_packet p) {
         b.extract<Ethernet_h>(p.ethernet);
         transition select(p.ethernet.etherType) {
             16w0x800: parse_ipv4;
+            default: noMatch;
         }
     }
     state parse_ipv4 {
@@ -79,6 +80,10 @@ parser TopParser(packet_in b, out Parsed_packet p) {
         tmp_14 = tmp_13;
         verify(tmp_14, error.IPv4ChecksumError);
         transition accept;
+    }
+    state noMatch {
+        verify(false, error.NoMatch);
+        transition reject;
     }
 }
 
@@ -295,18 +300,36 @@ control TopDeparser(inout Parsed_packet p, packet_out b) {
         tmp_20 = ck_2.get();
         p.ip.hdrChecksum = tmp_20;
     }
+    action act_9() {
+        b.emit<Ethernet_h>(p.ethernet);
+    }
+    action act_10() {
+        b.emit<Ipv4_h>(p.ip);
+    }
     table tbl_act_8() {
+        actions = {
+            act_9();
+        }
+        const default_action = act_9();
+    }
+    table tbl_act_9() {
         actions = {
             act_8();
         }
         const default_action = act_8();
     }
-    apply {
-        b.emit<Ethernet_h>(p.ethernet);
-        if (p.ip.isValid()) {
-            tbl_act_8.apply();
+    table tbl_act_10() {
+        actions = {
+            act_10();
         }
-        b.emit<Ipv4_h>(p.ip);
+        const default_action = act_10();
+    }
+    apply {
+        tbl_act_8.apply();
+        if (p.ip.isValid()) {
+            tbl_act_9.apply();
+        }
+        tbl_act_10.apply();
     }
 }
 

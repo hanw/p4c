@@ -20,8 +20,8 @@ namespace IR {
 
 const cstring IR::Type_Stack::next = "next";
 const cstring IR::Type_Stack::last = "last";
-const cstring IR::Type_Stack::full = "full";
-const cstring IR::Type_Stack::empty = "empty";
+const cstring IR::Type_Stack::arraySize = "size";
+const cstring IR::Type_Stack::lastIndex = "lastIndex";
 const cstring IR::Type_Stack::push_front = "push_front";
 const cstring IR::Type_Stack::pop_front = "pop_front";
 const cstring IR::Type_Header::isValid = "isValid";
@@ -122,6 +122,14 @@ bool Type_ActionEnum::contains(cstring name) const {
             return true;
     }
     return false;
+}
+
+size_t Type_MethodBase::minParameterCount() const {
+    size_t rv = 0;
+    for (auto p : *parameters)
+        if (!p->annotations->getSingle("optional"))
+            ++rv;
+    return rv;
 }
 
 const Type* Type_Specialized::getP4Type() const {
