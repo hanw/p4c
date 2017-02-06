@@ -328,7 +328,7 @@ class RunBMV2(object):
         self.json = None
         self.tables = []
         self.actions = []
-        self.switchLogFile = "switch.log"  # .txt is added by BMv2
+        self.switchLogFile = "psa.log"  # .txt is added by BMv2
         self.readJson()
     def readJson(self):
         with open(self.jsonfile) as jf:
