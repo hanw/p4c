@@ -810,19 +810,23 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                    << "_"
                    << em->method->toString();
 
+                if (em->originalExternType->name.name == corelib.packetOut.name
+                    && em->method->name.name == corelib.packetOut.emit.name) {
+                    conv->simpleExpressionsOnly = true;
+                    if (mc->arguments->size() == 1
+                        && typeMap->getType(mc->arguments->at(0))->is<IR::Type_Stack>()) {
+                        ss.str(std::string()); // clear the primitive name
+                        ss << "_packet_out_emit_stack";
+                    }
+                }
+
                 auto prim = mkPrimitive(ss.str().c_str(), result);
                 auto params = mkParameters(prim);
-
-                if (em->originalExternType->name.name == corelib.packetOut.name) {
-                    if (em->method->name.name == corelib.packetOut.emit.name) {
-                        conv->simpleExpressionsOnly = true;
-                    }
-                } else {
-                    auto self = new Util::JsonObject();
-                    self->emplace("type", "extern");
-                    self->emplace("value", em->object->getName());
-                    params->append(self);
-                }
+               
+                auto self = new Util::JsonObject();
+                self->emplace("type", "extern");
+                self->emplace("value", em->object->getName());
+                params->append(self);
 
                 for (auto a : *mc->arguments) {
                     auto arg = conv->convert(a);
@@ -1331,7 +1335,39 @@ JsonConverter::convertTable(const CFG::TableNode* node,
     return result;
 }
 
+Util::JsonObject *JsonConverter::createExternInstance(cstring name, cstring type) {
+    auto j = new Util::JsonObject();
+    j->emplace("name", name);
+    j->emplace("id", nextId("extern_instances"));
+    j->emplace("type", type);
+    return j;
+}
 
+void JsonConverter::addExternAttributes(const IR::ExternBlock *eb,
+                                        Util::JsonArray *attributes) {
+    for (auto arg : *eb->getConstructorParameters()->parameters) {
+        auto j = new Util::JsonObject();
+        j->emplace("name", arg->toString()); 
+        auto val = eb->getParameterValue(arg->externalName());
+        if (val->is<IR::Constant>()) {
+            auto constVal = val->to<IR::Constant>();
+            if (arg->type->is<IR::Type_Bits>()) {
+                j->emplace("type", "hexstr");
+                j->emplace("value", stringRepr(constVal->value));
+            } else {
+                BUG("%1%: unhandled constant constructor param",
+                    constVal->toString());
+            }
+        } else if (val->is<IR::Declaration_ID>()) {
+            auto declID = val->to<IR::Declaration_ID>();
+            j->emplace("type", "string");
+            j->emplace("value", declID->toString());
+        } else {
+            BUG("%1%: unknown constructor param type", arg->type);
+        }
+        attributes->append(j);
+    }
+}
 
 Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
                                            cstring name,
@@ -1372,6 +1408,20 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
         }
     }
 
+    // special handling for packet out extern
+    // TODO(pierce): handle other externs-as-parameters this way also?
+    for (auto p : *cont->type->applyParams->parameters) {
+        auto p_type = typeMap->getType(p);
+        if (p_type->is<IR::Type_Extern>()) {
+            auto ex_type = p_type->to<IR::Type_Extern>();
+            if (ex_type->getName() == corelib.packetOut.name) {
+                auto inst = createExternInstance(p->getName(), ex_type->getName());
+                mkArrayField(inst, "attribute_values");
+                externs->append(inst);
+            }
+        }
+    }
+
     for (auto c : *cont->controlLocals) {
         if (c->is<IR::Declaration_Constant>() ||
             c->is<IR::Declaration_Variable>() ||
@@ -1384,34 +1434,10 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
             cstring name = c->externalName();
             if (bl->is<IR::ExternBlock>()) {
                 auto eb = bl->to<IR::ExternBlock>();
-                auto j = new Util::JsonObject();
-                j->emplace("name", c->getName());
-                j->emplace("id", nextId("extern_instances"));
-                j->emplace("type", eb->type->getName().toString());
-                auto attributes = mkArrayField(j, "attribute_values");
-                for (auto a : *eb->getConstructorParameters()->parameters) {
-                    auto aJ = new Util::JsonObject();
-                    aJ->emplace("name", a->toString()); 
-                    auto val = eb->getParameterValue(a->getName().toString());
-                    if (val->is<IR::Constant>()) {
-                        auto constVal = val->to<IR::Constant>();
-                        if (a->type->is<IR::Type_Bits>()) {
-                            aJ->emplace("type", "hexstr");
-                            aJ->emplace("value", stringRepr(constVal->value));
-                        } else {
-                            BUG("%1%: unhandled constant constructor param",
-                                constVal->toString());
-                        }
-                    } else if (val->is<IR::Declaration_ID>()) {
-                        auto declID = val->to<IR::Declaration_ID>();
-                        aJ->emplace("type", "string");
-                        aJ->emplace("value", declID->toString());
-                    } else {
-                        BUG("%1%: unknown constructor param type", a->type);
-                    }
-                    attributes->append(aJ);
-                }
-                externs->append(j);
+                auto inst = createExternInstance(name, eb->type->externalName());
+                auto attributes = mkArrayField(inst, "attribute_values");
+                addExternAttributes(eb, attributes);
+                externs->append(inst);
             }
             continue;
         }

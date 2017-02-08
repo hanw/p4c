@@ -117,30 +117,6 @@ MidEnd::MidEnd(CompilerOptions& options) {
         new P4::RemoveAllUnusedDeclarations(&refMap),
         new P4::ClearTypeMap(&typeMap),
         evaluator,
-        new VisitFunctor([this, v1controls, evaluator](const IR::Node *root) -> const IR::Node* {
-            auto toplevel = evaluator->getToplevelBlock();
-            auto main = toplevel->getMain();
-            if (main == nullptr)
-                // nothing further to do
-                return nullptr;
-            // We save the names of some control blocks for special processing later
-            if (main->getConstructorParameters()->size() != 6)
-                ::error("%1%: Expected 6 arguments for main package", main);
-            auto verify = main->getParameterValue(P4V1::V1Model::instance.sw.verify.name);
-            auto update = main->getParameterValue(P4V1::V1Model::instance.sw.update.name);
-            auto deparser = main->getParameterValue(P4V1::V1Model::instance.sw.deparser.name);
-            if (verify == nullptr || update == nullptr || deparser == nullptr ||
-                !verify->is<IR::ControlBlock>() || !update->is<IR::ControlBlock>() ||
-                !deparser->is<IR::ControlBlock>()) {
-                ::error("%1%: main package does not match the expected model %2%",
-                        main, P4V1::V1Model::instance.file.toString());
-                return nullptr;
-            }
-            updateControlBlockName = update->to<IR::ControlBlock>()->container->name;
-            v1controls->emplace(verify->to<IR::ControlBlock>()->container->name);
-            v1controls->emplace(updateControlBlockName);
-            v1controls->emplace(deparser->to<IR::ControlBlock>()->container->name);
-            return root; }),
         new P4::Inline(&refMap, &typeMap, evaluator),
         new P4::InlineActions(&refMap, &typeMap),
         new P4::LocalizeAllActions(&refMap),
@@ -177,7 +153,6 @@ MidEnd::MidEnd(CompilerOptions& options) {
         new P4::TypeChecking(&refMap, &typeMap),
         new LowerExpressions(&typeMap),
         new P4::ConstantFolding(&refMap, &typeMap, false),
-        new FixupChecksum(&updateControlBlockName),
         evaluator,
         new VisitFunctor([this, evaluator]() { toplevel = evaluator->getToplevelBlock(); })
     });

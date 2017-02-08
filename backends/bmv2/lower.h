@@ -46,19 +46,6 @@ class LowerExpressions : public Transform {
     { prune(); return table; }  // don't simplify expressions in table
 };
 
-// TODO: FIXME
-// This pass is a hack to work around current BMv2 limitations:
-// checksum computations must be expressed in a restricted way, since
-// the JSON code generator uses simple pattern-matching.
-class FixupChecksum : public Transform {
-    const cstring* updateBlockName;
- public:
-    explicit FixupChecksum(const cstring* updateBlockName) :
-            updateBlockName(updateBlockName)
-    { setName("FixupChecksum"); }
-    const IR::Node* preorder(IR::P4Control* control) override;
-};
-
 }  // namespace BMV2
 
 #endif /* _BACKENDS_BMV2_LOWER_H_ */
