@@ -50,6 +50,9 @@ const IR::Node* TypeVariableSubstitutionVisitor::preorder(IR::TypeParameters *tp
 const IR::Node* TypeVariableSubstitutionVisitor::preorder(IR::Type_Var* typeVariable) {
     LOG1("Visiting " << dbp(getOriginal()));
     const IR::Type* type = bindings->lookup(getOriginal<IR::Type_Var>());
+    if (getOriginal()->id == 563) {
+        printf("");
+    }
     if (type == nullptr)
         return typeVariable;
     LOG1("Replacing " << getOriginal() << " with " << type);
@@ -64,6 +67,21 @@ const IR::Node* TypeVariableSubstitutionVisitor::preorder(IR::Type_InfInt* typeV
     LOG1("Replacing " << getOriginal() << " with " << type);
     return type;
 }
+
+//const IR::Node* TypeVariableSubstitutionVisitor::preorder(IR::Type_Name* typeName) {
+//    // experimental -- replace all type_name
+//    LOG1("Visiting " << dbp(getOriginal()));
+//    auto tn = new IR::Type_Name(typeName->srcInfo, typeName->path);
+//    if (findContext<IR::Declaration_Variable>()) {
+//        auto declVar = findContext<IR::Declaration_Variable>();
+//        if (declVar->type == getOriginal()) {
+//            printf("SUBST: DeclVar ID is: %d\n", declVar->id);
+//            printf("SUBST: Original TN id is: %d\n", getOriginal()->id);
+//            printf("SUBST: New TN id is: %d\n", tn->id);
+//        }
+//    }
+//    return tn;
+//}
 
 const IR::Node* TypeNameSubstitutionVisitor::preorder(IR::Type_Name* typeName) {
     auto type = bindings->lookup(typeName);

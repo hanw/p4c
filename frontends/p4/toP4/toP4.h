@@ -193,6 +193,7 @@ class ToP4 : public Inspector {
     bool preorder(const IR::Parameter* p) override;
     bool preorder(const IR::Annotation* a) override;
     bool preorder(const IR::P4Program* program) override;
+    bool preorder(const IR::P4Package* p) override;
     bool preorder(const IR::P4Control* c) override;
     bool preorder(const IR::P4Action* c) override;
     bool preorder(const IR::ParserState* s) override;

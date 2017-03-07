@@ -432,6 +432,12 @@ Visitor::profile_t GeneralInliner::init_apply(const IR::Node* node) {
     return AbstractInliner::init_apply(node);
 }
 
+//const IR::Node* GeneralInliner::preorder(IR::P4Package *caller) {
+//    prune(); // don't inline into package definition
+//    // TODO(pierce): in the future, inline packages?
+//    return caller;
+//}
+
 const IR::Node* GeneralInliner::preorder(IR::P4Control* caller) {
     // prepares the code to inline
     auto orig = getOriginal<IR::P4Control>();

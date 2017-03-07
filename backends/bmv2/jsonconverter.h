@@ -30,7 +30,7 @@ limitations under the License.
 
 namespace BMV2 {
 
-class BMV2_Model : public  ::P4_16::V2Model {
+class BMV2_Model : public ::P4_16::V2Model {
  private:
     struct TableAttributes_Model {
         TableAttributes_Model() : 
@@ -55,14 +55,11 @@ class BMV2_Model : public  ::P4_16::V2Model {
     };
 
  public:
-    BMV2_Model(::P4_16::V2Model *v2model) :
-            tableAttributes(), tableImplementations(),
-            selectorMatchType("selector"), rangeMatchType("range") {
-        this->parsers = v2model->parsers;
-        this->controls = v2model->controls;
-        this->externs = v2model->externs;
-    }
-    
+    BMV2_Model(const ::P4_16::V2Model &model)
+            : ::P4_16::V2Model(model), tableAttributes(),
+              tableImplementations(), selectorMatchType("selector"),
+              rangeMatchType("range") { }
+
     ::Model::Elem             selectorMatchType;
     ::Model::Elem             rangeMatchType;
     TableAttributes_Model     tableAttributes;
@@ -76,17 +73,14 @@ class JsonConverter final {
     const CompilerOptions& options;
     Util::JsonObject       toplevel;  // output is constructed here
 
-    BMV2_Model             model;
-
-
     P4::P4CoreLibrary&     corelib;
+    BMV2_Model             model;
     P4::ReferenceMap*      refMap;
     P4::TypeMap*           typeMap;
     ProgramParts           structure;
     cstring                scalarsName;  // name of struct in JSON holding all scalars
     const IR::ToplevelBlock* toplevelBlock;
     ExpressionConverter*   conv;
-    const IR::Parameter*   headerParameter;
 
     const unsigned         boolWidth = 1;
     // We place scalar user metadata fields (i.e., bit<>, bool)
@@ -179,8 +173,7 @@ class JsonConverter final {
     void addEnums();
 
  public:
-    explicit JsonConverter(const CompilerOptions& options,
-                           ::P4_16::V2Model *v2model);
+    explicit JsonConverter(const CompilerOptions& options);
     void convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
                  const IR::ToplevelBlock *toplevel,
                  P4::ConvertEnums::EnumMapping* enumMap);

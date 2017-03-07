@@ -114,6 +114,7 @@ static int yylex();
     IR::Type_Parser             *Type_Parser;
     IR::Type_Error              *Type_Error;
     IR::Path                    *Path;
+    IR::Type_Package            *Type_Package;
 }
 
 %token      LE GE SHL AND OR NE EQ
@@ -163,7 +164,8 @@ static int yylex();
 %type<Type_Declaration> headerTypeDeclaration structTypeDeclaration headerUnionDeclaration
                         derivedTypeDeclaration parserDeclaration
                         controlDeclaration enumDeclaration typedefDeclaration
-                        packageTypeDeclaration typeDeclaration
+                        typeDeclaration packageDeclaration
+%type<Type_Package>     packageTypeDeclaration
 %type<Type_Error>       errorDeclaration
 %type<Node>             declaration externDeclaration matchKindDeclaration
 %type<Type_Parser>      parserTypeDeclaration
@@ -244,6 +246,7 @@ declaration
     | actionDeclaration       { $$ = $1; }
     | parserDeclaration       { $$ = $1; }
     | typeDeclaration         { $$ = $1; }
+    | packageDeclaration      { $$ = $1; }
     | controlDeclaration      { $$ = $1; }
     | instantiation           { $$ = $1; }
     | errorDeclaration        { addErrors($1); $$ = nullptr; }
@@ -302,9 +305,17 @@ direction
 
 packageTypeDeclaration
     : optAnnotations PACKAGE name { structure.pushContainerType(*$3, false); }
-      optTypeParameters { structure.declareTypes($5->parameters); }
-      '(' parameterList ')'                { auto pl = new IR::ParameterList(@8, $8);
-                                             $$ = new IR::Type_Package(@3, *$3, $1, $5, pl); }
+                            optTypeParameters { structure.declareTypes($5->parameters); }
+                            '(' parameterList ')'
+                              { auto pl = new IR::ParameterList(@8, $8);
+                                $$ = new IR::Type_Package(@3, *$3, $1, $5, pl); }
+    ;
+
+packageDeclaration
+    : packageTypeDeclaration 
+      '{' controlLocalDeclarations APPLY controlBody '}'
+                            { structure.pop();
+                              $$ = new IR::P4Package($1->name.srcInfo, $1->name, $1, $1->applyParams, $3, $5); }
     ;
 
 instantiation

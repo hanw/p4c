@@ -58,16 +58,32 @@ class Extern_Model : public Block_Model<Method_Model> {
 
 
 class V2Model : public ::Model::Model {
- public:
-    V2Model() : ::Model::Model("0.2") {
-        this->parsers = new std::vector<Parser_Model*>();
-        this->controls = new std::vector<Control_Model*>();
-        this->externs = new std::vector<Extern_Model*>();
-  }
-
+ protected:
     std::vector<Parser_Model*> *parsers;
     std::vector<Control_Model*> *controls;
     std::vector<Extern_Model*> *externs;
+
+ public:
+    V2Model() : ::Model::Model("0.2"),
+                parsers(new std::vector<Parser_Model*>()),
+                controls(new std::vector<Control_Model*>()),
+                externs(new std::vector<Extern_Model*>()) { }
+
+    const std::vector<Parser_Model*>* getParsers() { return parsers; }
+    const std::vector<Control_Model*>* getControls() { return controls; }
+    const std::vector<Extern_Model*>* getExterns() { return externs; }
+
+    void addParser(Parser_Model *p) {
+        parsers->push_back(p);
+    }
+
+    void addControl(Control_Model *c) {
+        controls->push_back(c);
+    }
+
+    void addExtern(Extern_Model *e) {
+        externs->push_back(e);
+    }
 };
 
 } // namespace P4_16

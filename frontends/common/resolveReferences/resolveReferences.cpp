@@ -302,6 +302,23 @@ void ResolveReferences::postorder(const IR::P4Control *c) {
     checkShadowing(c);
 }
 
+bool ResolveReferences::preorder(const IR::P4Package *c) {
+    refMap->usedName(c->name.name);
+    addToContext(c);
+    addToContext(c->type->typeParameters);
+    addToContext(c->type->applyParams);
+    addToContext(c->constructorParams);
+    return true;
+}
+
+void ResolveReferences::postorder(const IR::P4Package *c) {
+    removeFromContext(c->constructorParams);
+    removeFromContext(c->type->applyParams);
+    removeFromContext(c->type->typeParameters);
+    removeFromContext(c);
+    checkShadowing(c);
+}
+
 bool ResolveReferences::preorder(const IR::P4Parser *c) {
     refMap->usedName(c->name.name);
     addToContext(c);

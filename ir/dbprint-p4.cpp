@@ -211,6 +211,21 @@ void IR::P4Control::dbprint(std::ostream &out) const {
     out << " }" << unindent;
 }
 
+void IR::P4Package::dbprint(std::ostream &out) const {
+    out << "package" << name;
+    if (type->typeParameters && !type->typeParameters->empty())
+        out << type->typeParameters;
+    if (constructorParams)
+        out << '(' << constructorParams << ')';
+    out << " " << type->annotations << "{" << indent;
+    for (auto d : *packageLocals)
+        out << endl << d;
+    if (body->components)
+        for (auto s : *body->components)
+            out << endl << s;
+    out << " }" << unindent;
+}
+
 void IR::V1Program::dbprint(std::ostream &out) const {
     for (auto &obj : Values(scope))
         out << obj << endl;

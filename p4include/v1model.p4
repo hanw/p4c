@@ -142,6 +142,24 @@ package V1Switch<H, M>(Parser<H, M> p,
                        Egress<H, M> eg,
                        ComputeChecksum<H, M> ck,
                        Deparser<H> dep
-                       );
+                       ) {
+
+    standard_metadata_t standard_meta;
+    packet_in           p_in;
+    packet_out          p_out;
+
+    // should unification replace these types?
+    H headers;
+    M usermeta;
+
+    apply {
+        p.apply(p_in, headers, usermeta, standard_meta);
+        vr.apply(headers, usermeta);
+        ig.apply(headers, usermeta, standard_meta);
+        eg.apply(headers, usermeta, standard_meta);
+        ck.apply(headers, usermeta);
+        dep.apply(p_out, headers);
+    }
+}
 
 #endif  /* _V1_MODEL_P4_ */

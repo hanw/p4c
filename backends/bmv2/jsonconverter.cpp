@@ -715,11 +715,11 @@ class ExpressionConverter : public Inspector {
     }
 };
 
-JsonConverter::JsonConverter(const CompilerOptions& options, P4_16::V2Model *v2model)
-        : options(options), model(v2model), corelib(P4::P4CoreLibrary::instance),
+JsonConverter::JsonConverter(const CompilerOptions& options)
+        : options(options), corelib(P4::P4CoreLibrary::instance),
+          model(*P4::ArchitecturalBlocks::getInstance()->getModel()),
           refMap(nullptr), typeMap(nullptr), toplevelBlock(nullptr),
-          conv(new ExpressionConverter(this)), headerParameter(nullptr) {
-}
+          conv(new ExpressionConverter(this)) { }
 
 void
 JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
@@ -1465,6 +1465,12 @@ void JsonConverter::addLocals() {
     for (auto v : structure.variables) {
         LOG1("Creating local " << v);
         auto type = typeMap->getType(v, true);
+
+        if (type->is<IR::Type_Var>()) {
+            auto sub = typeMap->getSubstitution(type->to<IR::Type_Var>());
+            printf("");
+        }
+
         if (auto st = type->to<IR::Type_StructLike>()) {
             auto name = createJsonType(st);
             auto json = new Util::JsonObject();
@@ -1521,6 +1527,9 @@ void JsonConverter::addLocals() {
             field->append(32);  // using 32-bit fields for errors
             field->append(0);
             scalars_width += 32;
+        } else if (type->is<IR::Type_Extern>()) {
+            // TODO(pierce): create extern instance here
+        } else if (type->is<IR::Type_Var>()) {
         } else {
             BUG("%1%: type not yet handled on this target", type);
         }
@@ -1576,6 +1585,16 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     CHECK_NULL(enumMap);
 
     auto package = toplevelBlock->getMain();
+    auto container = package->container;
+
+    for (auto l : *container->packageLocals) {
+        if (l->is<IR::Declaration_Variable>()) {
+            auto declv = l->to<IR::Declaration_Variable>();
+            auto type = typeMap->getType(declv);
+            printf("");
+        }
+    }
+
     if (package == nullptr) {
         ::error("No output to generate");
         return;
@@ -1609,7 +1628,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
 
     auto prsrs = mkArrayField(&toplevel, "parsers");
 
-    for (auto p : *model.parsers) {
+    for (auto p : *model.getParsers()) {
         auto parserBlock = package->getParameterValue(p->toString());
         CHECK_NULL(parserBlock);
         auto parser = parserBlock->to<IR::ParserBlock>()->container;
@@ -1618,7 +1637,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
             auto paramVal = parser->type->applyParams->getParameter(parserParam.index);
             auto paramValType = typeMap->getType(paramVal->getNode(), true);
             auto pvt = paramValType->to<IR::Type_Struct>();
-            addTypesAndInstances(paramVal, pvt);
+//            addTypesAndInstances(paramVal, pvt);
         }
         auto parserJson = toJson(parser, p->toString());
         prsrs->append(parserJson);
@@ -1638,7 +1657,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     auto meters = mkArrayField(&toplevel, "meter_arrays");
     auto externs = mkArrayField(&toplevel, "extern_instances");
 
-    for (auto c : *model.controls) {
+    for (auto c : *model.getControls()) {
         auto controlBlock =
             package->getParameterValue(c->toString())->to<IR::ControlBlock>();
         auto control = convertControl(controlBlock, c->toString(),
@@ -1651,7 +1670,6 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
 
 }
 
-// TODO(pierce): what about the arguments to controls?
 void JsonConverter::addTypesAndInstances(const IR::Parameter *param,
                                          const IR::Type_Struct *type) {
     if (!type) {

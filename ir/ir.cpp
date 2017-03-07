@@ -40,8 +40,8 @@ const Type_Method* P4Parser::getConstructorMethodType() const {
     return new Type_Method(Util::SourceInfo(), getTypeParameters(), type, constructorParams);
 }
 
-const Type_Method* Type_Package::getConstructorMethodType() const {
-    return new Type_Method(Util::SourceInfo(), getTypeParameters(), this, constructorParams);
+const Type_Method* P4Package::getConstructorMethodType() const {
+    return new Type_Method(Util::SourceInfo(), getTypeParameters(), type, constructorParams);
 }
 
 Util::Enumerator<const IR::IDeclaration*>* IGeneralNamespace::getDeclsByName(cstring name) const {
@@ -109,6 +109,11 @@ const Method* Type_Extern::lookupMethod(cstring name, int paramCount) const {
         }
     }
     return result;
+}
+
+const Type_Method*
+Type_Package::getApplyMethodType() const {
+    return new Type_Method(Util::SourceInfo(), new IR::TypeParameters(), nullptr, applyParams);
 }
 
 const Type_Method*

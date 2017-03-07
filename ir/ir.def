@@ -30,6 +30,31 @@
   precedence   -> int getPrecedence() const
  */
 
+
+class P4Package : Type_Declaration, ISimpleNamespace, IApply, IContainer {
+    Type_Package         type;
+    ParameterList        constructorParams;
+    IndexedVector<Declaration>  packageLocals;
+    BlockStatement       body;
+
+    TypeParameters getTypeParameters() const override { return type->getTypeParameters(); }
+    Util::Enumerator<IDeclaration>* getDeclarations() const override {
+        return packageLocals->getDeclarations(); }
+    Type_Method getApplyMethodType() const override { return type->getApplyMethodType(); }
+    Type_Method getConstructorMethodType() const override;
+    IDeclaration getDeclByName(cstring name) const override {
+        return packageLocals->getDeclaration(name); }
+    ParameterList getConstructorParameters() const override { return constructorParams; }
+#apply
+    validate {
+        if (!(name == type->name))
+            BUG("Name mismatch for %1%: %2% != %3%", this, name, type->name);
+        packageLocals->check_null();
+    }
+    toString { return cstring("package") + externalName(); }
+}
+
+
 class ParserState : ISimpleNamespace, Declaration, IAnnotated {
     Annotations               annotations;
     IndexedVector<StatOrDecl> components;
@@ -441,8 +466,9 @@ class ControlBlock : InstantiatedBlock {
 }
 
 class PackageBlock : InstantiatedBlock {
-    Type_Package type;
-    ParameterList getConstructorParameters() const override { return type->constructorParams; }
+    P4Package container;
+    ParameterList getConstructorParameters() const override {
+        return container->constructorParams; }
 #nodbprint
 }
 

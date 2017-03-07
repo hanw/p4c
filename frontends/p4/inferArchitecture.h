@@ -26,19 +26,23 @@ namespace P4 {
 
 // Saves achitecture description in cpp datastructure
 
-class InferArchitecture : public Inspector {
+class ArchitecturalBlocks : public Inspector {
  private:
     ::P4_16::V2Model *archModel;
     TypeMap *typeMap;
+    static ArchitecturalBlocks *instance;
 
  public:
-    InferArchitecture(TypeMap *tm) {
-        this->archModel = new ::P4_16::V2Model();
-        this->typeMap = tm;
+    ArchitecturalBlocks(TypeMap *typeMap)
+        : typeMap(typeMap), archModel(new ::P4_16::V2Model()) {
+        instance = this;
     }
 
-    ::P4_16::V2Model *getModel() { return this->archModel; }
+    ::P4_16::V2Model *getModel() const { return archModel; }
 
+    static const ArchitecturalBlocks *getInstance() { return instance; }
+
+ public:
     bool preorder(const IR::Type_Control *node) override;
     bool preorder(const IR::Type_Parser *node) override;
     bool preorder(const IR::Type_Extern *node) override;
@@ -48,8 +52,37 @@ class InferArchitecture : public Inspector {
 
     // don't care
     bool preorder(const IR::Node *node) override;
+};
 
-    static InferArchitecture *instance;
+// Hopefully someday this can be absorbed into ResolveReferences
+class ResolveToPackageObjects : public Inspector {
+ private:
+    static ResolveToPackageObjects *instance;
+//    IR::Type_Specialized *resolvedPackage{nullptr};
+//    std::unordered_map<IR::Node*, IR::Node*> *parameterMap{nullptr};
+
+//    void setParam(
+
+ public:
+    ResolveToPackageObjects() { } //: parameterMap(new std::unordered_map<IR::Node*, IR::Node>()) { }
+
+    static const ResolveToPackageObjects *getInstance() {
+        return instance;
+    }
+
+ public:
+//    bool preorder(const IR::P4Package *package) override;
+//    bool preorder(const IR::P4Control *package) override;
+//    bool preorder(const IR::P4Parser *parser) override;
+    bool preorder(const IR::Type_Specialized *ts) override;
+};
+
+class InferArchitecture : public PassManager {
+ public:
+    InferArchitecture(TypeMap *typeMap) {
+        passes.push_back(new ArchitecturalBlocks(typeMap));
+        passes.push_back(new ResolveToPackageObjects());
+    }
 };
 
 } // namespace P4

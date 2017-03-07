@@ -144,8 +144,9 @@ bool ToP4::preorder(const IR::P4Program* program) {
     for (auto a : *program->declarations) {
         // Check where this declaration originates
         cstring sourceFile = ifSystemFile(a);
-        if (!a->is<IR::Type_Error>() &&  // errors can come from multiple files
-            sourceFile != nullptr) {
+        if (!a->is<IR::Type_Error>() // errors can come from multiple files
+            && !a->is<IR::P4Package>() // want to see package definitions
+            && sourceFile != nullptr) {
             /* FIXME -- when including a user header file (sourceFile != mainFile), do we want
              * to emit an #include of it or not?  Probably not when translating from P4-14, as
              * that would create a P4-16 file that tries to include a P4-14 header.  Unless we
@@ -373,7 +374,8 @@ bool ToP4::preorder(const IR::Type_Package* package) {
     builder.append("package ");
     builder.append(package->name);
     visit(package->typeParameters);
-    visit(package->constructorParams);
+    visit(package->applyParams);
+
     if (isDeclaration) builder.endOfStatement();
     return false;
 }
@@ -989,6 +991,30 @@ bool ToP4::preorder(const IR::Parameter* p) {
     visit(p->type);
     builder.spc();
     builder.append(p->name);
+    return false;
+}
+
+bool ToP4::preorder(const IR::P4Package * p) {
+    dump(1);
+    bool decl = isDeclaration;
+    isDeclaration = false;
+    visit(p->type);
+    isDeclaration = decl;
+    if (p->constructorParams->size() != 0)
+        visit(p->constructorParams);
+    builder.spc();
+    builder.blockStart();
+    for (auto s : *p->packageLocals) {
+        builder.emitIndent();
+        visit(s);
+        builder.newline();
+    }
+
+    builder.emitIndent();
+    builder.append("apply ");
+    visit(p->body);
+    builder.newline();
+    builder.blockEnd(true);
     return false;
 }
 

@@ -125,6 +125,8 @@ class TypeInference : public Transform {
     const IR::Type* canonicalize(const IR::Type* type);
     const IR::IndexedVector<IR::StructField>* canonicalizeFields(const IR::Type_StructLike* type);
     const IR::ParameterList* canonicalizeParameters(const IR::ParameterList* params);
+    const IR::IndexedVector<IR::Declaration>* canonicalizeLocals(
+        const IR::IndexedVector<IR::Declaration>* locals);
 
     // various helpers
     void validateFields(const IR::Type* type,
@@ -199,7 +201,7 @@ class TypeInference : public Transform {
     const IR::Node* postorder(IR::Type_Tuple* type) override;
     const IR::Node* postorder(IR::Type_Set* type) override;
     const IR::Node* postorder(IR::Type_ArchBlock* type) override;
-    const IR::Node* postorder(IR::Type_Package* type) override;
+    const IR::Node* postorder(IR::P4Package* type) override;
     const IR::Node* postorder(IR::Type_ActionEnum* type) override;
     const IR::Node* postorder(IR::P4Table* type) override;
     const IR::Node* postorder(IR::P4Action* type) override;

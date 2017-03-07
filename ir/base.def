@@ -60,7 +60,7 @@ interface ITypeVar {
     virtual int getDeclId() const = 0;
 }
 
-// Implemented by P4Parser, P4Control and Type_Package
+// Implemented by P4Parser, P4Control and P4Package
 interface IContainer : IMayBeGenericType, IDeclaration {
     // The type of the constructor as a method
     virtual Type_Method getConstructorMethodType() const = 0;

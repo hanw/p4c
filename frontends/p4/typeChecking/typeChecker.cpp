@@ -83,11 +83,15 @@ const IR::Type* TypeInference::cloneWithFreshTypeVariables(const IR::IMayBeGener
     TypeVariableSubstitution tvs;
     for (auto v : *type->getTypeParameters()->parameters) {
         auto tv = new IR::Type_Var(v->srcInfo, v->getName());
+        printf("%s, %d\n", v->toString(), v->id);
         bool b = tvs.setBinding(v, tv);
         BUG_CHECK(b, "%1%: failed replacing %2% with %3%", type, v, tv);
     }
 
     TypeVariableSubstitutionVisitor sv(&tvs, true);
+    if (type->is<IR::P4Package>()) {
+        printf("");
+    }
     auto clone = type->toType()->apply(sv);
     CHECK_NULL(clone);
     // Learn this new type
@@ -150,6 +154,9 @@ const IR::Type* TypeInference::getTypeType(const IR::Node* element) const {
 }
 
 void TypeInference::setType(const IR::Node* element, const IR::Type* type) {
+    if (type->is<IR::Type_Var>()) {
+        printf("");
+    }
     typeMap->setType(element, type);
 }
 
@@ -210,6 +217,39 @@ const IR::ParameterList* TypeInference::canonicalizeParameters(const IR::Paramet
         return new IR::ParameterList(params->srcInfo, vec);
     else
         return params;
+}
+
+// TODO(pierce): experimental
+const IR::IndexedVector<IR::Declaration>* TypeInference::canonicalizeLocals(
+        const IR::IndexedVector<IR::Declaration>* locals) {
+    if (locals == nullptr)
+        return locals;
+
+    bool changes = false;
+    auto vec = new IR::IndexedVector<IR::Declaration>();
+    for (auto l : *locals->getEnumerator()) {
+        auto localType = getType(l);
+        BUG_CHECK(!localType->is<IR::Type_Type>(),
+                  "%1%: Unexpected local type", localType);
+        if (localType == nullptr)
+            return nullptr;
+        if (l->is<IR::Declaration_Variable>()) {
+            auto declVar = l->to<IR::Declaration_Variable>();
+            if (localType != declVar->type) {
+                declVar = new IR::Declaration_Variable(declVar->srcInfo,
+                    declVar->name, declVar->annotations, localType,
+                    declVar->initializer);
+                l = declVar->to<IR::Declaration>();
+                changes = true;
+            }
+        }
+        setType(l, localType);
+        vec->push_back(l);
+    }
+    if (changes)
+        return vec;
+    else
+        return locals;
 }
 
 bool TypeInference::checkParameters(const IR::ParameterList* paramList, bool forbidModules) const {
@@ -358,12 +398,27 @@ const IR::Type* TypeInference::canonicalize(const IR::Type* type) {
         return type;
     } else if (type->is<IR::Type_Package>()) {
         auto tp = type->to<IR::Type_Package>();
-        auto pl = canonicalizeParameters(tp->constructorParams);
+        auto pl = canonicalizeParameters(tp->applyParams);
         auto tps = tp->typeParameters;
         if (pl == nullptr || tps == nullptr)
             return nullptr;
-        if (pl != tp->constructorParams || tps != tp->typeParameters)
-            return new IR::Type_Package(tp->srcInfo, tp->name, tp->annotations, tps, pl);
+        if (!checkParameters(pl, true))
+            return nullptr;
+        if (pl != tp->applyParams || tps != tp->typeParameters)
+            return new IR::Type_Package(tp->srcInfo, tp->name, tp->annotations,
+                                        tps, pl);
+        return type;
+    } else if (type->is<IR::P4Package>()) {
+        auto pack = type->to<IR::P4Package>();
+        auto ptype0 = getTypeType(pack->type);
+        auto ptype = ptype0->to<IR::Type_Package>();
+        auto pl = canonicalizeParameters(pack->constructorParams);
+        auto cl = canonicalizeLocals(pack->packageLocals);
+        if (pl == nullptr || cl == nullptr)
+            return nullptr;
+        if (ptype != pack->type || pl != pack->constructorParams)
+            return new IR::P4Package(pack->srcInfo, pack->name,
+                                     ptype, pl, cl, pack->body);
         return type;
     } else if (type->is<IR::P4Control>()) {
         auto cont = type->to<IR::P4Control>();
@@ -833,13 +888,13 @@ const IR::Node* TypeInference::preorder(IR::Declaration_Instance* decl) {
     } else if (simpleType->is<IR::IContainer>()) {
         if (decl->initializer != nullptr)
             typeError("%1%: initializers only allowed for extern instances", decl->initializer);
-        auto type = containerInstantiation(decl, decl->arguments, simpleType->to<IR::IContainer>());
-        if (type == nullptr) {
+        auto container = containerInstantiation(decl, decl->arguments, simpleType->to<IR::IContainer>());
+        if (container->type == nullptr) {
             prune();
             return decl;
         }
-        setType(decl, type);
-        setType(orig, type);
+        setType(decl, container->type);
+        setType(orig, container->type);
     } else {
         typeError("%1%: cannot allocate objects of type %2%", decl, type);
     }
@@ -847,17 +902,19 @@ const IR::Node* TypeInference::preorder(IR::Declaration_Instance* decl) {
     return decl;
 }
 
-// Return type created by constructor
-const IR::Type*
+// Unified container
+const IR::IContainer*
 TypeInference::containerInstantiation(
     const IR::Node* node,  // can be Declaration_Instance or ConstructorCallExpression
     const IR::Vector<IR::Expression>* constructorArguments,
     const IR::IContainer* container) {
     CHECK_NULL(node); CHECK_NULL(constructorArguments); CHECK_NULL(container);
-    auto constructor = container->getConstructorMethodType();
-    constructor = cloneWithFreshTypeVariables(
-        constructor->to<IR::IMayBeGenericType>())->to<IR::Type_Method>();
-    CHECK_NULL(constructor);
+//    auto constructor = container->getConstructorMethodType();
+//    constructor = cloneWithFreshTypeVariables(
+//        constructor->to<IR::IMayBeGenericType>())->to<IR::Type_Method>();
+    auto freshContainer = cloneWithFreshTypeVariables(container)->to<IR::IContainer>();
+//   CHECK_NULL(constructor);
+   CHECK_NULL(freshContainer);
 
     // We build a type for the callExpression and unify it with the method expression
     // Allocate a fresh variable for the return type; it will be hopefully bound in the process.
@@ -878,15 +935,22 @@ TypeInference::containerInstantiation(
                                             new IR::Vector<IR::Type>(),
                                             rettype, args);
     TypeConstraints constraints;
-    constraints.addEqualityConstraint(constructor, callType);
+    constraints.addEqualityConstraint(
+        freshContainer->getConstructorMethodType(), callType);
     auto tvs = constraints.solve(node, true);
     typeMap->addSubstitutions(tvs);
+
     if (tvs == nullptr)
         return nullptr;
 
     auto returnType = tvs->lookup(rettype);
     BUG_CHECK(returnType != nullptr, "Cannot infer constructor result type %1%", node);
-    return returnType;
+
+    if (container->is<IR::P4Package>()) {
+        auto c = freshContainer->to<IR::P4Package>();
+        printf("");
+    }
+    return freshContainer;
 }
 
 const IR::Node* TypeInference::preorder(IR::Function* function) {
@@ -957,19 +1021,9 @@ const IR::Node* TypeInference::postorder(IR::Type_ArchBlock* decl) {
     return decl;
 }
 
-const IR::Node* TypeInference::postorder(IR::Type_Package* decl) {
-    auto canon = setTypeType(decl);
-    if (canon != nullptr) {
-        for (auto p : *decl->getConstructorParameters()->parameters) {
-            auto ptype = getType(p);
-            if (ptype == nullptr)
-                // error
-                return decl;
-            if (ptype->is<IR::P4Parser>() || ptype->is<IR::P4Control>())
-                ::error("%1%: Invalid package parameter type", p);
-        }
-    }
-    return decl;
+const IR::Node* TypeInference::postorder(IR::P4Package* package) {
+    (void)setTypeType(package, false);
+    return package;
 }
 
 const IR::Node* TypeInference::postorder(IR::Type_Specialized *type) {
@@ -1015,6 +1069,10 @@ const IR::Node* TypeInference::postorder(IR::Type_Enum* type) {
 }
 
 const IR::Node* TypeInference::postorder(IR::Type_Var* typeVar) {
+    if (getOriginal()->id == 563) {
+        auto parent = getContext();
+        printf("");
+    }
     if (done()) return typeVar;
     const IR::Type* type;
     if (typeVar->name.isDontCare())
@@ -2294,8 +2352,9 @@ const IR::Node* TypeInference::postorder(IR::ConstructorCallExpression* expressi
         setType(getOriginal(), type);
         setType(expression, type);
     } else if (simpleType->is<IR::IContainer>()) {
-        auto conttype = containerInstantiation(expression, expression->arguments,
+        auto container = containerInstantiation(expression, expression->arguments,
                                                simpleType->to<IR::IContainer>());
+        auto conttype = container->type;
         if (conttype == nullptr)
             return expression;
         if (type->is<IR::Type_SpecializedCanonical>()) {

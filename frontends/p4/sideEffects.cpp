@@ -437,6 +437,17 @@ const IR::Node* DoSimplifyExpressions::postorder(IR::Function* function) {
     return function;
 }
 
+// TODO(pierce): should we allow this for p4package?
+const IR::Node* DoSimplifyExpressions::postorder(IR::P4Package* package) {
+    if (toInsert.empty())
+        return package;
+    auto locals = new IR::IndexedVector<IR::Declaration>(*package->packageLocals);
+    locals->append(toInsert);
+    package->packageLocals = locals;
+    toInsert.clear();
+    return package;
+}
+
 const IR::Node* DoSimplifyExpressions::postorder(IR::P4Parser* parser) {
     if (toInsert.empty())
         return parser;
@@ -502,6 +513,9 @@ const IR::Node* DoSimplifyExpressions::postorder(IR::AssignmentStatement* statem
 }
 
 const IR::Node* DoSimplifyExpressions::postorder(IR::MethodCallStatement* statement) {
+    if (findContext<IR::P4Package>() != nullptr) {
+        return statement;
+    }
     DismantleExpression dm(refMap, typeMap);
     auto parts = dm.dismantle(statement->methodCall, false, true);
     CHECK_NULL(parts);

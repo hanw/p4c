@@ -64,6 +64,36 @@ const IR::Node* DoRemoveReturns::preorder(IR::P4Action* action) {
     return result;
 }
 
+const IR::Node* DoRemoveReturns::preorder(IR::P4Package* pack) {
+    HasExits he;
+    (void)pack->body->apply(he);
+    if (!he.hasReturns) {
+        // don't pollute the code unnecessarily
+        prune();
+        return pack;
+    }
+
+    cstring var = refMap->newName(variableName);
+    returnVar = IR::ID(var, nullptr);
+    auto f = new IR::BoolLiteral(Util::SourceInfo(), false);
+    auto decl = new IR::Declaration_Variable(Util::SourceInfo(), returnVar,
+                                             IR::Annotations::empty, IR::Type_Boolean::get(), f);
+    BUG_CHECK(stack.empty(), "Non-empty stack");
+    push();
+    visit(pack->body);
+    auto bodyContents = new IR::IndexedVector<IR::StatOrDecl>();
+    bodyContents->push_back(decl);
+    bodyContents->append(*pack->body->components);
+    auto body = new IR::BlockStatement(
+        pack->body->srcInfo, pack->body->annotations, bodyContents);
+    auto result = new IR::P4Package(pack->srcInfo, pack->name, pack->type,
+                                    pack->constructorParams, pack->packageLocals, body);
+    pop();
+    BUG_CHECK(stack.empty(), "Non-empty stack");
+    prune();
+    return result;
+}
+
 const IR::Node* DoRemoveReturns::preorder(IR::P4Control* control) {
     HasExits he;
     (void)control->body->apply(he);

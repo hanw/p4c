@@ -285,10 +285,9 @@ abstract Type_ArchBlock : Type_Declaration, IMayBeGenericType, IAnnotated {
     TypeParameters getTypeParameters() const override { return typeParameters; }
 }
 
-class Type_Package : Type_ArchBlock, IContainer {
-    ParameterList constructorParams;
-    Type_Method getConstructorMethodType() const override;
-    ParameterList getConstructorParameters() const override { return constructorParams; }
+class Type_Package : Type_ArchBlock, IApply {
+    ParameterList applyParams;
+    Type_Method getApplyMethodType() const override;
     toString{ return cstring("package ") + externalName(); }
 }
 

@@ -32,6 +32,19 @@ const IR::Node* MoveDeclarations::postorder(IR::P4Action* action)  {
     return action;
 }
 
+const IR::Node* MoveDeclarations::postorder(IR::P4Package* package)  {
+    LOG1("Visiting " << package << " toMove " << toMove.size());
+    auto decls = new IR::IndexedVector<IR::Declaration>();
+    for (auto decl : *getMoves()) {
+        LOG1("Moved " << decl);
+        decls->push_back(decl);
+    }
+    decls->append(*package->packageLocals);
+    package->packageLocals = decls;
+    pop();
+    return package;
+}
+
 const IR::Node* MoveDeclarations::postorder(IR::P4Control* control)  {
     LOG1("Visiting " << control << " toMove " << toMove.size());
     auto decls = new IR::IndexedVector<IR::Declaration>();

@@ -34,6 +34,19 @@ const IR::Node* RemoveUnusedDeclarations::preorder(IR::Type_Enum* type) {
     return type;
 }
 
+const IR::Node* RemoveUnusedDeclarations::preorder(IR::P4Package* pack) {
+    if (!refMap->isUsed(getOriginal<IR::IDeclaration>())) {
+        LOG1("Removing " << pack);
+        prune();
+        return nullptr;
+    }
+
+    visit(pack->packageLocals);
+    visit(pack->body);
+    prune();
+    return pack;
+}
+
 const IR::Node* RemoveUnusedDeclarations::preorder(IR::P4Control* cont) {
     if (!refMap->isUsed(getOriginal<IR::IDeclaration>())) {
         LOG1("Removing " << cont);

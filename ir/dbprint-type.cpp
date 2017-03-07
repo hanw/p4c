@@ -91,7 +91,7 @@ void IR::Type_Package::dbprint(std::ostream& out) const {
     out << Brief << "package " << name;
     if (typeParameters != nullptr)
         out << typeParameters;
-    out << "(" << constructorParams << ")" << annotations << ';' << clrflag(Brief);
+    out << "(" << applyParams << ")" << annotations << ';' << clrflag(Brief);
 }
 
 void IR::Type_Tuple::dbprint(std::ostream& out) const {

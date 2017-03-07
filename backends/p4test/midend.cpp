@@ -85,7 +85,7 @@ MidEnd::MidEnd(CompilerOptions& options) {
                 // nothing further to do
                 return nullptr;
             // Special handling when compiling for v1model.p4
-            if (main->type->name == P4V1::V1Model::instance.sw.name) {
+            if (main->container->type->name == P4V1::V1Model::instance.sw.name) {
                 if (main->getConstructorParameters()->size() != 6)
                     return root;
                 auto verify = main->getParameterValue(P4V1::V1Model::instance.sw.verify.name);

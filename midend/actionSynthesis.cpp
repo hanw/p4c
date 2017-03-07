@@ -116,12 +116,17 @@ bool DoSynthesizeActions::mustMove(const IR::AssignmentStatement *assign) {
         auto mi = MethodInstance::resolve(mc, refMap, typeMap);
         if (!mi->is<ExternMethod>())
             return true;
-        auto em = mi->to<ExternMethod>();
-        auto &v1model = P4V1::V1Model::instance;
-//        if (em->originalExternType->name.name == v1model.ck16.name)
-//            return false;
     }
     return true;
+}
+
+const IR::Node* DoSynthesizeActions::preorder(IR::P4Package* package) {
+    prune();
+    return package;
+}
+
+const IR::Node* DoSynthesizeActions::postorder(IR::P4Package* package) {
+    return package;
 }
 
 const IR::Node* DoSynthesizeActions::preorder(IR::P4Control* control) {
