@@ -119,7 +119,7 @@ FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program) {
         new SimplifyControlFlow(&refMap, &typeMap),
         new SpecializeAll(&refMap, &typeMap),
         new RemoveParserControlFlow(&refMap, &typeMap),
-        new InferArchitecture(&typeMap),
+        new InferArchitecture(&typeMap, &refMap),
         new FrontEndLast(),
     };
 

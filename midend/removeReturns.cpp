@@ -64,7 +64,8 @@ const IR::Node* DoRemoveReturns::preorder(IR::P4Action* action) {
     return result;
 }
 
-const IR::Node* DoRemoveReturns::preorder(IR::P4Package* pack) {
+// was P4Package
+const IR::Node* DoRemoveReturns::preorder(IR::Type_Package* pack) {
     HasExits he;
     (void)pack->body->apply(he);
     if (!he.hasReturns) {
@@ -86,8 +87,9 @@ const IR::Node* DoRemoveReturns::preorder(IR::P4Package* pack) {
     bodyContents->append(*pack->body->components);
     auto body = new IR::BlockStatement(
         pack->body->srcInfo, pack->body->annotations, bodyContents);
-    auto result = new IR::P4Package(pack->srcInfo, pack->name, pack->type,
-                                    pack->constructorParams, pack->packageLocals, body);
+    auto result = new IR::Type_Package(
+        pack->srcInfo, pack->name, pack->annotations, pack->typeParameters,
+        pack->applyParams, pack->constructorParams, pack->packageLocals, body);
     pop();
     BUG_CHECK(stack.empty(), "Non-empty stack");
     prune();

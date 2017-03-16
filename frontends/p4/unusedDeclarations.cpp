@@ -34,7 +34,8 @@ const IR::Node* RemoveUnusedDeclarations::preorder(IR::Type_Enum* type) {
     return type;
 }
 
-const IR::Node* RemoveUnusedDeclarations::preorder(IR::P4Package* pack) {
+// was P4Package
+const IR::Node* RemoveUnusedDeclarations::preorder(IR::Type_Package* pack) {
     if (!refMap->isUsed(getOriginal<IR::IDeclaration>())) {
         LOG1("Removing " << pack);
         prune();

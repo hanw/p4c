@@ -124,17 +124,17 @@ parser Parser<H, M>(packet_in b,
                     out H parsedHdr,
                     inout M meta,
                     inout standard_metadata_t standard_metadata);
-control VerifyChecksum<H, M>(in H hdr,
+control VerifyChecksum<H, M>(in H hdr11,
                              inout M meta);
-control Ingress<H, M>(inout H hdr,
+control Ingress<H, M>(inout H hdr22,
                       inout M meta,
                       inout standard_metadata_t standard_metadata);
-control Egress<H, M>(inout H hdr,
+control Egress<H, M>(inout H hdr33,
                      inout M meta,
                      inout standard_metadata_t standard_metadata);
-control ComputeChecksum<H, M>(inout H hdr,
+control ComputeChecksum<H, M>(inout H hdr44,
                               inout M meta);
-control Deparser<H>(packet_out b, in H hdr);
+control Deparser<H>(packet_out b, in H hdr55);
 
 package V1Switch<H, M>(Parser<H, M> p,
                        VerifyChecksum<H, M> vr,
@@ -148,7 +148,6 @@ package V1Switch<H, M>(Parser<H, M> p,
     packet_in           p_in;
     packet_out          p_out;
 
-    // should unification replace these types?
     H headers;
     M usermeta;
 

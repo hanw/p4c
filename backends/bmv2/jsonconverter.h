@@ -80,6 +80,12 @@ class JsonConverter final {
     ProgramParts           structure;
     cstring                scalarsName;  // name of struct in JSON holding all scalars
     const IR::ToplevelBlock* toplevelBlock;
+    const IR::Declaration_Instance *mainInstance{nullptr};
+
+    // this stores the enclosing IApply when converting expressions
+    // -- for reference when looking up parameter bindings
+    const IR::Type_Declaration *enclosingBlock{nullptr};
+
     ExpressionConverter*   conv;
 
     const unsigned         boolWidth = 1;
@@ -108,12 +114,15 @@ class JsonConverter final {
     void padScalars();
 
  protected:
-    void pushFields(cstring prefix, const IR::Type_StructLike *st,
-                    Util::JsonArray *fields);
-    cstring createJsonType(const IR::Type_StructLike *type);
+    void pushFields(const IR::Type_StructLike *st, Util::JsonArray *fields);
+    unsigned createHeaderTypeAndInstance(cstring prefix, cstring varName,
+                                         const IR::Type_StructLike *type);
+    void createNestedStruct(cstring prefix, cstring varName,
+                           const IR::Type_StructLike *type);
+    void createStack(cstring prefix, cstring varName, const IR::Type_Stack *stack);
     unsigned nextId(cstring group);
     void addLocals();
-    void addTypesAndInstances(const IR::Parameter *param, const IR::Type_Struct *type);
+//    void addTypesAndInstances(const IR::Parameter *param, const IR::Type_Struct *type);
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                            Util::JsonArray* result, Util::JsonArray* fieldLists,
                            Util::JsonArray* calculations, Util::JsonArray* learn_lists);
@@ -171,6 +180,14 @@ class JsonConverter final {
 
     // Adds declared enums to json
     void addEnums();
+
+    // Check structure composition
+    bool hasStructLikeMembers(const IR::Type_StructLike *st);
+    bool hasBitMembers(const IR::Type_StructLike *st);
+    void checkStructure(const IR::Type_StructLike *st);
+
+    // resolve control/parser params to package locals
+    const IR::Parameter *resolveParameter(const IR::Parameter *param);
 
  public:
     explicit JsonConverter(const CompilerOptions& options);

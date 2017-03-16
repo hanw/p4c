@@ -285,10 +285,23 @@ abstract Type_ArchBlock : Type_Declaration, IMayBeGenericType, IAnnotated {
     TypeParameters getTypeParameters() const override { return typeParameters; }
 }
 
-class Type_Package : Type_ArchBlock, IApply {
-    ParameterList applyParams;
+class Type_Package : Type_ArchBlock, IApply, IContainer, ISimpleNamespace {
+    ParameterList applyParams; // always empty
+    ParameterList constructorParams;
     Type_Method getApplyMethodType() const override;
     toString{ return cstring("package ") + externalName(); }
+
+    Type_Method getConstructorMethodType() const override;
+    ParameterList getConstructorParameters() const override {
+        return constructorParams; }
+
+    Util::Enumerator<IDeclaration>* getDeclarations() const override {
+        return packageLocals->getDeclarations(); }
+    IDeclaration getDeclByName(cstring name) const override {
+        return packageLocals->getDeclaration(name); }
+
+    IndexedVector<Declaration>  packageLocals;
+    BlockStatement       body;
 }
 
 class Type_Parser : Type_ArchBlock, IApply {

@@ -26,7 +26,7 @@ namespace EBPF {
 bool EBPFProgram::build() {
     auto pack = toplevel->getMain();
     if (pack->getConstructorParameters()->size() != 2) {
-        ::error("Expected toplevel package %1% to have 2 parameters", pack->container->type);
+        ::error("Expected toplevel package %1% to have 2 parameters", pack->type);
         return false;
     }
 

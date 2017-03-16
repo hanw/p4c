@@ -180,7 +180,7 @@ Evaluator::processConstructor(
         }
         popBlock(block);
         return block;
-    } else if (decl->is<IR::P4Package>()) {
+    } else if (decl->is<IR::Type_Package>()) { // was P4Package
 //        auto block = new IR::PackageBlock(node->srcInfo, node, instanceType,
 //                                          decl->to<IR::Type_Package>());
 //        pushBlock(block);
@@ -189,7 +189,7 @@ Evaluator::processConstructor(
 //            block->instantiate(values);
 //        popBlock(block);
 //        return block;
-        auto pack = decl->to<IR::P4Package>();
+        auto pack = decl->to<IR::Type_Package>(); // was P4Package
         auto block = new IR::PackageBlock(node->srcInfo, node, instanceType, pack);
         pushBlock(block);
         auto values = evaluateArguments(arguments, current);

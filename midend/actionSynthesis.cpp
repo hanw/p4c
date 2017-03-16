@@ -120,12 +120,12 @@ bool DoSynthesizeActions::mustMove(const IR::AssignmentStatement *assign) {
     return true;
 }
 
-const IR::Node* DoSynthesizeActions::preorder(IR::P4Package* package) {
+const IR::Node* DoSynthesizeActions::preorder(IR::Type_Package* package) {
     prune();
     return package;
 }
 
-const IR::Node* DoSynthesizeActions::postorder(IR::P4Package* package) {
+const IR::Node* DoSynthesizeActions::postorder(IR::Type_Package* package) {
     return package;
 }
 

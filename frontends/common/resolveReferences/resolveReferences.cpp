@@ -280,6 +280,10 @@ bool ResolveReferences::preorder(const IR::This* pointer) {
 }
 
 bool ResolveReferences::preorder(const IR::PathExpression* path) {
+    if (findContext<IR::Type_Package>()) {
+        auto c = findContext<IR::Type_Package>();
+        printf("");
+    }
     resolvePath(path->path, false); return true; }
 
 bool ResolveReferences::preorder(const IR::Type_Name* type) {
@@ -302,19 +306,19 @@ void ResolveReferences::postorder(const IR::P4Control *c) {
     checkShadowing(c);
 }
 
-bool ResolveReferences::preorder(const IR::P4Package *c) {
+bool ResolveReferences::preorder(const IR::Type_Package *c) {
     refMap->usedName(c->name.name);
     addToContext(c);
-    addToContext(c->type->typeParameters);
-    addToContext(c->type->applyParams);
+    addToContext(c->typeParameters);
+    addToContext(c->applyParams);
     addToContext(c->constructorParams);
     return true;
 }
 
-void ResolveReferences::postorder(const IR::P4Package *c) {
+void ResolveReferences::postorder(const IR::Type_Package *c) {
     removeFromContext(c->constructorParams);
-    removeFromContext(c->type->applyParams);
-    removeFromContext(c->type->typeParameters);
+    removeFromContext(c->applyParams);
+    removeFromContext(c->typeParameters);
     removeFromContext(c);
     checkShadowing(c);
 }

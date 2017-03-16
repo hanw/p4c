@@ -269,9 +269,11 @@ void CFG::build(const IR::P4Control* cc,
 namespace {
 class DiscoverStructure : public Inspector {
     ProgramParts*           structure;
+    P4::TypeMap*            typeMap;
 
  public:
-    explicit DiscoverStructure(ProgramParts* structure) : structure(structure) {}
+    explicit DiscoverStructure(ProgramParts* structure, P4::TypeMap *tm)
+        : structure(structure), typeMap(tm) {}
 
     void postorder(const IR::ParameterList* paramList) override {
         bool inAction = findContext<IR::P4Action>() != nullptr;
@@ -281,6 +283,15 @@ class DiscoverStructure : public Inspector {
             if (!inAction)
                 structure->nonActionParameters.emplace(p);
             index++;
+        }
+    }
+    void postorder(const IR::Declaration_Instance *di) override {
+        auto t = typeMap->getType(di);
+        if (t->is<IR::Type_Package>()) {
+            auto package = t->to<IR::Type_Package>();
+            for (auto l : *package->packageLocals) {
+                visit(l);
+            }
         }
     }
     void postorder(const IR::P4Action* action) override {
@@ -293,8 +304,8 @@ class DiscoverStructure : public Inspector {
 };
 }  // namespace
 
-void ProgramParts::analyze(const IR::ToplevelBlock* toplevel) {
-    DiscoverStructure disc(this);
+void ProgramParts::analyze(const IR::ToplevelBlock* toplevel, P4::TypeMap* tm) {
+    DiscoverStructure disc(this, tm);
     toplevel->getProgram()->apply(disc);
 }
 

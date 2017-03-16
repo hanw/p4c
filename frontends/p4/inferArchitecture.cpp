@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 #include "inferArchitecture.h"
+#include "methodInstance.h"
 
 namespace P4 {
 
@@ -61,7 +62,7 @@ bool ArchitecturalBlocks::preorder(const IR::Type_Parser *node) {
 
 bool ArchitecturalBlocks::preorder(const IR::Type_Package *node) {
     // TODO(pierce): shouldn't these be constructor parameters?
-    for (auto param : *node->applyParams->parameters) {
+    for (auto param : *node->constructorParams->parameters) {
         BUG_CHECK(param->type->is<IR::Type_Specialized>(),
                   "Unexpected Package param type");
         auto baseType = param->type->to<IR::Type_Specialized>()->baseType;
@@ -102,19 +103,36 @@ bool ArchitecturalBlocks::preorder(const IR::Node *node) {
 
 ResolveToPackageObjects *ResolveToPackageObjects::instance = nullptr;
 
-bool ResolveToPackageObjects::preorder(const IR::Type_Specialized *ts) {
-//    printf("Type_Specialized found: %s\n", ts->toString());
-    return true;
+bool ResolveToPackageObjects::preorder(const IR::MethodCallStatement *m) {
+    auto mi = MethodInstance::resolve(m->methodCall, refMap, typeMap);
+    if (mi->isApply()) {
+        auto apply = mi->to<P4::ApplyMethod>()->applyObject;
+        auto applyMethodType = apply->getApplyMethodType();
+
+        auto mit = m->methodCall->arguments->begin();
+        for (auto p : *applyMethodType->parameters->parameters) {
+            auto pathExp = (*mit)->to<IR::PathExpression>();
+            setParameterMapping(p->to<IR::Parameter>(),
+                                refMap->getDeclaration(pathExp->path));
+        }
+    }
+    return false;
 }
 
-//bool ResolveToPackageObjects::preorder(const IR::P4Package *package) {
-//    return true;
-//}
+bool ResolveToPackageObjects::preorder(const IR::Type_Package *p) {
+    for (auto s : *p->body->components) {
+        visit(s);
+    }
+    return false;
+}
 
-//bool ResolveToPackageObjects::preorder(const IR::P4Control *package) {
-//}
-//
-//bool ResolveToPackageObjects::preorder(const IR::P4Parser *parser) {
-//}
+bool ResolveToPackageObjects::preorder(const IR::P4Program *p) {
+    for (auto decl : *p->getDeclarations()) {
+        if (decl->is<IR::Type_Package>()) {
+            visit(decl->to<IR::Type_Package>());
+        }
+    }
+    return false;
+}
 
 } // namespace P4

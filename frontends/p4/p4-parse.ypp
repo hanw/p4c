@@ -164,7 +164,8 @@ static int yylex();
 %type<Type_Declaration> headerTypeDeclaration structTypeDeclaration headerUnionDeclaration
                         derivedTypeDeclaration parserDeclaration
                         controlDeclaration enumDeclaration typedefDeclaration
-                        typeDeclaration packageDeclaration
+                        typeDeclaration 
+// packageDeclaration
 %type<Type_Package>     packageTypeDeclaration
 %type<Type_Error>       errorDeclaration
 %type<Node>             declaration externDeclaration matchKindDeclaration
@@ -246,12 +247,12 @@ declaration
     | actionDeclaration       { $$ = $1; }
     | parserDeclaration       { $$ = $1; }
     | typeDeclaration         { $$ = $1; }
-    | packageDeclaration      { $$ = $1; }
     | controlDeclaration      { $$ = $1; }
     | instantiation           { $$ = $1; }
     | errorDeclaration        { addErrors($1); $$ = nullptr; }
     | matchKindDeclaration    { $$ = $1; }
     ;
+//    | packageDeclaration      { $$ = $1; }
 
 nonTypeName
     : IDENTIFIER  { $$ = new IR::ID(@1, $1); }
@@ -305,18 +306,19 @@ direction
 
 packageTypeDeclaration
     : optAnnotations PACKAGE name { structure.pushContainerType(*$3, false); }
-                            optTypeParameters { structure.declareTypes($5->parameters); }
-                            '(' parameterList ')'
-                              { auto pl = new IR::ParameterList(@8, $8);
-                                $$ = new IR::Type_Package(@3, *$3, $1, $5, pl); }
+      optTypeParameters           { structure.declareTypes($5->parameters); }
+      optConstructorParameters
+      '{' controlLocalDeclarations APPLY controlBody '}'
+                  { auto pl = new IR::ParameterList();
+                    auto cpl = new IR::ParameterList(@7, $7);
+                    $$ = new IR::Type_Package(@3, *$3, $1, $5, pl, cpl, $9, $11); }
     ;
 
-packageDeclaration
-    : packageTypeDeclaration 
-      '{' controlLocalDeclarations APPLY controlBody '}'
-                            { structure.pop();
-                              $$ = new IR::P4Package($1->name.srcInfo, $1->name, $1, $1->applyParams, $3, $5); }
-    ;
+//packageDeclaration
+//    : packageTypeDeclaration 
+//      { structure.pop();
+//        $$ = new IR::P4Package($1->name.srcInfo, $1->name, $1); }
+//    ;
 
 instantiation
       : annotations typeRef '(' argumentList ')' name ';'
@@ -613,7 +615,7 @@ typeDeclaration
     | typedefDeclaration ';'           { $$ = $1; }
     | parserTypeDeclaration ';'        { structure.pop(); $$ = $1; }
     | controlTypeDeclaration ';'       { structure.pop(); $$ = $1; }
-    | packageTypeDeclaration ';'       { structure.pop(); $$ = $1; }
+    | packageTypeDeclaration           { structure.pop(); $$ = $1; }
     ;
 
 derivedTypeDeclaration

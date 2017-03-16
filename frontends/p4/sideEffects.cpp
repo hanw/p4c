@@ -437,8 +437,8 @@ const IR::Node* DoSimplifyExpressions::postorder(IR::Function* function) {
     return function;
 }
 
-// TODO(pierce): should we allow this for p4package?
-const IR::Node* DoSimplifyExpressions::postorder(IR::P4Package* package) {
+// TODO(pierce): should we allow this for p4package? -- was P4Package
+const IR::Node* DoSimplifyExpressions::postorder(IR::Type_Package* package) {
     if (toInsert.empty())
         return package;
     auto locals = new IR::IndexedVector<IR::Declaration>(*package->packageLocals);
@@ -513,7 +513,7 @@ const IR::Node* DoSimplifyExpressions::postorder(IR::AssignmentStatement* statem
 }
 
 const IR::Node* DoSimplifyExpressions::postorder(IR::MethodCallStatement* statement) {
-    if (findContext<IR::P4Package>() != nullptr) {
+    if (findContext<IR::Type_Package>() != nullptr) { // was P4Package
         return statement;
     }
     DismantleExpression dm(refMap, typeMap);
