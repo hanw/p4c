@@ -120,18 +120,23 @@ extern void truncate(in bit<32> length);
 // M should be a struct of structs
 // H should be a struct of headers or stacks
 
+
+// TODO(pierce): calling the standard_metadata_t parameters in these types
+// "standard_metadata" causes the standard_metadata package local to get renamed
+// -- why?
+
 parser Parser<H, M>(packet_in b,
                     out H parsedHdr,
                     inout M meta,
-                    inout standard_metadata_t standard_metadata);
+                    inout standard_metadata_t sm);
 control VerifyChecksum<H, M>(in H hdr11,
                              inout M meta);
 control Ingress<H, M>(inout H hdr22,
                       inout M meta,
-                      inout standard_metadata_t standard_metadata);
+                      inout standard_metadata_t sm);
 control Egress<H, M>(inout H hdr33,
                      inout M meta,
-                     inout standard_metadata_t standard_metadata);
+                     inout standard_metadata_t sm);
 control ComputeChecksum<H, M>(inout H hdr44,
                               inout M meta);
 control Deparser<H>(packet_out b, in H hdr55);
@@ -144,7 +149,7 @@ package V1Switch<H, M>(Parser<H, M> p,
                        Deparser<H> dep
                        ) {
 
-    standard_metadata_t standard_meta;
+    standard_metadata_t standard_metadata;
     packet_in           p_in;
     packet_out          p_out;
 
@@ -152,10 +157,10 @@ package V1Switch<H, M>(Parser<H, M> p,
     M usermeta;
 
     apply {
-        p.apply(p_in, headers, usermeta, standard_meta);
+        p.apply(p_in, headers, usermeta, standard_metadata);
         vr.apply(headers, usermeta);
-        ig.apply(headers, usermeta, standard_meta);
-        eg.apply(headers, usermeta, standard_meta);
+        ig.apply(headers, usermeta, standard_metadata);
+        eg.apply(headers, usermeta, standard_metadata);
         ck.apply(headers, usermeta);
         dep.apply(p_out, headers);
     }

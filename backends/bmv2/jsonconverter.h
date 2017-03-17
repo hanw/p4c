@@ -84,7 +84,7 @@ class JsonConverter final {
 
     // this stores the enclosing IApply when converting expressions
     // -- for reference when looking up parameter bindings
-    const IR::Type_Declaration *enclosingBlock{nullptr};
+    const IR::IApply *enclosingBlock{nullptr};
 
     ExpressionConverter*   conv;
 
@@ -105,6 +105,7 @@ class JsonConverter final {
     Util::JsonArray *headerInstances;
     Util::JsonArray *headerStacks;
     Util::JsonArray *field_lists;
+    Util::JsonArray *actions;
 
     Util::JsonObject *scalarsStruct;
     unsigned scalars_width = 0;
@@ -123,16 +124,19 @@ class JsonConverter final {
     unsigned nextId(cstring group);
     void addLocals();
 //    void addTypesAndInstances(const IR::Parameter *param, const IR::Type_Struct *type);
+//    void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
+//                           Util::JsonArray* result, Util::JsonArray* fieldLists,
+//                           Util::JsonArray* calculations, Util::JsonArray* learn_lists);
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
-                           Util::JsonArray* result, Util::JsonArray* fieldLists,
-                           Util::JsonArray* calculations, Util::JsonArray* learn_lists);
+                           Util::JsonArray* result);
     Util::IJson* convertTable(const CFG::TableNode* node,
                               Util::JsonArray* counters,
                               Util::JsonArray* action_profiles);
     Util::IJson* convertIf(const CFG::IfNode* node, cstring parent);
-    Util::JsonArray* createActions(Util::JsonArray* fieldLists,
-                                   Util::JsonArray* calculations,
-                                   Util::JsonArray* learn_lists);
+//    Util::JsonArray* createActions(Util::JsonArray* fieldLists,
+//                                   Util::JsonArray* calculations,
+//                                   Util::JsonArray* learn_lists);
+    unsigned createAction(const IR::P4Action *action);
     Util::IJson* toJson(const IR::P4Parser* cont, cstring name);
     Util::IJson* toJson(const IR::ParserState* state);
     void convertDeparserBody(const IR::Vector<IR::StatOrDecl>* body,
@@ -141,7 +145,7 @@ class JsonConverter final {
     Util::IJson* convertParserStatement(const IR::StatOrDecl* stat);
     Util::JsonObject *createExternInstance(cstring name, cstring type);
     void addExternAttributes(const IR::ExternBlock *eb, Util::JsonArray *attributes);
-    Util::IJson* convertControl(const IR::ControlBlock* block, cstring name,
+    Util::IJson* convertControl(const IR::P4Control *cont, cstring name,
                                 Util::JsonArray* counters, Util::JsonArray* meters,
                                 Util::JsonArray *externs);
     cstring createCalculation(cstring algo, const IR::Expression* fields,
@@ -187,7 +191,7 @@ class JsonConverter final {
     void checkStructure(const IR::Type_StructLike *st);
 
     // resolve control/parser params to package locals
-    const IR::Parameter *resolveParameter(const IR::Parameter *param);
+    const IR::IDeclaration *resolveParameter(const IR::Parameter *param);
 
  public:
     explicit JsonConverter(const CompilerOptions& options);

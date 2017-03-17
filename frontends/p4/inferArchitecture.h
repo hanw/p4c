@@ -54,47 +54,10 @@ class ArchitecturalBlocks : public Inspector {
     bool preorder(const IR::Node *node) override;
 };
 
-class ResolveToPackageObjects : public Inspector {
- private:
-    using ParameterMap =
-        std::unordered_map<const IR::Parameter*, const IR::IDeclaration*>;
- private:
-    ParameterMap *parameterMap{nullptr};
-    TypeMap *typeMap;
-    ReferenceMap *refMap;
-    static ResolveToPackageObjects *instance;
-
- private:
-    void setParameterMapping(
-            const IR::Parameter *param, const IR::IDeclaration *packageLocal) {
-        CHECK_NULL(param); CHECK_NULL(packageLocal);
-        parameterMap->emplace(param, packageLocal);
-    }
-    
-    const IR::IDeclaration *getParameterMapping(const IR::Parameter *p) {
-        auto ret = parameterMap->find(p);
-        return nullptr;
-    }
-
- public:
-    ResolveToPackageObjects(TypeMap *tm, ReferenceMap *rm)
-            : parameterMap(new ParameterMap()), typeMap(tm), refMap(rm) { }
-
-    static const ResolveToPackageObjects *getInstance() {
-        return instance;
-    }
-
- public:
-    bool preorder(const IR::MethodCallStatement *m) override;
-    bool preorder(const IR::Type_Package *p) override;
-    bool preorder(const IR::P4Program *p) override;
-};
-
 class InferArchitecture : public PassManager {
  public:
     InferArchitecture(TypeMap *typeMap, ReferenceMap *refMap) {
         passes.push_back(new ArchitecturalBlocks(typeMap));
-        passes.push_back(new ResolveToPackageObjects(typeMap, refMap));
     }
 };
 

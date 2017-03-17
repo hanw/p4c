@@ -99,40 +99,4 @@ bool ArchitecturalBlocks::preorder(const IR::Node *node) {
     return false;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-
-ResolveToPackageObjects *ResolveToPackageObjects::instance = nullptr;
-
-bool ResolveToPackageObjects::preorder(const IR::MethodCallStatement *m) {
-    auto mi = MethodInstance::resolve(m->methodCall, refMap, typeMap);
-    if (mi->isApply()) {
-        auto apply = mi->to<P4::ApplyMethod>()->applyObject;
-        auto applyMethodType = apply->getApplyMethodType();
-
-        auto mit = m->methodCall->arguments->begin();
-        for (auto p : *applyMethodType->parameters->parameters) {
-            auto pathExp = (*mit)->to<IR::PathExpression>();
-            setParameterMapping(p->to<IR::Parameter>(),
-                                refMap->getDeclaration(pathExp->path));
-        }
-    }
-    return false;
-}
-
-bool ResolveToPackageObjects::preorder(const IR::Type_Package *p) {
-    for (auto s : *p->body->components) {
-        visit(s);
-    }
-    return false;
-}
-
-bool ResolveToPackageObjects::preorder(const IR::P4Program *p) {
-    for (auto decl : *p->getDeclarations()) {
-        if (decl->is<IR::Type_Package>()) {
-            visit(decl->to<IR::Type_Package>());
-        }
-    }
-    return false;
-}
-
 } // namespace P4

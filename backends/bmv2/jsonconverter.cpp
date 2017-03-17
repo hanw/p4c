@@ -294,6 +294,24 @@ class ExpressionConverter : public Inspector {
         map.emplace(expression, result);
     }
 
+    const IR::Parameter* enclosingParamReference(const IR::Expression* expression) {
+        CHECK_NULL(expression);
+        if (!expression->is<IR::PathExpression>()) {
+            return nullptr;
+        }
+
+        auto pe = expression->to<IR::PathExpression>();
+        auto decl = converter->refMap->getDeclaration(pe->path, true);
+        auto param = decl->to<IR::Parameter>();
+        if (param == nullptr) {
+            return param;
+        }
+        if (converter->structure.nonActionParameters.count(param) > 0) {
+            return param;
+        }
+        return nullptr;
+    }
+
     void postorder(const IR::ArrayIndex* expression) override {
         auto result = new Util::JsonObject();
         result->emplace("type", "header");
@@ -304,7 +322,14 @@ class ExpressionConverter : public Inspector {
         if (expression->left->is<IR::Member>()) {
             // This is a header part of the parameters
             auto mem = expression->left->to<IR::Member>();
-            elementAccess = mem->member.name;
+            auto param = enclosingParamReference(mem->expr);
+            auto packageObject = converter->resolveParameter(param);
+            if (packageObject != nullptr) {
+                elementAccess = packageObject->externalName() + "_"
+                        + mem->member.name;
+            } else {
+                elementAccess = mem->member.name;
+            }
         } else if (expression->left->is<IR::PathExpression>()) {
             // This is a temporary variable with type stack.
             auto path = expression->left->to<IR::PathExpression>();
@@ -323,25 +348,6 @@ class ExpressionConverter : public Inspector {
     }
 
     // Non-null if the expression refers to a parameter from the enclosing control
-    const IR::Parameter* enclosingParamReference(const IR::Expression* expression) {
-        CHECK_NULL(expression);
-        if (!expression->is<IR::PathExpression>()) {
-            return nullptr;
-        }
-
-        auto pe = expression->to<IR::PathExpression>();
-        auto decl = converter->refMap->getDeclaration(pe->path, true);
-        auto param = decl->to<IR::Parameter>();
-        if (param == nullptr) {
-            return param;
-        }
-        converter->resolveParameter(param);
-        if (converter->structure.nonActionParameters.count(param) > 0) {
-            return param;
-        }
-        return nullptr;
-    }
-
     void postorder(const IR::Member* expression) override {
         // TODO: deal with references that return bool
         auto result = new Util::JsonObject();
@@ -360,6 +366,9 @@ class ExpressionConverter : public Inspector {
 
         auto param = enclosingParamReference(expression->expr);
         if (param != nullptr) {
+            auto packageObject = converter->resolveParameter(param);
+            BUG_CHECK(packageObject != nullptr, "All parameters should resolve "
+                      "to package objects...no?");
             auto type = converter->typeMap->getType(expression, true);
             auto ptype = converter->typeMap->getType(param, true);
             // TODO(pierce): not sure this check scales
@@ -367,18 +376,22 @@ class ExpressionConverter : public Inspector {
             if (ptype->is<IR::Type_Struct>() && type->is<IR::Type_Bits>()) { 
                 result->emplace("type", "field");
                 auto e = mkArrayField(result, "value");
-                e->append(param->getName());
+                e->append(packageObject->externalName());
                 e->append(expression->member);
             } else {
                 if (type->is<IR::Type_Stack>()) {
                     result->emplace("type", "header_stack");
-                    result->emplace("value", expression->member.name);
+                    result->emplace("value",
+                            packageObject->externalName() + "_"
+                            + expression->member.name);
                 } else {
                     // This may be wrong, but the caller will handle it 
                     // properly (e.g., this can be a method,
                     // such as packet.lookahead)
                     result->emplace("type", "header");
-                    result->emplace("value", expression->member.name);
+                    result->emplace("value",
+                            packageObject->externalName() + "_"
+                            + expression->member.name);
                 }
             }
         } else {
@@ -716,6 +729,78 @@ class ExpressionConverter : public Inspector {
     }
 };
 
+class ResolveToPackageObjects : public Inspector {
+ private:
+    using ParameterMap =
+        std::unordered_map<const IR::Parameter*, const IR::IDeclaration*>;
+ private:
+    ParameterMap *parameterMap{nullptr};
+    P4::TypeMap *typeMap;
+    P4::ReferenceMap *refMap;
+    static ResolveToPackageObjects *instance;
+
+ private:
+    void setParameterMapping(
+            const IR::Parameter *param, const IR::IDeclaration *packageLocal) {
+        CHECK_NULL(param); CHECK_NULL(packageLocal);
+        parameterMap->emplace(param, packageLocal);
+    }
+    
+ public:
+    ResolveToPackageObjects(P4::TypeMap *tm, P4::ReferenceMap *rm)
+            : parameterMap(new ParameterMap()), typeMap(tm), refMap(rm) {
+        instance = this;
+    }
+
+    static const ResolveToPackageObjects *getInstance() {
+        return instance;
+    }
+
+    const IR::IDeclaration *getParameterMapping(const IR::Parameter *p) const {
+        auto ret = parameterMap->find(p);
+        if (ret == parameterMap->end()) {
+            return nullptr;
+        }
+        return ret->second;
+    }
+
+ public:
+    bool preorder(const IR::MethodCallStatement *m) {
+        auto mi = P4::MethodInstance::resolve(m->methodCall, refMap, typeMap);
+        if (mi->isApply()) {
+            auto apply = mi->to<P4::ApplyMethod>()->applyObject;
+            auto applyMethodType = apply->getApplyMethodType();
+    
+            auto mit = m->methodCall->arguments->begin();
+            for (auto p : *applyMethodType->parameters->parameters) {
+                auto pathExp = (*mit)->to<IR::PathExpression>();
+                setParameterMapping(p->to<IR::Parameter>(),
+                                    refMap->getDeclaration(pathExp->path));
+                ++mit;
+            }
+        }
+        return false;
+    }
+    
+    bool preorder(const IR::Type_Package *p) {
+        for (auto s : *p->body->components) {
+            visit(s);
+        }
+        return false;
+    }
+    
+    bool preorder(const IR::P4Program *p) {
+        for (auto decl : *p->getDeclarations()) {
+            if (decl->is<IR::Type_Package>()) {
+                visit(decl->to<IR::Type_Package>());
+            }
+        }
+        return false;
+    }
+};
+
+ResolveToPackageObjects *ResolveToPackageObjects::instance = nullptr;
+
 JsonConverter::JsonConverter(const CompilerOptions& options)
         : options(options), corelib(P4::P4CoreLibrary::instance),
           model(*P4::ArchitecturalBlocks::getInstance()->getModel()),
@@ -724,17 +809,13 @@ JsonConverter::JsonConverter(const CompilerOptions& options)
 
 void
 JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
-                                 Util::JsonArray* result,
-                                 Util::JsonArray* field_lists,
-                                 Util::JsonArray* calculations,
-                                 Util::JsonArray* learn_lists) {
+                                 Util::JsonArray* result) {
     conv->createFieldLists = true;
     for (auto s : *body) {
         if (!s->is<IR::Statement>()) {
             continue;
         } else if (s->is<IR::BlockStatement>()) {
-            convertActionBody(s->to<IR::BlockStatement>()->components, result,
-                              field_lists, calculations, learn_lists);
+            convertActionBody(s->to<IR::BlockStatement>()->components, result);
             continue;
         } else if (s->is<IR::ReturnStatement>()) {
             break;
@@ -876,7 +957,7 @@ void JsonConverter::addToFieldList(const IR::Expression* expr, Util::JsonArray* 
 
 // returns id of created field list
 int JsonConverter::createFieldList(const IR::Expression* expr, cstring group,
-                                   cstring listName, Util::JsonArray* field_lists) {
+        cstring listName, Util::JsonArray* field_lists) {
     auto fl = new Util::JsonObject();
     field_lists->append(fl);
     int id = nextId(group);
@@ -887,43 +968,78 @@ int JsonConverter::createFieldList(const IR::Expression* expr, cstring group,
     return id;
 }
 
-Util::JsonArray* JsonConverter::createActions(Util::JsonArray* field_lists,
-                                              Util::JsonArray* calculations,
-                                              Util::JsonArray* learn_lists) {
-    auto result = new Util::JsonArray();
-    for (auto it : structure.actions) {
-        auto action = it.first;
-        cstring name = action->externalName();
-        auto jact = new Util::JsonObject();
-        jact->emplace("name", name);
-        unsigned id = nextId("actions");
-        structure.ids.emplace(action, id);
-        jact->emplace("id", id);
-        auto params = mkArrayField(jact, "runtime_data");
-        for (auto p : *action->parameters->getEnumerator()) {
-            // The P4 v1.0 compiler removes unused action parameters!
-            // We have to do the same, although this seems wrong.
-            if (!refMap->isUsed(p)) {
-                ::warning("Removing unused action parameter %1% for "
-                          "compatibility reasons", p);
-                continue;
-            }
+//Util::JsonArray* JsonConverter::createActions(Util::JsonArray* field_lists,
+//                                              Util::JsonArray* calculations,
+//                                              Util::JsonArray* learn_lists) {
+//    auto result = new Util::JsonArray();
+//    for (auto it : structure.actions) {
+//        auto action = it.first;
+//        enclosingBlock = it.second;
+//        cstring name = action->externalName();
+//        auto jact = new Util::JsonObject();
+//        jact->emplace("name", name);
+//        unsigned id = nextId("actions");
+//        structure.ids.emplace(action, id);
+//        jact->emplace("id", id);
+//        auto params = mkArrayField(jact, "runtime_data");
+//        for (auto p : *action->parameters->getEnumerator()) {
+//            // The P4 v1.0 compiler removes unused action parameters!
+//            // We have to do the same, although this seems wrong.
+//            if (!refMap->isUsed(p)) {
+//                ::warning("Removing unused action parameter %1% for "
+//                          "compatibility reasons", p);
+//                continue;
+//            }
+//
+//            auto param = new Util::JsonObject();
+//            param->emplace("name", p->name);
+//            auto type = typeMap->getType(p, true);
+//            if (!type->is<IR::Type_Bits>())
+//                ::error("%1%: Action parameters can only be bit<> "
+//                        "or int<> on this target", p);
+//                param->emplace("bitwidth", type->width_bits());
+//                params->append(param);
+//            }
+//            auto body = mkArrayField(jact, "primitives");
+//            convertActionBody(action->body->components, body, 
+//                              field_lists, calculations, learn_lists);
+//            result->append(jact);
+//    }
+//    enclosingBlock = nullptr;
+//    return result;
+//}
 
-            auto param = new Util::JsonObject();
-            param->emplace("name", p->name);
-            auto type = typeMap->getType(p, true);
-            if (!type->is<IR::Type_Bits>())
-                ::error("%1%: Action parameters can only be bit<> "
-                        "or int<> on this target", p);
-                param->emplace("bitwidth", type->width_bits());
-                params->append(param);
-            }
-            auto body = mkArrayField(jact, "primitives");
-            convertActionBody(action->body->components, body, 
-                              field_lists, calculations, learn_lists);
-            result->append(jact);
+// returns id of action created
+unsigned JsonConverter::createAction(const IR::P4Action *action) {
+    cstring name = action->externalName();
+    auto jact = new Util::JsonObject();
+    jact->emplace("name", name);
+    unsigned id = nextId("actions");
+    jact->emplace("id", id);
+    auto params = mkArrayField(jact, "runtime_data");
+    for (auto p : *action->parameters->getEnumerator()) {
+        // The P4 v1.0 compiler removes unused action parameters!
+        // We have to do the same, although this seems wrong.
+        if (!refMap->isUsed(p)) {
+            ::warning("Removing unused action parameter %1% for "
+                      "compatibility reasons", p);
+            continue;
+        }
+
+        auto param = new Util::JsonObject();
+        param->emplace("name", p->name);
+        auto type = typeMap->getType(p, true);
+        if (!type->is<IR::Type_Bits>())
+            ::error("%1%: Action parameters can only be bit<> "
+                    "or int<> on this target", p);
+            param->emplace("bitwidth", type->width_bits());
+            params->append(param);
     }
-    return result;
+    auto body = mkArrayField(jact, "primitives");
+    convertActionBody(action->body->components, body);
+    actions->append(jact);
+    structure.ids.emplace(action, id);
+    return id;
 }
 
 Util::IJson* JsonConverter::nodeName(const CFG::Node* node) const {
@@ -1217,7 +1333,7 @@ JsonConverter::convertTable(const CFG::TableNode* node,
         auto decl = refMap->getDeclaration(a->getPath(), true);
         BUG_CHECK(decl->is<IR::P4Action>(), "%1%: should be an action name", a);
         auto action = decl->to<IR::P4Action>();
-        unsigned id = get(structure.ids, action);
+        unsigned id = createAction(action);
         action_ids->append(id);
         auto name = action->externalName();
         actions->append(name);
@@ -1370,12 +1486,12 @@ void JsonConverter::addExternAttributes(const IR::ExternBlock *eb,
     }
 }
 
-Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
+Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
                                            cstring name,
                                            Util::JsonArray* counters,
                                            Util::JsonArray* meters,
                                            Util::JsonArray *externs) {
-    const IR::P4Control* cont = block->container;
+//    const IR::P4Control* cont = block->container;
     enclosingBlock = cont;
 
     LOG1("Processing " << cont);
@@ -1434,17 +1550,17 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block,
             c->is<IR::P4Table>())
             continue;
         if (c->is<IR::Declaration_Instance>()) {
-            auto bl = block->getValue(c);
-            CHECK_NULL(bl);
-            cstring name = c->externalName();
-            if (bl->is<IR::ExternBlock>()) {
-                auto eb = bl->to<IR::ExternBlock>();
-                auto inst = createExternInstance(name, eb->type->externalName());
-                auto attributes = mkArrayField(inst, "attribute_values");
-                addExternAttributes(eb, attributes);
-                externs->append(inst);
-            }
-            continue;
+//            auto bl = block->getValue(c);
+//            CHECK_NULL(bl);
+//            cstring name = c->externalName();
+//            if (bl->is<IR::ExternBlock>()) {
+//                auto eb = bl->to<IR::ExternBlock>();
+//                auto inst = createExternInstance(name, eb->type->externalName());
+//                auto attributes = mkArrayField(inst, "attribute_values");
+//                addExternAttributes(eb, attributes);
+//                externs->append(inst);
+//            }
+//            continue;
         }
         BUG("%1%: not yet handled", c);
     }
@@ -1671,23 +1787,55 @@ void JsonConverter::addMetaInformation() {
   toplevel.emplace("__meta__", meta);
 }
 
-const IR::Parameter *JsonConverter::resolveParameter(
+const IR::IDeclaration *JsonConverter::resolveParameter(
         const IR::Parameter *param) {
+    if (param == nullptr) {
+        return nullptr;
+    }
+
     auto package = toplevelBlock->getMain()->type;
     auto parameterIt = package->constructorParams->parameters->begin();
+
+    BUG_CHECK(enclosingBlock != nullptr, "Trying to resolve parameter but "
+              "enclosing block is null");
+
     for (auto a : *mainInstance->arguments) {
         auto cc = a->to<IR::ConstructorCallExpression>();
         auto cct = typeMap->getType(cc->constructedType);
 
-        auto iapply = cct->to<IR::Type_Type>()->type->to<IR::Type_Declaration>();
-        auto t = typeMap->equivalent(enclosingBlock, iapply);
+        auto iapply = cct->to<IR::Type_Type>()->type->to<IR::IApply>();
+//        auto t = typeMap->equivalent(enclosingBlock-, iapply);
         if (enclosingBlock == iapply) {
             break;
         }
         ++parameterIt;
     }
 
-    return param;
+    for (auto c : *package->body->components) {
+        BUG_CHECK(c->is<IR::MethodCallStatement>(), "Only method call "
+                  "statements are allowed in package apply body: %1%", c);
+        auto methodCall = c->to<IR::MethodCallStatement>()->methodCall;
+        auto member = methodCall->method->to<IR::Member>();
+        if (member->expr->toString() == (*parameterIt)->toString()) {
+            auto mi = P4::MethodInstance::resolve(methodCall, refMap, typeMap);
+            BUG_CHECK(mi->isApply(), "Only apply method calls are allowed in "
+                      "package body");
+            auto apply = mi->to<P4::ApplyMethod>()->applyObject;
+            auto applyMethodType = apply->getApplyMethodType();
+
+            auto applyPIt = applyMethodType->parameters->parameters->begin();
+            auto enclosingApplyMethod = enclosingBlock->getApplyMethodType();
+            for (auto p : *enclosingApplyMethod->parameters->parameters) {
+                auto t = typeMap->equivalent(p->to<IR::Type>(), param->to<IR::Type>());
+                if (param->getName() == p->getName()) {
+                    return ResolveToPackageObjects::getInstance()->
+                        getParameterMapping(*applyPIt);
+                }
+                ++applyPIt;
+            }
+        }
+    }
+    return nullptr;
 }
 
 void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
@@ -1701,23 +1849,15 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     CHECK_NULL(refMap);
     CHECK_NULL(enumMap);
 
-    auto package = toplevelBlock->getMain();
+    ResolveToPackageObjects resolver(typeMap, refMap);
+    toplevelBlock->getProgram()->apply(resolver);
 
-    // get the declaration instance of the package
-    for (auto decl : *toplevelBlock->getProgram()->getDeclarations()) {
-        if (decl->getName() == "main" && decl->is<IR::Declaration_Instance>()) {
-            auto mainInst = decl->to<IR::Declaration_Instance>();
-            BUG_CHECK(!mainInst->type->is<IR::Type_Package>(),
-                      "Main instance is not of Type_Package: %1%", mainInst);
-            this->mainInstance = mainInst;
-            break;
-        }
-    }
-
-    if (package == nullptr) {
-        ::error("No output to generate");
-        return;
-    }
+//    auto package = toplevelBlock->getMain();
+//
+//    if (package == nullptr) {
+//        ::error("No output to generate");
+//        return;
+//    }
 
     structure.analyze(toplevelBlock, typeMap);
         if (::errorCount() > 0) {
@@ -1745,48 +1885,90 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
 
     addEnums();
 
-    auto prsrs = mkArrayField(&toplevel, "parsers");
-
-    for (auto p : *model.getParsers()) {
-        auto parserBlock = package->getParameterValue(p->toString());
-        CHECK_NULL(parserBlock);
-        auto parser = parserBlock->to<IR::ParserBlock>()->container;
-    
-//        for (auto parserParam : *p->getElems()) {
-//            auto paramVal = parser->type->applyParams->getParameter(parserParam.index);
-//            auto paramValType = typeMap->getType(paramVal->getNode(), true);
-//            auto pvt = paramValType->to<IR::Type_Struct>();
-//            addTypesAndInstances(paramVal, pvt);
-//        }
-        auto parserJson = toJson(parser, p->toString());
-        prsrs->append(parserJson);
-    }
-
     field_lists = mkArrayField(&toplevel, "field_lists");
     auto calculations = mkArrayField(&toplevel, "calculations");
     auto learn_lists = mkArrayField(&toplevel, "learn_lists");
-    auto acts = createActions(field_lists, calculations, learn_lists);
-    if (::errorCount() > 0) {
-        return;
-    }
-    toplevel.emplace("actions", acts);
 
     auto pipelines = mkArrayField(&toplevel, "pipelines");
     auto counters = mkArrayField(&toplevel, "counter_arrays");
     auto meters = mkArrayField(&toplevel, "meter_arrays");
     auto externs = mkArrayField(&toplevel, "extern_instances");
+    auto prsrs = mkArrayField(&toplevel, "parsers");
+    actions = mkArrayField(&toplevel, "actions");
 
-    for (auto c : *model.getControls()) {
-        auto controlBlock =
-            package->getParameterValue(c->toString())->to<IR::ControlBlock>();
-        auto control = convertControl(controlBlock, c->toString(),
-                                      counters, meters, externs);
-        if (::errorCount() > 0) {
-            return; 
+    // get the declaration instance of the package
+    for (auto decl : *toplevelBlock->getProgram()->getDeclarations()) {
+        if (decl->getName() == "main" && decl->is<IR::Declaration_Instance>()) {
+            auto mainInst = decl->to<IR::Declaration_Instance>();
+            BUG_CHECK(!mainInst->type->is<IR::Type_Package>(),
+                      "Main instance is not of Type_Package: %1%", mainInst);
+            this->mainInstance = mainInst;
+            break;
         }
-        pipelines->append(control);
     }
 
+//    auto acts = createActions(field_lists, calculations, learn_lists);
+//    if (::errorCount() > 0) {
+//        return;
+//    }
+//    toplevel.emplace("actions", acts);
+
+    auto package = typeMap->getType(mainInstance)->to<IR::Type_Package>();
+    auto packageBlock = toplevelBlock->getMain();
+
+    if (package == nullptr) {
+        ::error("No output to generate");
+        return;
+    }
+
+//    auto isCalled [](const IR::) {
+
+    auto packageParamIt = package->constructorParams->parameters->begin();
+    for (auto arg : *mainInstance->arguments) {
+        BUG_CHECK(arg->is<IR::ConstructorCallExpression>(), "Arguments to "
+                  "package constructors must be control or parser constructor "
+                  "calls: %1%", arg);
+        auto cc = arg->to<IR::ConstructorCallExpression>();
+        auto cctt = typeMap->getType(cc->constructedType)->to<IR::Type_Type>();
+        auto cct = cctt->type;
+
+        // if isCalled
+        if (cct->is<IR::P4Parser>()) {
+            auto parser = cct->to<IR::P4Parser>();
+            auto parserJson = toJson(parser, (*packageParamIt)->toString());
+            prsrs->append(parserJson);
+        } else if (cct->is<IR::P4Control>()) {
+            auto control = cct->to<IR::P4Control>();
+//            auto controlBlock = packageBlock->getParameterValue(
+//                    (*packageParamIt)->toString())->to<IR::ControlBlock>();
+            auto controlJson = convertControl(
+                    control, (*packageParamIt)->toString(),
+                    counters, meters, externs);
+            pipelines->append(controlJson);
+        }
+        ++packageParamIt;
+    }
+
+//    for (auto p : *model.getParsers()) {
+//        auto parserBlock = package->getParameterValue(p->toString());
+//        CHECK_NULL(parserBlock);
+//        auto parser = parserBlock->to<IR::ParserBlock>()->container;
+//    
+//        auto parserJson = toJson(parser, p->toString());
+//        prsrs->append(parserJson);
+//    }
+//
+//
+//    for (auto c : *model.getControls()) {
+//        auto controlBlock =
+//            package->getParameterValue(c->toString())->to<IR::ControlBlock>();
+//        auto control = convertControl(controlBlock, c->toString(),
+//                                      counters, meters, externs);
+//        if (::errorCount() > 0) {
+//            return; 
+//        }
+//        pipelines->append(control);
+//    }
 }
 
 Util::IJson* JsonConverter::toJson(const IR::P4Parser* parser, cstring name) {
