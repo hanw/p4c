@@ -1609,14 +1609,13 @@ Util::JsonObject *JsonConverter::createExternInstance(cstring name, cstring type
     return j;
 }
 
-void JsonConverter::addExternAttributes(const IR::ExternBlock *eb,
+void JsonConverter::addExternAttributes(const IR::Declaration_Instance *di,
                                         Util::JsonArray *attributes) {
-    for (auto arg : *eb->getConstructorParameters()->parameters) {
+    for (auto arg : *di->arguments) {
         auto j = new Util::JsonObject();
         j->emplace("name", arg->toString()); 
-        auto val = eb->getParameterValue(arg->externalName());
-        if (val->is<IR::Constant>()) {
-            auto constVal = val->to<IR::Constant>();
+        if (arg->is<IR::Constant>()) {
+            auto constVal = arg->to<IR::Constant>();
             if (arg->type->is<IR::Type_Bits>()) {
                 j->emplace("type", "hexstr");
                 j->emplace("value", stringRepr(constVal->value));
@@ -1624,8 +1623,8 @@ void JsonConverter::addExternAttributes(const IR::ExternBlock *eb,
                 BUG("%1%: unhandled constant constructor param",
                     constVal->toString());
             }
-        } else if (val->is<IR::Declaration_ID>()) {
-            auto declID = val->to<IR::Declaration_ID>();
+        } else if (arg->is<IR::Declaration_ID>()) {
+            auto declID = arg->to<IR::Declaration_ID>();
             j->emplace("type", "string");
             j->emplace("value", declID->toString());
         } else {
@@ -1682,8 +1681,6 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
         }
     }
 
-    auto type = typeMap->getType(cont->type);
-
     // special handling for packet out extern
     // TODO(pierce): handle other externs-as-parameters this way also?
     for (auto p : *cont->type->applyParams->parameters) {
@@ -1706,17 +1703,17 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
             c->is<IR::P4Table>())
             continue;
         if (c->is<IR::Declaration_Instance>()) {
-//            auto bl = block->getValue(c);
-//            CHECK_NULL(bl);
-//            cstring name = c->externalName();
-//            if (bl->is<IR::ExternBlock>()) {
-//                auto eb = bl->to<IR::ExternBlock>();
-//                auto inst = createExternInstance(name, eb->type->externalName());
-//                auto attributes = mkArrayField(inst, "attribute_values");
-//                addExternAttributes(eb, attributes);
-//                externs->append(inst);
-//            }
-//            continue;
+            // TODO(pierce): should this happen with local variables?
+            auto di = c->to<IR::Declaration_Instance>();
+            auto type = typeMap->getType(di);
+            cstring name = c->externalName();
+            if (type->is<IR::Type_Extern>()) {
+                auto externType = type->to<IR::Type_Extern>();
+                auto json = createExternInstance(name, externType->externalName());
+                auto attributes = mkArrayField(json, "attribute_values");
+                addExternAttributes(di, attributes);
+            }
+            continue;
         }
         BUG("%1%: not yet handled", c);
     }

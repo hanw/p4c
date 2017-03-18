@@ -145,7 +145,8 @@ class JsonConverter final {
     Util::IJson* convertDeparser(const IR::P4Control* state);
     Util::IJson* convertParserStatement(const IR::StatOrDecl* stat);
     Util::JsonObject *createExternInstance(cstring name, cstring type);
-    void addExternAttributes(const IR::ExternBlock *eb, Util::JsonArray *attributes);
+    void addExternAttributes(const IR::Declaration_Instance *di,
+                             Util::JsonArray *attributes);
     Util::IJson* convertControl(const IR::P4Control *cont, cstring name,
                                 Util::JsonArray* counters, Util::JsonArray* meters,
                                 Util::JsonArray *externs);
