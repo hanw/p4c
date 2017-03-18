@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 #include "target.h"
+#include "ebpfType.h"
 
 namespace EBPF {
 
@@ -63,6 +64,12 @@ void KernelSamplesTarget::emitTableUpdate(Util::SourceCodeBuilder* builder, cstr
                           tblName, key, value);
 }
 
+void KernelSamplesTarget::emitUserTableUpdate(Util::SourceCodeBuilder* builder, cstring tblName,
+                                          cstring key, cstring value) const {
+    builder->appendFormat("bpf_update_elem(%s, &%s, &%s, BPF_ANY);",
+                          tblName, key, value);
+}
+
 void KernelSamplesTarget::emitTableDecl(Util::SourceCodeBuilder* builder,
                                         cstring tblName, bool isHash,
                                         cstring keyType, cstring valueType,
@@ -78,11 +85,11 @@ void KernelSamplesTarget::emitTableDecl(Util::SourceCodeBuilder* builder,
         builder->appendLine("BPF_MAP_TYPE_ARRAY,");
 
     builder->emitIndent();
-    builder->appendFormat(".key_size = sizeof(%s), ", keyType);
+    builder->appendFormat(".key_size = sizeof(%s),", keyType);
     builder->newline();
 
     builder->emitIndent();
-    builder->appendFormat(".value_size = sizeof(%s), ", valueType);
+    builder->appendFormat(".value_size = sizeof(%s),", valueType);
     builder->newline();
 
     builder->emitIndent();
@@ -124,6 +131,12 @@ void BccTarget::emitTableUpdate(Util::SourceCodeBuilder* builder, cstring tblNam
                           tblName, key, value);
 }
 
+void BccTarget::emitUserTableUpdate(Util::SourceCodeBuilder* builder, cstring tblName,
+                                    cstring key, cstring value) const {
+    builder->appendFormat("bpf_update_elem(%s, &%s, &%s, BPF_ANY);",
+                          tblName, key, value);
+}
+
 void BccTarget::emitIncludes(Util::SourceCodeBuilder* builder) const {
     builder->append("#include <uapi/linux/bpf.h>\n"
                     "#include <uapi/linux/if_ether.h>\n"
@@ -138,7 +151,7 @@ void BccTarget::emitTableDecl(Util::SourceCodeBuilder* builder,
                               cstring keyType, cstring valueType, unsigned size) const {
     cstring kind = isHash ? "hash" : "array";
     builder->appendFormat("BPF_TABLE(\"%s\", %s, %s, %s, %d);",
-                          kind, keyType, valueType, tblName, size);
+                      kind, keyType, valueType, tblName, size);
     builder->newline();
 }
 

@@ -21,6 +21,7 @@ limitations under the License.
 #include "frontends/common/options.h"
 #include "frontends/common/16model.h"
 #include "frontends/p4/coreLibrary.h"
+#include "midend/convertEnums.h"
 #include "analyzer.h"
 #include <iomanip>
 // Currently we are requiring a v1model to be used

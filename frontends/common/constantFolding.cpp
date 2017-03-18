@@ -351,7 +351,7 @@ DoConstantFolding::binary(const IR::Operation_Binary* e,
 
     const IR::Expression* result;
     if (e->is<IR::Operation_Relation>())
-        result = new IR::BoolLiteral(e->srcInfo, static_cast<bool>(value));
+        result = new IR::BoolLiteral(e->srcInfo, value != 0);
     else
         result = new IR::Constant(e->srcInfo, resultType, value, left->base, true);
     setConstant(e, result);
@@ -525,7 +525,7 @@ const IR::Node* DoConstantFolding::postorder(IR::Concat* e) {
     }
 
     auto resultType = IR::Type_Bits::get(Util::SourceInfo(), lt->size + rt->size, lt->isSigned);
-    mpz_class value = Util::shift_left(left->value, static_cast<unsigned>(lt->size)) + right->value;
+    mpz_class value = Util::shift_left(left->value, static_cast<unsigned>(rt->size)) + right->value;
     auto result = new IR::Constant(e->srcInfo, resultType, value, left->base);
     setConstant(e, result);
     return result;

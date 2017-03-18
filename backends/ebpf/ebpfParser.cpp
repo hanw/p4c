@@ -33,10 +33,9 @@ class StateTranslationVisitor : public CodeGenInspector {
     void compileExtract(const IR::Vector<IR::Expression>* args);
 
  public:
-    StateTranslationVisitor(const EBPFParserState* state, CodeBuilder* builder) :
-            CodeGenInspector(builder, state->parser->program->typeMap),
+    explicit StateTranslationVisitor(const EBPFParserState* state) :
+            CodeGenInspector(state->parser->program->refMap, state->parser->program->typeMap),
             hasDefault(false), p4lib(P4::P4CoreLibrary::instance), state(state) {}
-    using CodeGenInspector::preorder;
     bool preorder(const IR::ParserState* state) override;
     bool preorder(const IR::SelectCase* selectCase) override;
     bool preorder(const IR::SelectExpression* expression) override;
@@ -83,7 +82,11 @@ bool StateTranslationVisitor::preorder(const IR::ParserState* parserState) {
 
 bool StateTranslationVisitor::preorder(const IR::SelectExpression* expression) {
     hasDefault = false;
-    // TODO: this does not handle correctly tuples
+    if (expression->select->components->size() != 1) {
+        // TODO: this does not handle correctly tuples
+        ::error("%1%: only supporting a single argument for select", expression->select);
+        return false;
+    }
     builder->emitIndent();
     builder->append("switch (");
     visit(expression->select);
@@ -319,23 +322,26 @@ bool StateTranslationVisitor::preorder(const IR::Member* expression) {
 //////////////////////////////////////////////////////////////////
 
 void EBPFParserState::emit(CodeBuilder* builder) {
-    StateTranslationVisitor visitor(this, builder);
+    StateTranslationVisitor visitor(this);
+    visitor.setBuilder(builder);
     state->apply(visitor);
 }
 
-EBPFParser::EBPFParser(const EBPFProgram* program,
-                       const IR::ParserBlock* block, const P4::TypeMap* typeMap) :
-        program(program), typeMap(typeMap), parserBlock(block), packet(nullptr),
-        headers(nullptr), headerType(nullptr) {}
+EBPFParser::EBPFParser(const EBPFProgram* program, const IR::ParserBlock* block,
+                       const P4::TypeMap* typeMap) :
+        program(program), typeMap(typeMap), parserBlock(block),
+        packet(nullptr), headers(nullptr), headerType(nullptr) {}
 
-void EBPFParser::emit(CodeBuilder *builder) {
+void EBPFParser::emit(CodeBuilder* builder) {
     for (auto s : states)
         s->emit(builder);
     builder->newline();
 
     // Create a synthetic reject state
     builder->emitIndent();
-    builder->appendFormat("%s: { return 1; }", IR::ParserState::reject.c_str());
+    builder->appendFormat("%s: { return %s; }",
+                          IR::ParserState::reject.c_str(),
+                          builder->target->abortReturnCode().c_str());
     builder->newline();
     builder->newline();
 }
@@ -347,7 +353,6 @@ bool EBPFParser::build() {
         return false;
     }
 
-    // TODO: more checks on these parameter types
     auto it = pl->parameters->begin();
     packet = *it; ++it;
     headers = *it;

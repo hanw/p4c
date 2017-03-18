@@ -44,6 +44,7 @@ limitations under the License.
 #include "simplifyParsers.h"
 #include "specialize.h"
 #include "inferArchitecture.h"
+#include "tableKeyNames.h"
 #include "parserControlFlow.h"
 
 namespace P4 {
@@ -103,6 +104,7 @@ FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program) {
         new BindTypeVariables(&typeMap),
         // Another round of constant folding, using type information.
         new ClearTypeMap(&typeMap),
+        new TableKeyNames(&refMap, &typeMap),
         new ConstantFolding(&refMap, &typeMap),
         new StrengthReduction(),
         new SimplifyControlFlow(&refMap, &typeMap),

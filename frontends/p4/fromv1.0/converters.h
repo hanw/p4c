@@ -1,5 +1,5 @@
 /*
-Copyright 2013-present Barefoot Networks, Inc. 
+Copyright 2013-present Barefoot Networks, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -44,6 +44,7 @@ class ExpressionConverter : public Transform {
     const IR::Node* postorder(IR::PathExpression* ref) override;
     const IR::Node* postorder(IR::ConcreteHeaderRef* nhr) override;
     const IR::Node* postorder(IR::HeaderStackItemRef* ref) override;
+    const IR::Node* postorder(IR::GlobalRef *gr) override;
     const IR::Expression* convert(const IR::Node* node) {
         auto result = node->apply(*this);
         return result->to<IR::Expression>();

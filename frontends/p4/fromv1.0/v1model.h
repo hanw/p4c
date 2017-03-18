@@ -89,15 +89,21 @@ struct Checksum16_Model : public ::Model::Extern_Model {
 };
 
 struct ActionProfile_Model : public ::Model::Extern_Model {
-    ActionProfile_Model() : Extern_Model("action_profile"), sizeType(IR::Type_Bits::get(32)) {}
+    ActionProfile_Model() : Extern_Model("action_profile"),
+                            sizeType(IR::Type_Bits::get(32)), sizeParam("size") {}
     const IR::Type* sizeType;
+    ::Model::Elem sizeParam;
 };
 
 struct ActionSelector_Model : public ::Model::Extern_Model {
     ActionSelector_Model() : Extern_Model("action_selector"),
-                             sizeType(IR::Type_Bits::get(32)), widthType(IR::Type_Bits::get(32)) {}
+                             sizeType(IR::Type_Bits::get(32)), sizeParam("size"),
+                             algorithmParam("algorithm"),
+                             widthType(IR::Type_Bits::get(32)) {}
     const IR::Type* sizeType;
+    ::Model::Elem sizeParam;
     const IR::Type* widthType;
+    ::Model::Elem algorithmParam;
 };
 
 struct Random_Model : public ::Model::Elem {

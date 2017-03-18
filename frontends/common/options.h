@@ -37,6 +37,7 @@ class CompilerOptions : public Util::Options {
 
  public:
     CompilerOptions();
+    std::vector<const char*>* process(int argc, char* const argv[]);
 
     enum class FrontendVersion {
         P4_14,
@@ -59,12 +60,20 @@ class CompilerOptions : public Util::Options {
     cstring prettyPrintFile = nullptr;
     // file to output to
     cstring outputFile = nullptr;
+    // Compiler version.
+    cstring compilerVersion;
 
     // Dump a JSON representation of the IR in the file
     cstring dumpJsonFile = nullptr;
 
     // Dump and undump the IR tree
     bool debugJson = false;
+
+    // Write a P4Runtime control plane API description to the specified file.
+    cstring p4RuntimeFile = nullptr;
+
+    // If true, write out the P4Runtime API description as human-readable JSON.
+    bool p4RuntimeAsJson = false;
 
     // Compiler target architecture
     cstring target = nullptr;

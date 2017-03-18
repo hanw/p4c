@@ -49,7 +49,7 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_2") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
     @name("_drop") action _drop_0() {
         mark_to_drop();
@@ -66,7 +66,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
             @default_only NoAction_0();
         }
         key = {
-            standard_metadata.instance_type: exact;
+            standard_metadata.instance_type: exact @name("standard_metadata.instance_type") ;
         }
         size = 16;
         default_action = NoAction_0();
@@ -81,7 +81,7 @@ struct tuple_0 {
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_3") action NoAction_1() {
+    @name("NoAction") action NoAction_1() {
     }
     @name("do_copy_to_cpu") action do_copy_to_cpu_0() {
         clone3<tuple_0>(CloneType.I2E, 32w250, { standard_metadata });

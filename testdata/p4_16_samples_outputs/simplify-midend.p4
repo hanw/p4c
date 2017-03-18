@@ -4,13 +4,13 @@ control c(out bool x) {
     bool tmp_2;
     bool tmp_3;
     bool tmp_4;
-    @name("NoAction_1") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
-    @name("NoAction_2") action NoAction_3() {
+    @name("NoAction") action NoAction_3() {
     }
     @name("t1") table t1() {
         key = {
-            x: exact;
+            x: exact @name("x") ;
         }
         actions = {
             NoAction_0();
@@ -19,7 +19,7 @@ control c(out bool x) {
     }
     @name("t2") table t2() {
         key = {
-            x: exact;
+            x: exact @name("x") ;
         }
         actions = {
             NoAction_3();

@@ -17,7 +17,6 @@ limitations under the License.
 #include <core.p4>
 
 control c(out bool x) {
-    bit<32> x;
     table t1 {
         key = { x : exact; }
         actions = { NoAction; }

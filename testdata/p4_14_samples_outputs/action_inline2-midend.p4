@@ -27,18 +27,9 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    bit<8> dest;
-    bit<8> dest_3;
-    bit<8> dest_4;
-    @name("NoAction_1") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
     @name("setb1") action setb1_0(bit<9> port) {
-        dest = hdr.data.b1;
-        dest_3 = hdr.data.b1;
-        dest_4 = hdr.data.b1;
-        dest_4 = hdr.data.b2;
-        dest_3 = hdr.data.b2;
-        dest = hdr.data.b2;
         hdr.data.b1 = hdr.data.b2;
         standard_metadata.egress_spec = port;
     }
@@ -51,7 +42,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_0();
         }
         key = {
-            hdr.data.f1: ternary;
+            hdr.data.f1: ternary @name("hdr.data.f1") ;
         }
         default_action = NoAction_0();
     }

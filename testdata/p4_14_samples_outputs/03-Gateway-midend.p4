@@ -44,7 +44,7 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_2") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
     @name("nop") action nop_0() {
     }
@@ -54,7 +54,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
             @default_only NoAction_0();
         }
         key = {
-            hdr.ethernet.srcAddr: exact;
+            hdr.ethernet.srcAddr: exact @name("hdr.ethernet.srcAddr") ;
         }
         default_action = NoAction_0();
     }
@@ -64,13 +64,13 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_3") action NoAction_1() {
+    @name("NoAction") action NoAction_1() {
     }
-    @name("NoAction_4") action NoAction_7() {
+    @name("NoAction") action NoAction_7() {
     }
-    @name("NoAction_5") action NoAction_8() {
+    @name("NoAction") action NoAction_8() {
     }
-    @name("NoAction_6") action NoAction_9() {
+    @name("NoAction") action NoAction_9() {
     }
     @name("nop") action nop_1() {
     }
@@ -107,7 +107,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_1();
         }
         key = {
-            hdr.vag.f1: exact;
+            hdr.vag.f1: exact @name("hdr.vag.f1") ;
         }
         size = 1024;
         default_action = NoAction_1();
@@ -119,7 +119,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_7();
         }
         key = {
-            hdr.vag.f2: exact;
+            hdr.vag.f2: exact @name("hdr.vag.f2") ;
         }
         size = 1024;
         default_action = NoAction_7();
@@ -131,7 +131,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_8();
         }
         key = {
-            hdr.vag.f3: exact;
+            hdr.vag.f3: exact @name("hdr.vag.f3") ;
         }
         size = 1024;
         default_action = NoAction_8();
@@ -143,7 +143,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_9();
         }
         key = {
-            hdr.vag.f4: exact;
+            hdr.vag.f4: exact @name("hdr.vag.f4") ;
         }
         size = 1024;
         default_action = NoAction_9();

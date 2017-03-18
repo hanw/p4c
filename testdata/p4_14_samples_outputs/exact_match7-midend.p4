@@ -32,7 +32,7 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_1") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
     @name("setb1") action setb1_0(bit<8> val) {
         hdr.data.b1 = val;
@@ -46,8 +46,8 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_0();
         }
         key = {
-            hdr.data.f1: exact;
-            hdr.data.f3: exact;
+            hdr.data.f1: exact @name("hdr.data.f1") ;
+            hdr.data.f3: exact @name("hdr.data.f3") ;
         }
         default_action = NoAction_0();
     }

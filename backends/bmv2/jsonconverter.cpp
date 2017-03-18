@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <algorithm>
+
 #include "jsonconverter.h"
 #include "lib/gmputil.h"
 #include "frontends/p4/coreLibrary.h"
@@ -103,7 +105,109 @@ class ErrorCodesVisitor : public Inspector {
     }
 };
 
-} // namespace
+// This pass makes sure that when several match tables share a selector, they use the same input for
+// the selection algorithm. This is because bmv2 considers that the selection key is part of the
+// action_selector while v1model.p4 considers that it belongs to the table match key definition.
+class SharedActionSelectorCheck : public Inspector {
+    JsonConverter* converter;
+    using Input = std::vector<const IR::Expression *>;
+    std::map<const IR::Declaration_Instance *, Input> selector_input_map{};
+
+  static bool checkSameKeyExpr(const IR::Expression* expr0, const IR::Expression* expr1) {
+      if (expr0->node_type_name() != expr1->node_type_name())
+          return false;
+      if (auto pe0 = expr0->to<IR::PathExpression>()) {
+          auto pe1 = expr1->to<IR::PathExpression>();
+          return pe0->path->name == pe1->path->name &&
+              pe0->path->absolute == pe1->path->absolute;
+      } else if (auto mem0 = expr0->to<IR::Member>()) {
+          auto mem1 = expr1->to<IR::Member>();
+          return checkSameKeyExpr(mem0->expr, mem1->expr) && mem0->member == mem1->member;
+      } else if (auto l0 = expr0->to<IR::Literal>()) {
+          auto l1 = expr1->to<IR::Literal>();
+          return *l0 == *l1;
+      } else if (auto ai0 = expr0->to<IR::ArrayIndex>()) {
+          auto ai1 = expr1->to<IR::ArrayIndex>();
+          return checkSameKeyExpr(ai0->left, ai1->left) && checkSameKeyExpr(ai0->right, ai1->right);
+      }
+      return false;
+  }
+
+ public:
+    explicit SharedActionSelectorCheck(JsonConverter* converter) : converter(converter)
+    { CHECK_NULL(converter); }
+
+    const Input &get_selector_input(const IR::Declaration_Instance* selector) const {
+        return selector_input_map.at(selector);
+    }
+
+    bool preorder(const IR::P4Table* table) override {
+        auto model = converter->model;
+        auto refMap = converter->refMap;
+        auto typeMap = converter->typeMap;
+
+        auto implementation = table->properties->getProperty(
+            model.tableAttributes.tableImplementation.name);
+        if (implementation == nullptr) return false;
+        if (!implementation->value->is<IR::ExpressionValue>()) {
+          ::error("%1%: expected expression for property", implementation);
+          return false;
+        }
+        auto propv = implementation->value->to<IR::ExpressionValue>();
+        if (!propv->expression->is<IR::PathExpression>()) return false;
+        auto pathe = propv->expression->to<IR::PathExpression>();
+        auto decl = refMap->getDeclaration(pathe->path, true);
+        if (!decl->is<IR::Declaration_Instance>()) {
+            ::error("%1%: expected a reference to an instance", pathe);
+            return false;
+        }
+        const auto &apname = decl->externalName();
+        auto dcltype = typeMap->getType(pathe, true);
+        if (!dcltype->is<IR::Type_Extern>()) {
+            ::error("%1%: unexpected type for implementation", dcltype);
+            return false;
+        }
+        auto type_extern_name = dcltype->to<IR::Type_Extern>()->name;
+        if (type_extern_name != model.tableImplementations.actionSelector.name)
+            return false;
+
+        auto key = table->getKey();
+        Input input;
+        for (auto ke : *key->keyElements) {
+            auto mt = refMap->getDeclaration(ke->matchType->path, true)->to<IR::Declaration_ID>();
+            BUG_CHECK(mt != nullptr, "%1%: could not find declaration", ke->matchType);
+            if (mt->name.name != model.selectorMatchType.name) continue;
+            input.push_back(ke->expression);
+        }
+        auto decl_instance = decl->to<IR::Declaration_Instance>();
+        auto it = selector_input_map.find(decl_instance);
+        if (it == selector_input_map.end()) {
+            selector_input_map[decl_instance] = input;
+            return false;
+        }
+
+        // returns true if inputs are the same, false otherwise
+        auto cmp_inputs = [](const Input &i1, const Input &i2) {
+            for (auto e1 : i1) {
+                auto cmp_e = [e1](const IR::Expression *e2) {
+                    return checkSameKeyExpr(e1, e2);
+                };
+                if (std::find_if(i2.begin(), i2.end(), cmp_e) == i2.end()) return false;
+            }
+            return true;
+        };
+
+        if (!cmp_inputs(it->second, input)) {
+            ::error(
+                 "Action selector '%1%' is used by multiple tables with different selector inputs",
+                 decl);
+        }
+
+        return false;
+    }
+};
+
+}  // namespace
 
 static cstring stringRepr(mpz_class value, unsigned bytes = 0) {
     cstring sign = "";
@@ -352,7 +456,17 @@ class ExpressionConverter : public Inspector {
         // TODO: deal with references that return bool
         auto result = new Util::JsonObject();
 
-        // handle errors
+        auto parentType = converter->typeMap->getType(expression->expr, true);
+        cstring fieldName = expression->member.name;
+        if (parentType->is<IR::Type_StructLike>()) {
+            auto st = parentType->to<IR::Type_StructLike>();
+            auto field = st->getField(expression->member);
+            if (field != nullptr)
+                // field could be a method call, i.e., isValid.
+                fieldName = field->externalName();
+        }
+
+        // handle the 'error' type
         {
             auto type = converter->typeMap->getType(expression, true);
             if (type->is<IR::Type_Error>()) {
@@ -411,7 +525,7 @@ class ExpressionConverter : public Inspector {
                         e->append(l->to<Util::JsonObject>()->get("value"));
                     else
                         e->append(l);
-                    e->append(expression->member);
+                    e->append(fieldName);
                     done = true;
                 }
             } else if (expression->expr->is<IR::PathExpression>()) {
@@ -441,8 +555,8 @@ class ExpressionConverter : public Inspector {
                 if (l->is<Util::JsonObject>()) {
                     auto lv = l->to<Util::JsonObject>()->get("value");
                     if (lv->is<Util::JsonArray>()) {
-                        // nested struct reference [ ["m", "f"], "x" ] =>
-                        // [ "m", "f.x" ]
+                        // TODO: is this case still necessary after eliminating nested structs?
+                        // nested struct reference [ ["m", "f"], "x" ] => [ "m", "f.x" ]
                         auto array = lv->to<Util::JsonArray>();
                         BUG_CHECK(array->size() == 2, "expected 2 elements");
                         auto first = array->at(0);
@@ -450,19 +564,18 @@ class ExpressionConverter : public Inspector {
                         BUG_CHECK(second->is<Util::JsonValue>(),
                                   "expected a value");
                         e->append(first);
-                        cstring nestedField =
-                            second->to<Util::JsonValue>()->getString();
-                        nestedField += "." + expression->member.name;
+                        cstring nestedField = second->to<Util::JsonValue>()->getString();
+                        nestedField += "." + fieldName;
                         e->append(nestedField);
                     } else if (lv->is<Util::JsonValue>()) {
                         e->append(lv);
-                        e->append(expression->member.name);
+                        e->append(fieldName);
                     } else {
                         BUG("%1%: Unexpected json", lv);
                     }
                 } else {
                     e->append(l);
-                    e->append(expression->member.name);
+                    e->append(fieldName);
                 }
             }
         }
@@ -697,16 +810,21 @@ class ExpressionConverter : public Inspector {
             result = obj;
         }
 
-        // This is weird, but that's how it is: expressions must
-        // be wrapped in another outer object.
+        std::set<cstring> to_wrap({"expression", "stack_field"});
+
+        // This is weird, but that's how it is: expression and stack_field must be wrapped in
+        // another outer object. In a future version of the bmv2 JSON, this will not be needed
+        // anymore as expressions will be treated in a more uniform way.
         if (wrap && result->is<Util::JsonObject>()) {
             auto to = result->to<Util::JsonObject>()->get("type");
-            if (to != nullptr && to->to<Util::JsonValue>() != nullptr &&
-                (*to->to<Util::JsonValue>()) == "expression") {
-                auto rwrap = new Util::JsonObject();
-                rwrap->emplace("type", "expression");
-                rwrap->emplace("value", result);
-                result = rwrap;
+            if (to != nullptr && to->to<Util::JsonValue>() != nullptr) {
+                auto jv = *to->to<Util::JsonValue>();
+                if (jv.isString() && to_wrap.find(jv.getString()) != to_wrap.end()) {
+                    auto rwrap = new Util::JsonObject();
+                    rwrap->emplace("type", "expression");
+                    rwrap->emplace("value", result);
+                    result = rwrap;
+                }
             }
         }
         return result;
@@ -1074,79 +1192,110 @@ bool JsonConverter::handleTableImplementation(const IR::Property* implementation
         return true;
     }
 
-    cstring name = implementation->externalName(refMap->newName("action_profile"));
-    table->emplace("action_profile", name);
     if (!implementation->value->is<IR::ExpressionValue>()) {
         ::error("%1%: expected expression for property", implementation);
         return false;
     }
     auto propv = implementation->value->to<IR::ExpressionValue>();
-    if (!propv->expression->is<IR::ConstructorCallExpression>()) {
-        ::error("%1%: expected constructor call for property", implementation);
-        return false;
-    }
-    auto cc = P4::ConstructorCall::resolve(
-            propv->expression->to<IR::ConstructorCallExpression>(), refMap, typeMap);
-    if (!cc->is<P4::ExternConstructorCall>()) {
-        ::error("%1%: expected extern object for property", implementation);
-        return false;
-    }
-
-    auto action_profile = new Util::JsonObject();
-    action_profiles->append(action_profile);
-    action_profile->emplace("name", name);
-    action_profile->emplace("id", nextId("action_profiles"));
 
     bool isSimpleTable = true;
-    auto ecc = cc->to<P4::ExternConstructorCall>();
+    Util::JsonObject* action_profile;
+    cstring apname;
 
-    auto add_size = [&action_profile, &ecc](size_t arg_index) {
-      auto size_expr = ecc->cce->arguments->at(arg_index);
-      int size;
-      if (!size_expr->is<IR::Constant>()) {
-        ::error("%1% must be a constant", size_expr);
-        size = 0;
-      } else {
-        size = size_expr->to<IR::Constant>()->asInt();
-      }
-      action_profile->emplace("max_size", size);
-    };
+    if (propv->expression->is<IR::ConstructorCallExpression>()) {
+        auto cc = P4::ConstructorCall::resolve(
+            propv->expression->to<IR::ConstructorCallExpression>(), refMap, typeMap);
+        if (!cc->is<P4::ExternConstructorCall>()) {
+            ::error("%1%: expected extern object for property", implementation);
+            return false;
+        }
+        auto ecc = cc->to<P4::ExternConstructorCall>();
+        auto implementationType = ecc->type;
+        auto arguments = ecc->cce->arguments;
+        apname = implementation->externalName(refMap->newName("action_profile"));
+        action_profile = new Util::JsonObject();
+        action_profiles->append(action_profile);
+        action_profile->emplace("name", apname);
+        action_profile->emplace("id", nextId("action_profiles"));
 
-    if (ecc->type->name == model.tableImplementations.actionSelector.name) {
-        BUG_CHECK(ecc->cce->arguments->size() == 3,
-                  "%1%: expected 3 arguments", cc->cce);
-        isSimpleTable = false;
-        auto selector = new Util::JsonObject();
-        table->emplace("type", "indirect_ws");
-        action_profile->emplace("selector", selector);
-        add_size(1);
-        auto hash = ecc->cce->arguments->at(0);
-        auto ei = P4::EnumInstance::resolve(hash, typeMap);
-        if (ei == nullptr) {
-            ::error("%1%: must be a constant on this target", hash);
+        auto add_size = [&action_profile, &arguments](size_t arg_index) {
+            auto size_expr = arguments->at(arg_index);
+            int size;
+            if (!size_expr->is<IR::Constant>()) {
+                ::error("%1% must be a constant", size_expr);
+                size = 0;
+            } else {
+                size = size_expr->to<IR::Constant>()->asInt();
+            }
+            action_profile->emplace("max_size", size);
+        };
+
+        if (implementationType->name
+            == model.tableImplementations.actionSelector.name) {
+            BUG_CHECK(arguments->size() == 3, "%1%: expected 3 arguments", arguments);
+            isSimpleTable = false;
+            auto selector = new Util::JsonObject();
+            table->emplace("type", "indirect_ws");
+            action_profile->emplace("selector", selector);
+            add_size(1);
+            auto hash = arguments->at(0);
+            auto ei = P4::EnumInstance::resolve(hash, typeMap);
+            if (ei == nullptr) {
+                ::error("%1%: must be a constant on this target", hash);
+            } else {
+                cstring algo = convertHashAlgorithm(ei->name);
+                selector->emplace("algo", algo);
+            }
+            auto input = mkArrayField(selector, "input");
+            for (auto ke : *key->keyElements) {
+                auto mt = refMap->getDeclaration(ke->matchType->path, true)
+                        ->to<IR::Declaration_ID>();
+                BUG_CHECK(mt != nullptr, "%1%: could not find declaration", ke->matchType);
+                if (mt->name.name != model.selectorMatchType.name)
+                    continue;
+
+                auto expr = ke->expression;
+                auto jk = conv->convert(expr);
+                input->append(jk);
+            }
+        } else if (implementationType->name
+                   == model.tableImplementations.actionProfile.name) {
+            isSimpleTable = false;
+            table->emplace("type", "indirect");
+            add_size(0);
         } else {
-            cstring algo = convertHashAlgorithm(ei->name);
-            selector->emplace("algo", algo);
-        }
-        auto input = mkArrayField(selector, "input");
-        for (auto ke : *key->keyElements) {
-            auto decl = refMap->getDeclaration(ke->matchType->path, true);
-            auto mt = decl->to<IR::Declaration_ID>();
-            BUG_CHECK(mt != nullptr, "%1%: could not find declaration", ke->matchType);
-            if (mt->name.name != model.selectorMatchType.name)
-                continue;
-
-            auto expr = ke->expression;
-            auto jk = conv->convert(expr);
-            input->append(jk);
-        }
-    } else if (ecc->type->name == model.tableImplementations.actionProfile.name) {
-        isSimpleTable = false;
-        table->emplace("type", "indirect");
-        add_size(0);
-    } else {
             ::error("%1%: unexpected value for property", propv);
+        }
+    } else if (propv->expression->is<IR::PathExpression>()) {
+        auto pathe = propv->expression->to<IR::PathExpression>();
+        auto decl = refMap->getDeclaration(pathe->path, true);
+        if (!decl->is<IR::Declaration_Instance>()) {
+            ::error("%1%: expected a reference to an instance", pathe);
+            return false;
+        }
+        apname = decl->externalName();
+        auto dcltype = typeMap->getType(pathe, true);
+        if (!dcltype->is<IR::Type_Extern>()) {
+            ::error("%1%: unexpected type for implementation", dcltype);
+            return false;
+        }
+        auto type_extern_name = dcltype->to<IR::Type_Extern>()->name;
+        if (type_extern_name == model.tableImplementations.actionProfile.name) {
+            table->emplace("type", "indirect");
+        } else if (type_extern_name
+                   == model.tableImplementations.actionSelector.name) {
+            table->emplace("type", "indirect_ws");
+        } else {
+            ::error("%1%: unexpected type for implementation", dcltype);
+            return false;
+        }
+        isSimpleTable = false;
+    } else {
+        ::error("%1%: unexpected value for property", propv);
+        return false;
     }
+
+    table->emplace("action_profile", apname);
     return isSimpleTable;
 }
 
@@ -1515,13 +1664,20 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
     auto action_profiles = mkArrayField(result, "action_profiles");
     auto conditionals = mkArrayField(result, "conditionals");
 
+    SharedActionSelectorCheck selector_check(this);
+    cont->apply(selector_check);
+
     for (auto node : cfg->allNodes) {
         if (node->is<CFG::TableNode>()) {
             auto j = convertTable(node->to<CFG::TableNode>(), counters,
                                   action_profiles);
+            if (::errorCount() > 0)
+                return nullptr;
             tables->append(j);
         } else if (node->is<CFG::IfNode>()) {
             auto j = convertIf(node->to<CFG::IfNode>(), cont->name);
+            if (::errorCount() > 0)
+                return nullptr;
             conditionals->append(j);
         }
     }
@@ -1779,10 +1935,12 @@ void JsonConverter::addMetaInformation() {
   auto meta = new Util::JsonObject();
 
   static constexpr int version_major = 2;
-  static constexpr int version_minor = 4;
+  static constexpr int version_minor = 6;
   auto version = mkArrayField(meta, "version");
   version->append(version_major);
   version->append(version_minor);
+
+  meta->emplace("compiler", "https://github.com/p4lang/p4c");
 
   toplevel.emplace("__meta__", meta);
 }
@@ -1804,7 +1962,6 @@ const IR::IDeclaration *JsonConverter::resolveParameter(
         auto cct = typeMap->getType(cc->constructedType);
 
         auto iapply = cct->to<IR::Type_Type>()->type->to<IR::IApply>();
-//        auto t = typeMap->equivalent(enclosingBlock-, iapply);
         if (enclosingBlock == iapply) {
             break;
         }
@@ -1921,6 +2078,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
         return;
     }
 
+// TODO(pierce): lambda that returns bool if a certain block's "apply" is called
 //    auto isCalled [](const IR::) {
 
     auto packageParamIt = package->constructorParams->parameters->begin();

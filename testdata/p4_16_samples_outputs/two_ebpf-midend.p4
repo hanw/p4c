@@ -46,14 +46,14 @@ parser prs(packet_in p, out Headers_t headers) {
 control pipe(inout Headers_t headers, out bool pass) {
     IPv4Address address_0;
     bool hasReturned_0;
-    @name("NoAction_1") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
     @name("Reject") action Reject_0() {
         pass = false;
     }
     @name("Check_ip") table Check_ip() {
         key = {
-            address_0: exact;
+            address_0: exact @name("address") ;
         }
         actions = {
             Reject_0();

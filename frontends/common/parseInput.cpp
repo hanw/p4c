@@ -30,6 +30,7 @@ const IR::P4Program* parseP4File(CompilerOptions& options) {
     bool compiling10 = options.isv1();
     if (compiling10) {
         P4V1::Converter converter;
+        converter.addDebugHook(options.getDebugHook());
         converter.loadModel();
         // Model is loaded before parsing the input file.
         // In this way the SourceInfo in the model comes first.
@@ -38,7 +39,7 @@ const IR::P4Program* parseP4File(CompilerOptions& options) {
             return nullptr;
         if (Log::verbose())
             std::cerr << "Converting to P4-16" << std::endl;
-        converter.visit(v1);
+        v1 = v1->apply(converter);
         if (v1 != nullptr) {
             result = v1->to<IR::P4Program>();
             if (result == nullptr) {

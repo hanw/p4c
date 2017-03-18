@@ -15,9 +15,9 @@ parser ParserI(packet_in pk, out H hdr, inout M meta, inout standard_metadata_t 
 }
 
 control IngressI(inout H hdr, inout M meta, inout standard_metadata_t smeta) {
-    @name("NoAction_1") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
-    @name("NoAction_2") action NoAction_3() {
+    @name("NoAction") action NoAction_3() {
     }
     @name("drop") action drop_0() {
         smeta.drop = 1w1;
@@ -37,7 +37,7 @@ control IngressI(inout H hdr, inout M meta, inout standard_metadata_t smeta) {
     }
     @name("indirect_ws") table indirect_ws() {
         key = {
-            meta.hash1: selector;
+            meta.hash1: selector @name("meta.hash1") ;
         }
         actions = {
             drop_3();

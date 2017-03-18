@@ -60,21 +60,21 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_1") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
-    @name("NoAction_2") action NoAction_9() {
+    @name("NoAction") action NoAction_9() {
     }
-    @name("NoAction_3") action NoAction_10() {
+    @name("NoAction") action NoAction_10() {
     }
-    @name("NoAction_4") action NoAction_11() {
+    @name("NoAction") action NoAction_11() {
     }
-    @name("NoAction_5") action NoAction_12() {
+    @name("NoAction") action NoAction_12() {
     }
-    @name("NoAction_6") action NoAction_13() {
+    @name("NoAction") action NoAction_13() {
     }
-    @name("NoAction_7") action NoAction_14() {
+    @name("NoAction") action NoAction_14() {
     }
-    @name("NoAction_8") action NoAction_15() {
+    @name("NoAction") action NoAction_15() {
     }
     @name("set1") action set1_0(bit<32> v1, bit<32> v2, bit<32> v3, bit<32> v4, bit<32> v5) {
         hdr.data.f1_1 = v1;
@@ -155,7 +155,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_0();
         }
         key = {
-            hdr.data.f1_1: exact;
+            hdr.data.f1_1: exact @name("hdr.data.f1_1") ;
         }
         default_action = NoAction_0();
     }
@@ -166,7 +166,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_9();
         }
         key = {
-            hdr.data.f2_1: exact;
+            hdr.data.f2_1: exact @name("hdr.data.f2_1") ;
         }
         default_action = NoAction_9();
     }
@@ -177,7 +177,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_10();
         }
         key = {
-            hdr.data.f3_1: exact;
+            hdr.data.f3_1: exact @name("hdr.data.f3_1") ;
         }
         default_action = NoAction_10();
     }
@@ -188,7 +188,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_11();
         }
         key = {
-            hdr.data.f4_1: exact;
+            hdr.data.f4_1: exact @name("hdr.data.f4_1") ;
         }
         default_action = NoAction_11();
     }
@@ -199,7 +199,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_12();
         }
         key = {
-            hdr.data.f5_1: exact;
+            hdr.data.f5_1: exact @name("hdr.data.f5_1") ;
         }
         default_action = NoAction_12();
     }
@@ -210,7 +210,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_13();
         }
         key = {
-            hdr.data.f6_1: exact;
+            hdr.data.f6_1: exact @name("hdr.data.f6_1") ;
         }
         default_action = NoAction_13();
     }
@@ -221,7 +221,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_14();
         }
         key = {
-            hdr.data.f7_1: exact;
+            hdr.data.f7_1: exact @name("hdr.data.f7_1") ;
         }
         default_action = NoAction_14();
     }
@@ -232,7 +232,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_15();
         }
         key = {
-            hdr.data.f8_1: exact;
+            hdr.data.f8_1: exact @name("hdr.data.f8_1") ;
         }
         default_action = NoAction_15();
     }

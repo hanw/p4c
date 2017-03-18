@@ -406,6 +406,8 @@ const IR::Type* TypeInference::canonicalize(const IR::Type* type) {
     } else if (type->is<IR::P4Control>()) {
         auto cont = type->to<IR::P4Control>();
         auto ctype0 = getTypeType(cont->type);
+        if (ctype0 == nullptr)
+            return nullptr;
         auto ctype = ctype0->to<IR::Type_Control>();
         auto pl = canonicalizeParameters(cont->constructorParams);
         if (pl == nullptr)
@@ -417,6 +419,8 @@ const IR::Type* TypeInference::canonicalize(const IR::Type* type) {
     } else if (type->is<IR::P4Parser>()) {
         auto p = type->to<IR::P4Parser>();
         auto ctype0 = getTypeType(p->type);
+        if (ctype0 == nullptr)
+            return nullptr;
         auto ctype = ctype0->to<IR::Type_Parser>();
         auto pl = canonicalizeParameters(p->constructorParams);
         if (pl == nullptr)
@@ -429,10 +433,7 @@ const IR::Type* TypeInference::canonicalize(const IR::Type* type) {
         auto te = type->to<IR::Type_Extern>();
         bool changes = false;
         auto methods = new IR::Vector<IR::Method>();
-        bool constructorFound = false;
         for (auto method : *te->methods) {
-            if (method->name == te->name)
-                constructorFound = true;
             auto fpType = canonicalize(method->type);
             if (fpType == nullptr)
                 return nullptr;
@@ -869,21 +870,18 @@ const IR::Node* TypeInference::preorder(IR::Declaration_Instance* decl) {
         if (args != decl->arguments)
             decl->arguments = args;
     } else if (simpleType->is<IR::IContainer>()) {
-        if (decl->initializer != nullptr)
+        if (decl->initializer != nullptr) {
             typeError("%1%: initializers only allowed for extern instances", decl->initializer);
-        auto conttype = containerInstantiation(decl, decl->arguments, simpleType->to<IR::IContainer>());
-        if (conttype == nullptr) {
+        }
+        auto type = containerInstantiation(decl, decl->arguments, simpleType->to<IR::IContainer>());
+        if (type == nullptr) {
             prune();
             return decl;
         }
-        setType(decl, conttype);
-        setType(orig, conttype);
+        setType(decl, type);
+        setType(orig, type);
     } else {
         typeError("%1%: cannot allocate objects of type %2%", decl, type);
-    }
-
-    for (auto a : *decl->arguments) {
-        printf("");
     }
 
     prune();
@@ -972,7 +970,7 @@ const IR::Type* TypeInference::setTypeType(const IR::Type* type, bool learn) {
     if (canon != nullptr) {
         // Learn the new type
         if (canon != orig && learn) {
-            TypeInference tc(refMap, typeMap, true);
+            TypeInference tc(refMap, typeMap, readOnly);
             (void)canon->apply(tc);
         }
         auto tt = new IR::Type_Type(canon);
@@ -1131,8 +1129,6 @@ const IR::Node* TypeInference::postorder(IR::Type_Stack* type) {
     auto canon = setTypeType(type);
     if (canon == nullptr)
         return type;
-    if (!type->sizeKnown())
-        typeError("%1%: Size of header stack type should be a constant", type);
 
     auto etype = canon->to<IR::Type_Stack>()->elementType;
     if (etype == nullptr)
@@ -2563,6 +2559,8 @@ const IR::Node* TypeInference::postorder(IR::SelectCase* sc) {
 
 const IR::Node* TypeInference::postorder(IR::KeyElement* elem) {
     auto ktype = getType(elem->expression);
+    if (ktype == nullptr)
+        return elem;
     if (!ktype->is<IR::Type_Bits>() && !ktype->is<IR::Type_Enum>() &&
         !ktype->is<IR::Type_Error>() && !ktype->is<IR::Type_Boolean>())
         typeError("Key %1% field type must be a scalar type; it cannot be %2%",
@@ -2632,8 +2630,10 @@ const IR::Node* TypeInference::postorder(IR::Property* prop) {
             auto actionListCall = elem->expression->to<IR::MethodCallExpression>();
             CHECK_NULL(actionListCall);
 
-            if (actionListCall->arguments->size() > default_call->arguments->size())
+            if (actionListCall->arguments->size() > default_call->arguments->size()) {
                 typeError("%1%: not enough arguments", default_call);
+                return prop;
+            }
 
             SameExpression se(refMap, typeMap);
             for (unsigned i=0; i < actionListCall->arguments->size(); i++) {

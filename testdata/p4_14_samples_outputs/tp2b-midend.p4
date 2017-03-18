@@ -28,11 +28,11 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_2") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
-    @name("NoAction_3") action NoAction_1() {
+    @name("NoAction") action NoAction_1() {
     }
-    @name("NoAction_4") action NoAction_9() {
+    @name("NoAction") action NoAction_9() {
     }
     @name("setf1") action setf1_0(bit<32> val) {
         hdr.data.f1 = val;
@@ -56,7 +56,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
             @default_only NoAction_0();
         }
         key = {
-            hdr.data.f2: ternary;
+            hdr.data.f2: ternary @name("hdr.data.f2") ;
         }
         default_action = NoAction_0();
     }
@@ -67,7 +67,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
             @default_only NoAction_1();
         }
         key = {
-            hdr.data.f3: ternary;
+            hdr.data.f3: ternary @name("hdr.data.f3") ;
         }
         default_action = NoAction_1();
     }
@@ -78,7 +78,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
             @default_only NoAction_9();
         }
         key = {
-            hdr.data.f3: ternary;
+            hdr.data.f3: ternary @name("hdr.data.f3") ;
         }
         default_action = NoAction_9();
     }
@@ -92,13 +92,13 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_5") action NoAction_10() {
+    @name("NoAction") action NoAction_10() {
     }
-    @name("NoAction_6") action NoAction_11() {
+    @name("NoAction") action NoAction_11() {
     }
-    @name("NoAction_7") action NoAction_12() {
+    @name("NoAction") action NoAction_12() {
     }
-    @name("NoAction_8") action NoAction_13() {
+    @name("NoAction") action NoAction_13() {
     }
     @name("setb1") action setb1_1(bit<32> val) {
         hdr.data.b1 = val;
@@ -127,7 +127,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_10();
         }
         key = {
-            hdr.data.f1: ternary;
+            hdr.data.f1: ternary @name("hdr.data.f1") ;
         }
         default_action = NoAction_10();
     }
@@ -138,7 +138,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_11();
         }
         key = {
-            hdr.data.b1: ternary;
+            hdr.data.b1: ternary @name("hdr.data.b1") ;
         }
         default_action = NoAction_11();
     }
@@ -149,7 +149,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_12();
         }
         key = {
-            hdr.data.f2: ternary;
+            hdr.data.f2: ternary @name("hdr.data.f2") ;
         }
         default_action = NoAction_12();
     }
@@ -160,7 +160,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_13();
         }
         key = {
-            hdr.data.b2: ternary;
+            hdr.data.b2: ternary @name("hdr.data.b2") ;
         }
         default_action = NoAction_13();
     }

@@ -18,7 +18,7 @@
 from __future__ import print_function
 from subprocess import Popen
 from threading import Thread
-import glob
+from glob import glob
 import json
 import sys
 import re
@@ -83,6 +83,25 @@ def reportError(*message):
 class Local(object):
     # object to hold local vars accessable to nested functions
     pass
+
+def FindExe(dirname, exe):
+    dir = os.getcwd()
+    while len(dir) > 1:
+        if os.path.isdir(os.path.join(dir, dirname)):
+            rv = None
+            rv_time = 0
+            for dName, sdName, fList in os.walk(os.path.join(dir, dirname)):
+                if exe in fList:
+                    n=os.path.join(dName, exe)
+                    if os.path.isfile(n) and os.access(n, os.X_OK):
+                        n_time = os.path.getmtime(n)
+                        if n_time > rv_time:
+                            rv = n
+                            rv_time = n_time
+            if rv is not None:
+                return rv
+        dir = os.path.dirname(dir)
+    return exe
 
 def run_timeout(options, args, timeout, stderr):
     if options.verbose:
@@ -363,13 +382,18 @@ class RunBMV2(object):
             interface, data = nextWord(cmd)
             data = ''.join(data.split())
             time.sleep(self.packetDelay)
-            self.interfaces[interface]._write_packet(HexToByte(data))
+            try:
+                self.interfaces[interface]._write_packet(HexToByte(data))
+            except ValueError:
+                reportError("Invalid packet data", data)
+                return FAILURE
             self.interfaces[interface].flush()
             self.packetDelay = 0
         elif first == "expect":
             interface, data = nextWord(cmd)
             data = ''.join(data.split())
-            self.expected.setdefault(interface, []).append(data)
+            if data != '':
+                self.expected.setdefault(interface, []).append(data)
         else:
             if self.options.verbose:
                 print("ignoring stf command:", first, cmd)
@@ -468,7 +492,7 @@ class RunBMV2(object):
         thriftPort = str(9090 + rand)
 
         try:
-            runswitch = ["psa", "--log-file", self.switchLogFile, "--log-flush",
+            runswitch = [ "psa", "--log-file", self.switchLogFile, "--log-flush",
                          "--use-files", str(wait), "--thrift-port", thriftPort,
                          "--device-id", str(rand)] + self.interfaceArgs() + ["../" + self.jsonfile]
             if self.options.verbose:
@@ -547,7 +571,7 @@ class RunBMV2(object):
         if self.options.verbose:
             print("Comparing outputs")
         direction = "out"
-        for file in glob.glob(self.filename('*', direction)):
+        for file in glob(self.filename('*', direction)):
             interface = self.interface_of_filename(file)
             if os.stat(file).st_size == 0:
                 packets = []

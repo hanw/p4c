@@ -85,9 +85,9 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_1") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
-    @name("NoAction_2") action NoAction_3() {
+    @name("NoAction") action NoAction_3() {
     }
     @name("do_setup") action do_setup_0(bit<9> idx, bit<1> routed) {
         meta.egress_metadata.mac_da = hdr.ethernet.dstAddr;
@@ -100,7 +100,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_0();
         }
         key = {
-            hdr.ethernet.isValid(): exact;
+            hdr.ethernet.isValid(): exact @name("hdr.ethernet.isValid()") ;
         }
         default_action = NoAction_0();
     }
@@ -136,9 +136,9 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_3();
         }
         key = {
-            meta.egress_metadata.smac_idx: exact;
-            hdr.ipv4.isValid()           : exact;
-            hdr.ipv6.isValid()           : exact;
+            meta.egress_metadata.smac_idx: exact @name("meta.egress_metadata.smac_idx") ;
+            hdr.ipv4.isValid()           : exact @name("hdr.ipv4.isValid()") ;
+            hdr.ipv6.isValid()           : exact @name("hdr.ipv6.isValid()") ;
         }
         size = 512;
         default_action = NoAction_3();

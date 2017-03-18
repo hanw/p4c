@@ -34,7 +34,7 @@ class Options(object):
     def __init__(self):
         self.binary = ""                # this program's name
         self.cleanupTmp = True          # if false do not remote tmp folder created
-        self.p4Filename = ""            # file that is being compiled
+        self.p4filename = ""            # file that is being compiled
         self.compilerSrcDir = ""        # path to compiler source tree
         self.verbose = False
         self.replace = False            # replace previous outputs
@@ -57,6 +57,12 @@ def usage(options):
 def isError(p4filename):
     # True if the filename represents a p4 program that should fail
     return "_errors" in p4filename
+
+def ignoreStderr(options):
+    for line in open(options.p4filename):
+        if "P4TEST_IGNORE_STDERR" in line:
+            return True
+    return False
 
 class Local(object):
     # object to hold local vars accessable to nested functions
@@ -100,40 +106,14 @@ def compare_files(options, produced, expected):
         return SUCCESS
 
     if options.verbose:
-        print("Comparing", produced, "and", expected)
+        print("Comparing", expected, "and", produced)
 
-    # unfortunately difflib has no option to compare ignoring whitespace,
-    # so we invoke diff for this purpose
-    cmd = "diff -B -q -w -I \"#include\" " + produced + " " + expected
+    cmd = "diff -B -u -w -I \"#include\" " + expected + " " + produced + " >&2"
     exitcode = subprocess.call(cmd, shell=True);
     if exitcode == 0:
         return SUCCESS
-
-    # if the files differ print the differences
-    diff = difflib.Differ().compare(open(produced).readlines(), open(expected).readlines())
-    result = SUCCESS
-
-    marker = re.compile("\?[ \t\+]*");
-    ignoreNextMarker = False
-    message = ""
-    for l in diff:
-        if l.startswith("- #include") or l.startswith("+ #include"):
-            # These can differ because the paths change
-            ignoreNextMarker = True
-            continue
-        if ignoreNextMarker:
-            ignoreNextMarker = False
-            if marker.match(l):
-                continue
-        if l[0] == ' ': continue
-        result = FAILURE
-        message += l
-
-    if message is not "":
-        print("Files ", produced, " and ", expected, " differ:", file=sys.stderr)
-        print("'", message, "'", file=sys.stderr)
-
-    return result
+    else:
+        return FAILURE
 
 def recompile_file(options, produced, mustBeIdentical):
     # Compile the generated file a second time
@@ -160,7 +140,7 @@ def check_generated_files(options, tmpdir, expecteddir):
             shutil.copy2(produced, expected)
         else:
             result = compare_files(options, produced, expected)
-            if result != SUCCESS and file[-7:] != "-stderr":
+            if result != SUCCESS and (file[-7:] != "-stderr" or not ignoreStderr(options)):
                 return result
     return SUCCESS
 
@@ -178,6 +158,10 @@ def process_file(options, argv):
         expected_dirname = dirname.replace("_samples/", "_samples_outputs/", 1)
     elif "_errors/" in dirname:
         expected_dirname = dirname.replace("_errors/", "_errors_outputs/", 1)
+    elif "p4_14/" in dirname:
+        expected_dirname = dirname.replace("p4_14/", "p4_14_outputs/", 1)
+    elif "p4_16/" in dirname:
+        expected_dirname = dirname.replace("p4_16/", "p4_16_outputs/", 1)
     else:
         expected_dirname = dirname + "_outputs"  # expected outputs are here
     if not os.path.exists(expected_dirname):
@@ -185,7 +169,7 @@ def process_file(options, argv):
 
     # We rely on the fact that these keys are in alphabetical order.
     rename = { "FrontEnd_11_SimplifyControlFlow": "first",
-               "FrontEnd_25_FrontEndLast": "frontend",
+               "FrontEnd_26_FrontEndLast": "frontend",
                "MidEnd_33_Evaluator": "midend" }
 
     if options.verbose:
@@ -263,14 +247,14 @@ def main(argv):
     options.binary = argv[0]
     if len(argv) <= 2:
         usage(options)
-        return FAILURE
+        sys.exit(FAILURE)
 
     options.compilerSrcdir = argv[1]
     argv = argv[2:]
     if not os.path.isdir(options.compilerSrcdir):
         print(options.compilerSrcdir + " is not a folder", file=sys.stderr)
         usage(options)
-        return FAILURE
+        sys.exit(FAILURE)
 
     while argv[0][0] == '-':
         if argv[0] == "-b":
@@ -285,7 +269,7 @@ def main(argv):
             if len(argv) == 0:
                 print("Missing argument for -a option")
                 usage(options)
-                sys.exit(1)
+                sys.exit(FAILURE)
             else:
                 options.compilerOptions += argv[1].split();
                 argv = argv[1:]
@@ -296,8 +280,11 @@ def main(argv):
         else:
             print("Uknown option ", argv[0], file=sys.stderr)
             usage(options)
-            sys.exit(1)
+            sys.exit(FAILURE)
         argv = argv[1:]
+
+    if 'P4TEST_REPLACE' in os.environ:
+        options.replace = True
 
     options.p4filename=argv[-1]
     options.testName = None

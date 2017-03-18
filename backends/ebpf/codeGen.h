@@ -35,14 +35,43 @@ class CodeBuilder : public Util::SourceCodeBuilder {
 class CodeGenInspector : public Inspector {
  protected:
     CodeBuilder*       builder;
-    const P4::TypeMap* typeMap;
+    P4::ReferenceMap* refMap;
+    P4::TypeMap* typeMap;
+    std::map<const IR::Parameter*, const IR::Parameter*> substitution;
 
  public:
-    CodeGenInspector(CodeBuilder* builder, const P4::TypeMap* typeMap) :
-            builder(builder), typeMap(typeMap) { visitDagOnce = false; }
+    CodeGenInspector(P4::ReferenceMap* refMap, P4::TypeMap* typeMap) :
+            builder(nullptr), refMap(refMap), typeMap(typeMap) {
+        CHECK_NULL(refMap); CHECK_NULL(typeMap);
+        visitDagOnce = false;
+    }
 
-    using Inspector::preorder;
+    void setBuilder(CodeBuilder* builder) {
+        CHECK_NULL(builder);
+        this->builder = builder;
+    }
 
+    void substitute(const IR::Parameter* p, const IR::Parameter* with);
+    void copySubstitutions(CodeGenInspector* other) {
+        for (auto s : other->substitution)
+            substitute(s.first, s.second);
+    }
+
+    bool notSupported(const IR::Expression* expression)
+    { ::error("%1%: not yet implemented", expression); return false; }
+
+    bool preorder(const IR::Expression* expression) override
+    { return notSupported(expression); }
+    bool preorder(const IR::Range* expression) override
+    { return notSupported(expression); }
+    bool preorder(const IR::Mask* expression) override
+    { return notSupported(expression); }
+    bool preorder(const IR::Slice* expression) override
+    { return notSupported(expression); }
+
+    bool preorder(const IR::StringLiteral* expression) override;
+    bool preorder(const IR::ListExpression* expression) override;
+    bool preorder(const IR::PathExpression* expression) override;
     bool preorder(const IR::Constant* expression) override;
     bool preorder(const IR::Declaration_Variable* decl) override;
     bool preorder(const IR::BoolLiteral* b) override;
@@ -52,6 +81,7 @@ class CodeGenInspector : public Inspector {
     bool preorder(const IR::ArrayIndex* a) override;
     bool preorder(const IR::Mux* a) override;
     bool preorder(const IR::Member* e) override;
+    bool preorder(const IR::MethodCallExpression* expression) override;
     bool comparison(const IR::Operation_Relation* comp);
     bool preorder(const IR::Equ* e) override { return comparison(e); }
     bool preorder(const IR::Neq* e) override { return comparison(e); }

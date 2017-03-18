@@ -126,10 +126,12 @@ const IR::Node* ExpressionConverter::postorder(IR::PathExpression *ref) {
     if (ref->path->name.name == "next") {
         return ref;
     }
-    auto fl = structure->field_lists.get(ref->path->name);
-    if (fl != nullptr) {
+    if (auto fl = structure->field_lists.get(ref->path->name)) {
         ExpressionConverter conv(structure);
-        return conv.convert(fl);
+        return conv.convert(fl); }
+    if (auto flc = structure->field_list_calculations.get(ref->path->name)) {
+        // FIXME -- what to do with the algorithm and width from flc?
+        return ExpressionConverter(structure).convert(flc->input_fields);
     }
     return ref;
 }
@@ -167,6 +169,10 @@ const IR::Node* ExpressionConverter::postorder(IR::HeaderStackItemRef* ref) {
     }
     BUG("Unexpected index %1%", ref->index_);
     return ref;
+}
+
+const IR::Node* ExpressionConverter::postorder(IR::GlobalRef *ref) {
+    return new IR::PathExpression(new IR::Path(ref->srcInfo, ref->toString()));
 }
 
 const IR::Node* StatementConverter::preorder(IR::Apply* apply) {
@@ -357,13 +363,8 @@ class DiscoverStructure : public Inspector {
     { structure->calculated_fields.push_back(cf); }
     void postorder(const IR::Meter* m) override
     { structure->meters.emplace(m); }
-    void postorder(const IR::ActionSelector* as) override {
-        structure->action_selectors.emplace(as);
-        if (!as->type.name.isNullOrEmpty())
-            ::warning("%1%: Action selector attribute ignored", as->type);
-        if (!as->mode.name.isNullOrEmpty())
-            ::warning("%1%: Action selector attribute ignored", as->mode);
-    }
+    void postorder(const IR::ActionSelector* as) override
+    { structure->action_selectors.emplace(as); }
     void postorder(const IR::Type_Extern *ext) override
     { structure->extern_types.emplace(ext); }
     void postorder(const IR::Declaration_Instance *ext) override
@@ -377,7 +378,7 @@ class ComputeCallGraph : public Inspector {
     explicit ComputeCallGraph(ProgramStructure* structure) : structure(structure)
     { CHECK_NULL(structure); setName("ComputeCallGraph"); }
     void postorder(const IR::Apply* apply) override {
-        LOG1("Scanning " << apply->name);
+        LOG3("Scanning " << apply->name);
         auto tbl = structure->tables.get(apply->name.name);
         if (tbl == nullptr)
             ::error("Could not find table %1%", apply->name);
@@ -389,12 +390,12 @@ class ComputeCallGraph : public Inspector {
             ::error("Table %1% invoked from two different controls: %2% and %3%",
                     tbl, apply, previous);
         }
-        LOG1("Invoking " << tbl << " in " << parent->name);
+        LOG3("Invoking " << tbl << " in " << parent->name);
         structure->tableMapping.emplace(tbl, parent);
         structure->tableInvocation.emplace(tbl, apply);
     }
     void postorder(const IR::V1Parser* parser) override {
-        LOG1("Scanning parser " << parser->name);
+        LOG3("Scanning parser " << parser->name);
         structure->parsers.add(parser->name);
         if (!parser->default_return.name.isNullOrEmpty())
             structure->parsers.calls(parser->name, parser->default_return);
@@ -408,7 +409,7 @@ class ComputeCallGraph : public Inspector {
                     BUG_CHECK(primitive->operands.size() == 1,
                               "Expected 1 operand for %1%", primitive);
                     auto dest = primitive->operands.at(0);
-                    LOG1("Parser " << parser->name << " extracts into " << dest);
+                    LOG3("Parser " << parser->name << " extracts into " << dest);
                     structure->extracts[parser->name].push_back(dest);
                 }
             }
@@ -483,6 +484,24 @@ class ComputeCallGraph : public Inspector {
             structure->calledControls.calls(parent->name, name);
         }
     }
+    void postorder(const IR::GlobalRef *gref) override {
+        const Context *ctxt = nullptr;
+        cstring caller;
+        if (auto af = findContext<IR::ActionFunction>()) {
+            caller = af->name;
+        } else if (auto di = findContext<IR::Declaration_Instance>()) {
+            caller = di->name;
+        } else {
+            BUG("%1%: GlobalRef not within action or extern", gref); }
+        if (auto ctr = gref->obj->to<IR::Counter>())
+            structure->calledCounters.calls(caller, ctr->name.name);
+        else if (auto mtr = gref->obj->to<IR::Meter>())
+            structure->calledMeters.calls(caller, mtr->name.name);
+        else if (auto reg = gref->obj->to<IR::Register>())
+            structure->calledRegisters.calls(caller, reg->name.name);
+        else if (auto ext = gref->obj->to<IR::Declaration_Instance>())
+            structure->calledExterns.calls(caller, ext->name.name);
+    }
 };
 
 class Rewriter : public Transform {
@@ -492,10 +511,15 @@ class Rewriter : public Transform {
     { CHECK_NULL(structure); setName("Rewriter"); }
 
     const IR::Node* preorder(IR::V1Program* global) override {
-        if (Log::verbose())
-            dump(global);
+        if (LOGGING(4)) {
+            LOG4("#### Initial P4_14 program");
+            dump(global); }
         prune();
-        return structure->create(global->srcInfo);
+        auto *rv = structure->create(global->srcInfo);
+        if (LOGGING(4)) {
+            LOG4("#### Generated P4_16 program");
+            dump(rv); }
+        return rv;
     }
 };
 }  // namespace

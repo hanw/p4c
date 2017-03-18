@@ -103,7 +103,7 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_1") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
     @name("no_action") action no_action_0() {
     }
@@ -117,8 +117,8 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_0();
         }
         key = {
-            meta.ingress_metadata.bd: exact;
-            hdr.ethernet.dstAddr    : ternary;
+            meta.ingress_metadata.bd: exact @name("meta.ingress_metadata.bd") ;
+            hdr.ethernet.dstAddr    : ternary @name("hdr.ethernet.dstAddr") ;
         }
         size = 8192;
         default_action = NoAction_0();

@@ -32,6 +32,7 @@ p4_frontend_UNIFIED = \
 	frontends/p4/parserControlFlow.cpp \
 	frontends/p4/reservedWords.cpp \
 	frontends/p4/coreLibrary.cpp \
+	frontends/p4/externInstance.cpp \
 	frontends/p4/methodInstance.cpp \
 	frontends/p4/parserCallGraph.cpp \
 	frontends/p4/tableApply.cpp \
@@ -48,6 +49,7 @@ p4_frontend_UNIFIED = \
 	frontends/p4/uniqueNames.cpp \
 	frontends/p4/resetHeaders.cpp \
 	frontends/p4/moveDeclarations.cpp \
+	frontends/p4/tableKeyNames.cpp \
 	frontends/p4/specialize.cpp \
 	frontends/p4/inferArchitecture.cpp
 
@@ -67,6 +69,7 @@ noinst_HEADERS += \
 	frontends/p4/enumInstance.h \
 	frontends/p4/evaluator/evaluator.h \
 	frontends/p4/evaluator/substituteParameters.h \
+	frontends/p4/externInstance.h \
 	frontends/p4/fromv1.0/converters.h \
 	frontends/p4/fromv1.0/programStructure.h \
 	frontends/p4/fromv1.0/v1model.h \
@@ -99,6 +102,7 @@ noinst_HEADERS += \
 	frontends/p4/uniqueNames.h \
 	frontends/p4/unusedDeclarations.h \
 	frontends/p4/validateParsedProgram.h \
+	frontends/p4/tableKeyNames.h \
 	frontends/p4/inferArchitecture.h
 
 cpplint_FILES += frontends/p4/p4-lex.l \

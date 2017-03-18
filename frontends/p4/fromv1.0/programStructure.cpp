@@ -225,25 +225,54 @@ void ProgramStructure::createStructures() {
     declarations->push_back(headers);
 }
 
-void ProgramStructure::createExterns() {
-    for (auto it : extern_types) {
-        auto type = it.first;
-        IR::Type_Extern *modified_type = nullptr;
-        if (type->name != it.second) {
-            auto annos = addNameAnnotation(type->name.name, type->annotations);
-            type = modified_type = new IR::Type_Extern(type->srcInfo, it.second, type->methods,
-                                                       type->attributes, annos); }
+class ProgramStructure::FixupExtern : public Modifier {
+    ProgramStructure            &self;
+    cstring                     origname, extname;
+    const IR::TypeParameters    *typeParams = nullptr;
+
+    bool preorder(IR::Type_Extern *type) override {
+        BUG_CHECK(!origname, "Nested extern");
+        origname = type->name;
+        return true; }
+    void postorder(IR::Type_Extern *type) override {
+        if (extname != type->name) {
+            type->annotations = self.addNameAnnotation(type->name.name, type->annotations);
+            type->name = extname; }
         // FIXME -- should create ctors based on attributes?  For now just create a
         // FIXME -- 0-arg one if needed
         if (!type->lookupMethod(type->name, 0)) {
-            if (!modified_type)
-                type = modified_type = type->clone();
             auto methods = type->methods->clone();
-            modified_type->methods = methods;
+            type->methods = methods;
             methods->push_back(new IR::Method(type->name, new IR::Type_Method(
-                                                new IR::ParameterList()))); }
-        declarations->push_back(type);
-    }
+                                                new IR::ParameterList()))); } }
+    void postorder(IR::Method *meth) override {
+        if (meth->name == origname) meth->name = extname; }
+    // Convert extern methods that take a field_list_calculation to take a type param instead
+    bool preorder(IR::Type_MethodBase *mtype) override {
+        BUG_CHECK(!typeParams, "recursion failure");
+        typeParams = mtype->typeParameters;
+        return true; }
+    bool preorder(IR::Parameter *param) override {
+        BUG_CHECK(typeParams, "recursion failure");
+        if (param->type->is<IR::Type_FieldListCalculation>()) {
+            auto n = new IR::Type_Var(self.makeUniqueName("FL"));
+            param->type = n;
+            auto v = typeParams->parameters->clone();
+            v->push_back(n);
+            typeParams = new IR::TypeParameters(v); }
+        return false; }
+    void postorder(IR::Type_MethodBase *mtype) override {
+        BUG_CHECK(typeParams, "recursion failure");
+        mtype->typeParameters = typeParams;
+        typeParams = nullptr; }
+
+ public:
+    FixupExtern(ProgramStructure &self, cstring n) : self(self), extname(n) {}
+};
+
+void ProgramStructure::createExterns() {
+    for (auto it : extern_types)
+        declarations->push_back(it.first->apply(FixupExtern(*this, it.second)));
 }
 
 const IR::Expression* ProgramStructure::paramReference(const IR::Parameter* param) {
@@ -443,14 +472,13 @@ void ProgramStructure::include(cstring filename) {
     CompilerOptions options;
     options.langVersion = CompilerOptions::FrontendVersion::P4_16;
     options.file = path.toString();
-    FILE* file = options.preprocess();
-    if (::errorCount() || file == nullptr)
-        return;
-    auto std = parse_P4_16_file(options.file, file);
-    if (::errorCount() || std == nullptr)
-        return;
-    for (auto decl : *std->declarations)
-        declarations->push_back(decl);
+    if (FILE* file = options.preprocess()) {
+        if (!::errorCount()) {
+            if (auto code = parse_P4_16_file(options.file, file)) {
+                if (!::errorCount()) {
+                    for (auto decl : *code->declarations) {
+                        declarations->push_back(decl); } } } }
+        options.closeInput(file); }
 }
 
 void ProgramStructure::loadModel() {
@@ -711,20 +739,18 @@ ProgramStructure::convertTable(const IR::V1Table* table, cstring newName,
         propvec->push_back(prop);
     }
 
-    IR::ID defaction;
-    if (!table->default_action.name.isNullOrEmpty())
-        defaction = table->default_action;
-    else
-        defaction = p4lib.noAction.Id();
     {
-        auto act = new IR::PathExpression(defaction);
+        const bool hasExplicitDefaultAction = !table->default_action.name.isNullOrEmpty();
+        auto act = new IR::PathExpression(hasExplicitDefaultAction ? table->default_action
+                                                                   : p4lib.noAction.Id());
         auto args = table->default_action_args != nullptr ?
                 table->default_action_args : new IR::Vector<IR::Expression>();
         auto methodCall = new IR::MethodCallExpression(Util::SourceInfo(), act,
                                                        emptyTypeArguments, args);
         auto prop = new IR::Property(
             Util::SourceInfo(), IR::ID(IR::TableProperties::defaultActionPropertyName),
-            IR::Annotations::empty, new IR::ExpressionValue(Util::SourceInfo(), methodCall), false);
+            IR::Annotations::empty, new IR::ExpressionValue(Util::SourceInfo(), methodCall),
+            /* isConstant = */ hasExplicitDefaultAction);
         propvec->push_back(prop);
     }
 
@@ -743,6 +769,10 @@ ProgramStructure::convertTable(const IR::V1Table* table, cstring newName,
         auto constructor = new IR::ConstructorCallExpression(Util::SourceInfo(), type, args);
         auto propvalue = new IR::ExpressionValue(Util::SourceInfo(), constructor);
         auto annos = addNameAnnotation(action_profile->name);
+        if (action_selector->mode)
+            annos = annos->addAnnotation("mode", new IR::StringLiteral(action_selector->mode));
+        if (action_selector->type)
+            annos = annos->addAnnotation("type", new IR::StringLiteral(action_selector->type));
         auto prop = new IR::Property(
             Util::SourceInfo(), IR::ID(v1model.tableAttributes.tableImplementation.Id()),
             annos, propvalue, false);
@@ -1359,7 +1389,7 @@ ProgramStructure::convertAction(const IR::ActionFunction* action, cstring newNam
     }
 
     // Save the original action name in an annotation
-    auto annos = addNameAnnotation(action->name);
+    auto annos = addNameAnnotation(action->name, action->annotations);
     auto result = new IR::P4Action(
         action->srcInfo, newName, annos, new IR::ParameterList(params),
         new IR::BlockStatement(body->srcInfo, IR::Annotations::empty, body));
@@ -1451,6 +1481,12 @@ ProgramStructure::convert(const IR::CounterOrMeter* cm, cstring newName) {
     auto kindarg = counterType(cm);
     args->push_back(kindarg);
     auto annos = addNameAnnotation(cm->name, cm->annotations);
+    if (auto *c = cm->to<IR::Counter>()) {
+        if (c->min_width >= 0)
+            annos = annos->addAnnotation("min_width", new IR::Constant(c->min_width));
+        if (c->max_width >= 0)
+            annos = annos->addAnnotation("max_width", new IR::Constant(c->max_width));
+    }
     auto decl = new IR::Declaration_Instance(
         Util::SourceInfo(), newName, annos, type, args, nullptr);
     return decl;
@@ -1571,6 +1607,9 @@ ProgramStructure::convertControl(const IR::V1Control* control, cstring newName) 
         calledMeters.getCallees(a, metersToDo);
         calledRegisters.getCallees(a, registersToDo);
         calledExterns.getCallees(a, externsToDo);
+    }
+    for (auto c : externsToDo) {
+        calledRegisters.getCallees(c, registersToDo);
     }
     for (auto c : metersToDo) {
         auto mtr = meters.get(c);
@@ -1750,6 +1789,7 @@ ProgramStructure::checksumUnit(const IR::FieldListCalculation* flc) {
 // if a FieldListCalculation contains multiple field lists concatenate them all
 // into a temporary field list
 const IR::FieldList* ProgramStructure::getFieldLists(const IR::FieldListCalculation* flc) {
+    // FIXME -- this duplicates P4_14::TypeCheck.  Why not just use flc->input_fields?
     if (flc->input->names.size() == 0)
         ::error("%1%: field_list_calculation with zero inputs", flc);
     if (flc->input->names.size() == 1) {

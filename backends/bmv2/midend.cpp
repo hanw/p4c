@@ -153,6 +153,9 @@ MidEnd::MidEnd(CompilerOptions& options) {
         new P4::TypeChecking(&refMap, &typeMap),
         new LowerExpressions(&typeMap),
         new P4::ConstantFolding(&refMap, &typeMap, false),
+//        new FixupChecksum(&updateControlBlockName),
+        new P4::SimplifyControlFlow(&refMap, &typeMap),
+        new P4::RemoveUnusedDeclarations(&refMap),
         evaluator,
         new VisitFunctor([this, evaluator]() { toplevel = evaluator->getToplevelBlock(); })
     });

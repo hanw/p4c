@@ -1,3 +1,5 @@
+#include <core.p4>
+
 extern Fake {
     Fake();
     void call(in bit<32> data);
@@ -14,15 +16,9 @@ parser P() {
 }
 
 control C() {
-    bit<32> x_2;
-    bit<32> y;
-    bit<32> tmp_0;
     @name("fake") Fake() fake_2;
     action act() {
-        x_2 = 32w0;
-        tmp_0 = x_2 + 32w1;
-        y = tmp_0;
-        fake_2.call(y);
+        fake_2.call(32w1);
     }
     table tbl_act() {
         actions = {

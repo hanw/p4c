@@ -17,11 +17,20 @@ limitations under the License.
 #include "codeGen.h"
 #include "ebpfObject.h"
 #include "ebpfType.h"
+#include "frontends/p4/enumInstance.h"
 
 namespace EBPF {
 
+void CodeGenInspector::substitute(const IR::Parameter* p, const IR::Parameter* with)
+{ substitution.emplace(p, with); }
+
 bool CodeGenInspector::preorder(const IR::Constant* expression) {
     builder->append(expression->toString());
+    return true;
+}
+
+bool CodeGenInspector::preorder(const IR::StringLiteral* expression) {
+    builder->appendFormat("\"%s\"", expression->toString());
     return true;
 }
 
@@ -118,22 +127,62 @@ bool CodeGenInspector::preorder(const IR::Cast* c) {
     return false;
 }
 
-bool CodeGenInspector::preorder(const IR::Member* e) {
-    visit(e->expr);
-    builder->append(".");
-    builder->append(e->member);
+bool CodeGenInspector::preorder(const IR::Member* expression) {
+    auto ei = P4::EnumInstance::resolve(expression, typeMap);
+    if (ei == nullptr) {
+        visit(expression->expr);
+        builder->append(".");
+    }
+    builder->append(expression->member);
+    return false;
+}
+
+bool CodeGenInspector::preorder(const IR::PathExpression* expression) {
+    visit(expression->path);
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::Path* p) {
     if (p->absolute)
-        builder->append(".");
+        ::error("%1%: Unexpected absolute path", p);
     builder->append(p->name);
     return false;
 }
 
 bool CodeGenInspector::preorder(const IR::BoolLiteral* b) {
     builder->append(b->toString());
+    return false;
+}
+
+bool CodeGenInspector::preorder(const IR::ListExpression* expression) {
+    bool first = true;
+    for (auto e : *expression->components) {
+        if (!first)
+            builder->append(", ");
+        first = false;
+        visit(e);
+    }
+    return false;
+}
+
+bool CodeGenInspector::preorder(const IR::MethodCallExpression* expression) {
+    P4::MethodCallDescription mcd(expression, refMap, typeMap);
+
+    visit(expression->method);
+    builder->append("(");
+    bool first = true;
+    for (auto p : *mcd.substitution.getParameters()) {
+        if (!first)
+            builder->append(", ");
+        first = false;
+
+        if (p->direction == IR::Direction::Out ||
+            p->direction == IR::Direction::InOut)
+            builder->append("&");
+        auto arg = mcd.substitution.lookup(p);
+        visit(arg);
+    }
+    builder->append(")");
     return false;
 }
 
@@ -164,9 +213,28 @@ bool CodeGenInspector::preorder(const IR::Type_Enum* type) {
 }
 
 bool CodeGenInspector::preorder(const IR::AssignmentStatement* a) {
-    visit(a->left);
-    builder->append(" = ");
-    visit(a->right);
+    auto ltype = typeMap->getType(a->left);
+    auto ebpfType = EBPFTypeFactory::instance->create(ltype);
+    bool memcpy = false;
+    EBPFScalarType* scalar = nullptr;
+    unsigned width = 0;
+    if (ebpfType->is<EBPFScalarType>()) {
+        scalar = ebpfType->to<EBPFScalarType>();
+        width = scalar->implementationWidthInBits();
+        memcpy = !EBPFScalarType::generatesScalar(width);
+    }
+
+    if (memcpy) {
+        builder->append("memcpy(&");
+        visit(a->left);
+        builder->append(", &");
+        visit(a->right);
+        builder->appendFormat(", %d)", scalar->bytesRequired());
+    } else {
+        visit(a->left);
+        builder->append(" = ");
+        visit(a->right);
+    }
     builder->endOfStatement();
     return false;
 }

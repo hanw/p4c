@@ -76,11 +76,20 @@ class Visitor {
     void visit(const IR::Node *const &n, const char *name = 0) {
         auto t = apply_visitor(n, name);
         if (t != n) visitor_const_error(); }
-    void visit(IR::Node *&, const char * = 0) { BUG("Can't visit non-const pointer"); }
+    void visit(const IR::Node *&n, const char *name, int cidx) {
+        ctxt->child_index = cidx;
+        n = apply_visitor(n, name); }
+    void visit(const IR::Node *const &n, const char *name, int cidx) {
+        ctxt->child_index = cidx;
+        auto t = apply_visitor(n, name);
+        if (t != n) visitor_const_error(); }
+    void visit(IR::Node *&, const char * = 0, int = 0) { BUG("Can't visit non-const pointer"); }
 #define DECLARE_VISIT_FUNCTIONS(CLASS, BASE)                            \
     void visit(const IR::CLASS *&n, const char *name = 0);              \
     void visit(const IR::CLASS *const &n, const char *name = 0);        \
-    void visit(IR::CLASS *&, const char * = 0) { BUG("Can't visit non-const pointer"); }
+    void visit(const IR::CLASS *&n, const char *name, int cidx);        \
+    void visit(const IR::CLASS *const &n, const char *name , int cidx); \
+    void visit(IR::CLASS *&, const char * = 0, int = 0) { BUG("Can't visit non-const pointer"); }
     IRNODE_ALL_SUBCLASSES(DECLARE_VISIT_FUNCTIONS)
 #undef DECLARE_VISIT_FUNCTIONS
 
@@ -133,6 +142,14 @@ class Visitor {
         const Context *c = ctxt;
         return findOrigCtxt<T>(c); }
 
+    /// @return the current node - i.e., the node that was passed to preorder()
+    /// or postorder(). For Modifiers and Transforms, this is a clone of the
+    /// node returned by getOriginal().
+    const IR::Node* getCurrentNode() const { return ctxt->node; }
+    template <class T>
+    const T* getCurrentNode() const {
+        return ctxt->node ? ctxt->node->to<T>() : nullptr; }
+
  protected:
     // if visitDagOnce is set to 'false' (usually in the derived Visitor
     // class constructor), nodes that appear multiple times in the tree
@@ -148,10 +165,7 @@ class Visitor {
     virtual bool join_flows(const IR::Node *) { return false; }
     void visit_children(const IR::Node *, std::function<void()> fn) { fn(); }
     class ChangeTracker;  // used by Modifier and Transform -- private to them
-#ifndef NDEBUG
-    virtual  // making this non-virtual for NDEBUG builds turns it into a noop
-#endif
-    void check_clone(const Visitor *) {}
+    virtual bool check_clone(const Visitor *) { return true; }
 
  private:
     virtual void visitor_const_error();
@@ -165,7 +179,7 @@ class Visitor {
 class Modifier : public virtual Visitor {
     ChangeTracker       *visited = nullptr;
     void visitor_const_error() override;
-    void check_clone(const Visitor *) override;
+    bool check_clone(const Visitor *) override;
  public:
     profile_t init_apply(const IR::Node *root) override;
     const IR::Node *apply_visitor(const IR::Node *n, const char *name = 0) override;
@@ -184,7 +198,7 @@ class Modifier : public virtual Visitor {
 class Inspector : public virtual Visitor {
     typedef unordered_map<const IR::Node *, bool>       visited_t;
     visited_t   *visited = nullptr;
-    void check_clone(const Visitor *) override;
+    bool check_clone(const Visitor *) override;
  public:
     profile_t init_apply(const IR::Node *root) override;
     const IR::Node *apply_visitor(const IR::Node *, const char *name = 0) override;
@@ -204,7 +218,7 @@ class Transform : public virtual Visitor {
     ChangeTracker       *visited = nullptr;
     bool prune_flag = false;
     void visitor_const_error() override;
-    void check_clone(const Visitor *) override;
+    bool check_clone(const Visitor *) override;
 
  public:
     profile_t init_apply(const IR::Node *root) override;
@@ -219,10 +233,10 @@ class Transform : public virtual Visitor {
     IRNODE_ALL_SUBCLASSES(DECLARE_VISIT_FUNCTIONS)
 #undef DECLARE_VISIT_FUNCTIONS
     void revisit_visited();
+    // can only be called usefully from a 'preorder' function (directly or indirectly)
+    void prune() { prune_flag = true; }
 
  protected:
-    // can only be called usefully from 'preorder' function
-    void prune() { prune_flag = true; }
     const IR::Node *transform_child(const IR::Node *child) {
         auto *rv = apply_visitor(child);
         prune_flag = true;
@@ -257,7 +271,10 @@ class Backtrack : public virtual Visitor {
 
 class P4WriteContext : public virtual Visitor {
  public:
-    bool isWrite();
+    bool isWrite(bool root_value = false);     // might write based on context
+    bool isRead(bool root_value = false);      // might read based on context
+    // note that the context might (conservatively) return true for BOTH isWrite and isRead,
+    // as it might be an 'inout' access or it might be unable to decide.
 };
 
 #endif /* _IR_VISITOR_H_ */

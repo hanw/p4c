@@ -120,9 +120,9 @@ parser ParserImpl(packet_in packet, out headers hdr, inout metadata meta, inout 
 }
 
 control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_2") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
-    @name("NoAction_3") action NoAction_1() {
+    @name("NoAction") action NoAction_1() {
     }
     @name("do_rewrites") action do_rewrites_0(bit<48> smac) {
         hdr.cpu_header.setInvalid();
@@ -149,7 +149,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
             @default_only NoAction_0();
         }
         key = {
-            standard_metadata.egress_port: exact;
+            standard_metadata.egress_port: exact @name("standard_metadata.egress_port") ;
         }
         size = 256;
         default_action = NoAction_0();
@@ -174,13 +174,13 @@ struct tuple_0 {
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_4") action NoAction_8() {
+    @name("NoAction") action NoAction_8() {
     }
-    @name("NoAction_5") action NoAction_9() {
+    @name("NoAction") action NoAction_9() {
     }
-    @name("NoAction_6") action NoAction_10() {
+    @name("NoAction") action NoAction_10() {
     }
-    @name("NoAction_7") action NoAction_11() {
+    @name("NoAction") action NoAction_11() {
     }
     @name("set_dmac") action set_dmac_0(bit<48> dmac) {
         hdr.ethernet.dstAddr = dmac;
@@ -234,7 +234,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_8();
         }
         key = {
-            meta.meta.nhop_ipv4: exact;
+            meta.meta.nhop_ipv4: exact @name("meta.meta.nhop_ipv4") ;
         }
         size = 512;
         default_action = NoAction_8();
@@ -246,7 +246,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_9();
         }
         key = {
-            meta.meta.if_index: exact;
+            meta.meta.if_index: exact @name("meta.meta.if_index") ;
         }
         default_action = NoAction_9();
     }
@@ -257,7 +257,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_10();
         }
         key = {
-            meta.meta.ipv4_da: lpm;
+            meta.meta.ipv4_da: lpm @name("meta.meta.ipv4_da") ;
         }
         size = 1024;
         default_action = NoAction_10();
@@ -273,13 +273,13 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_11();
         }
         key = {
-            meta.meta.is_ext_if: exact;
-            hdr.ipv4.isValid() : exact;
-            hdr.tcp.isValid()  : exact;
-            hdr.ipv4.srcAddr   : ternary;
-            hdr.ipv4.dstAddr   : ternary;
-            hdr.tcp.srcPort    : ternary;
-            hdr.tcp.dstPort    : ternary;
+            meta.meta.is_ext_if: exact @name("meta.meta.is_ext_if") ;
+            hdr.ipv4.isValid() : exact @name("hdr.ipv4.isValid()") ;
+            hdr.tcp.isValid()  : exact @name("hdr.tcp.isValid()") ;
+            hdr.ipv4.srcAddr   : ternary @name("hdr.ipv4.srcAddr") ;
+            hdr.ipv4.dstAddr   : ternary @name("hdr.ipv4.dstAddr") ;
+            hdr.tcp.srcPort    : ternary @name("hdr.tcp.srcPort") ;
+            hdr.tcp.dstPort    : ternary @name("hdr.tcp.dstPort") ;
         }
         size = 128;
         default_action = NoAction_11();

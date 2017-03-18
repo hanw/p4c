@@ -89,16 +89,9 @@ parser TopParser(packet_in b, out Parsed_packet p) {
 
 control TopPipe(inout Parsed_packet headers, in error parseError, in InControl inCtrl, out OutControl outCtrl) {
     IPv4Address nextHop_1;
-    bit<8> tmp_15;
-    bool tmp_16;
-    bool tmp_17;
-    bool tmp_18;
-    bool tmp_19;
     IPv4Address nextHop_2;
-    IPv4Address nextHop_3;
     bool hasReturned_0;
-    IPv4Address nextHop_0;
-    @name("NoAction_1") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
     @name("Drop_action") action Drop_action_0() {
         outCtrl.outputPort = 4w0xf;
@@ -113,15 +106,13 @@ control TopPipe(inout Parsed_packet headers, in error parseError, in InControl i
         outCtrl.outputPort = 4w0xf;
     }
     @name("Set_nhop") action Set_nhop_0(IPv4Address ipv4_dest, PortId port) {
-        nextHop_0 = ipv4_dest;
-        tmp_15 = headers.ip.ttl + 8w255;
         headers.ip.ttl = headers.ip.ttl + 8w255;
         outCtrl.outputPort = port;
         nextHop_2 = ipv4_dest;
     }
     @name("ipv4_match") table ipv4_match() {
         key = {
-            headers.ip.dstAddr: lpm;
+            headers.ip.dstAddr: lpm @name("headers.ip.dstAddr") ;
         }
         actions = {
             Drop_action_0();
@@ -135,7 +126,7 @@ control TopPipe(inout Parsed_packet headers, in error parseError, in InControl i
     }
     @name("check_ttl") table check_ttl() {
         key = {
-            headers.ip.ttl: exact;
+            headers.ip.ttl: exact @name("headers.ip.ttl") ;
         }
         actions = {
             Send_to_cpu_0();
@@ -148,7 +139,7 @@ control TopPipe(inout Parsed_packet headers, in error parseError, in InControl i
     }
     @name("dmac") table dmac_1() {
         key = {
-            nextHop_3: exact;
+            nextHop_1: exact @name("nextHop") ;
         }
         actions = {
             Drop_action_4();
@@ -162,7 +153,7 @@ control TopPipe(inout Parsed_packet headers, in error parseError, in InControl i
     }
     @name("smac") table smac_1() {
         key = {
-            outCtrl.outputPort: exact;
+            outCtrl.outputPort: exact @name("outCtrl.outputPort") ;
         }
         actions = {
             Drop_action_5();
@@ -176,29 +167,18 @@ control TopPipe(inout Parsed_packet headers, in error parseError, in InControl i
     }
     action act_0() {
         hasReturned_0 = false;
-        tmp_16 = parseError != error.NoError;
     }
     action act_1() {
         hasReturned_0 = true;
     }
     action act_2() {
         nextHop_1 = nextHop_2;
-        tmp_17 = outCtrl.outputPort == 4w0xf;
     }
     action act_3() {
         hasReturned_0 = true;
     }
     action act_4() {
-        tmp_18 = outCtrl.outputPort == 4w0xe;
-    }
-    action act_5() {
-        nextHop_3 = nextHop_1;
-    }
-    action act_6() {
         hasReturned_0 = true;
-    }
-    action act_7() {
-        tmp_19 = outCtrl.outputPort == 4w0xf;
     }
     table tbl_act() {
         actions = {
@@ -232,58 +212,37 @@ control TopPipe(inout Parsed_packet headers, in error parseError, in InControl i
     }
     table tbl_act_3() {
         actions = {
-            act_4();
-        }
-        const default_action = act_4();
-    }
-    table tbl_act_4() {
-        actions = {
             act_3();
         }
         const default_action = act_3();
     }
-    table tbl_act_5() {
+    table tbl_act_4() {
         actions = {
-            act_5();
+            act_4();
         }
-        const default_action = act_5();
-    }
-    table tbl_act_6() {
-        actions = {
-            act_7();
-        }
-        const default_action = act_7();
-    }
-    table tbl_act_7() {
-        actions = {
-            act_6();
-        }
-        const default_action = act_6();
+        const default_action = act_4();
     }
     apply {
         tbl_act.apply();
-        if (tmp_16) {
+        if (parseError != error.NoError) {
             tbl_Drop_action.apply();
             tbl_act_0.apply();
         }
         if (!hasReturned_0) {
             ipv4_match.apply();
             tbl_act_1.apply();
-            if (tmp_17) 
+            if (outCtrl.outputPort == 4w0xf) 
                 tbl_act_2.apply();
         }
         if (!hasReturned_0) {
             check_ttl.apply();
-            tbl_act_3.apply();
-            if (tmp_18) 
-                tbl_act_4.apply();
+            if (outCtrl.outputPort == 4w0xe) 
+                tbl_act_3.apply();
         }
         if (!hasReturned_0) {
-            tbl_act_5.apply();
             dmac_1.apply();
-            tbl_act_6.apply();
-            if (tmp_19) 
-                tbl_act_7.apply();
+            if (outCtrl.outputPort == 4w0xf) 
+                tbl_act_4.apply();
         }
         if (!hasReturned_0) 
             smac_1.apply();
@@ -293,43 +252,43 @@ control TopPipe(inout Parsed_packet headers, in error parseError, in InControl i
 control TopDeparser(inout Parsed_packet p, packet_out b) {
     bit<16> tmp_20;
     @name("ck") Ck16() ck_2;
-    action act_8() {
+    action act_5() {
         ck_2.clear();
         p.ip.hdrChecksum = 16w0;
         ck_2.update<Ipv4_h>(p.ip);
         tmp_20 = ck_2.get();
         p.ip.hdrChecksum = tmp_20;
     }
-    action act_9() {
+    action act_6() {
         b.emit<Ethernet_h>(p.ethernet);
     }
-    action act_10() {
+    action act_7() {
         b.emit<Ipv4_h>(p.ip);
     }
-    table tbl_act_8() {
+    table tbl_act_5() {
         actions = {
-            act_9();
+            act_6();
         }
-        const default_action = act_9();
+        const default_action = act_6();
     }
-    table tbl_act_9() {
+    table tbl_act_6() {
         actions = {
-            act_8();
+            act_5();
         }
-        const default_action = act_8();
+        const default_action = act_5();
     }
-    table tbl_act_10() {
+    table tbl_act_7() {
         actions = {
-            act_10();
+            act_7();
         }
-        const default_action = act_10();
+        const default_action = act_7();
     }
     apply {
-        tbl_act_8.apply();
+        tbl_act_5.apply();
         if (p.ip.isValid()) {
-            tbl_act_9.apply();
+            tbl_act_6.apply();
         }
-        tbl_act_10.apply();
+        tbl_act_7.apply();
     }
 }
 

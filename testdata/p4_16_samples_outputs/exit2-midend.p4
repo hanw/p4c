@@ -1,7 +1,5 @@
 control ctrl(out bit<32> c) {
     bool hasExited;
-    bit<32> a;
-    bool tmp_0;
     @name("e") action e_0() {
         hasExited = true;
     }
@@ -10,9 +8,7 @@ control ctrl(out bit<32> c) {
     }
     action act() {
         hasExited = false;
-        a = 32w0;
         c = 32w2;
-        tmp_0 = a == 32w0;
     }
     action act_0() {
         c = 32w5;
@@ -43,7 +39,7 @@ control ctrl(out bit<32> c) {
     }
     apply {
         tbl_act.apply();
-        if (tmp_0) 
+        if (true) 
             tbl_e.apply();
         else 
             tbl_e_0.apply();

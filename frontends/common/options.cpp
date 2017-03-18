@@ -15,6 +15,9 @@ limitations under the License.
 */
 
 #include <getopt.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "setup.h"
 #include "options.h"
@@ -25,21 +28,17 @@ limitations under the License.
 #include "frontends/p4/toP4/toP4.h"
 #include "ir/json_generator.h"
 
-static cstring version = "0.0.5";
 const char* CompilerOptions::defaultMessage = "Compile a P4 program";
 
 CompilerOptions::CompilerOptions() : Util::Options(defaultMessage) {
-    registerOption("-h", nullptr,
-                   [this](const char*) { usage(); exit(0); return false; },
-                   "Print this help message");
     registerOption("--help", nullptr,
                    [this](const char*) { usage(); exit(0); return false; },
                    "Print this help message");
     registerOption("--version", nullptr,
                    [this](const char*) {
                        std::cerr << binaryName << std::endl;
-                       std::cerr << "Version " << version << std::endl;
-                       return true; }, "Print compiler version");
+                       std::cerr << "Version " << compilerVersion << std::endl;
+                       exit(0); return false; }, "Print compiler version");
     registerOption("-I", "path",
                    [this](const char* arg) {
                        preprocessor_options += std::string(" -I") + arg; return true; },
@@ -59,13 +58,13 @@ CompilerOptions::CompilerOptions() : Util::Options(defaultMessage) {
                    [this](const char*) {
                        langVersion = CompilerOptions::FrontendVersion::P4_14;
                        return true; },
-                    "Specify language version to compile");
+                    "[Deprecated] Specify language version to compile", true);
     registerOption("--p4-16", nullptr,
                    [this](const char*) {
                        langVersion = CompilerOptions::FrontendVersion::P4_16;
                        return true; },
-                    "Specify language version to compile");
-    registerOption("--p4v", "lang",
+                    "[Deprecated] Specify language version to compile", true);
+    registerOption("--p4v", "{14|16}",
                    [this](const char* arg) {
                        if (!strcmp(arg, "1.0") || !strcmp(arg, "14")) {
                            langVersion = CompilerOptions::FrontendVersion::P4_14;
@@ -89,9 +88,21 @@ CompilerOptions::CompilerOptions() : Util::Options(defaultMessage) {
     registerOption("--testJson", nullptr,
                     [this](const char*) { debugJson = true; return true; },
                     "Dump and undump the IR");
+    registerOption("--p4runtime-file", "file",
+                   [this](const char* arg) { p4RuntimeFile = arg; return true; },
+                   "Write a P4Runtime control plane API description to the specified file.");
+    registerOption("--p4runtime-as-json", nullptr,
+                   [this](const char* arg) { p4RuntimeAsJson = true; return true; },
+                   "Write out the P4Runtime API description as human-readable JSON.");
     registerOption("-o", "outfile",
                    [this](const char* arg) { outputFile = arg; return true; },
                    "Write output to outfile");
+    registerOption("--Werror", nullptr,
+                    [](const char*) {
+                        ErrorReporter::instance.setWarningsAreErrors();
+                        return true;
+                    },
+                    "Treat all warnings as errors");
     registerOption("-T", "loglevel",
                    [](const char* arg) { Log::addDebugSpec(arg); return true; },
                    "[Compiler debugging] Adjust logging level per file (see below)");
@@ -130,6 +141,56 @@ void CompilerOptions::setInputFile() {
     }
 }
 
+template <size_t N>
+static void convertToAbsPath(const char* const relPath, char (&output)[N]) {
+    output[0] = '\0';  // Default to the empty string, indicating failure.
+
+    char cwd[PATH_MAX];
+    getcwd(cwd, sizeof(cwd));
+    const size_t cwdLen = strlen(cwd);
+    if (cwdLen == 0) return;
+    const char* separator = cwd[cwdLen - 1] == '/' ? "" : "/";
+
+    // Construct an absolute path. We're assuming that @relPath is relative to
+    // the current working directory.
+    snprintf(output, N, "%s%s%s", cwd, separator, relPath);
+}
+
+std::vector<const char*>* CompilerOptions::process(int argc, char* const argv[]) {
+    char buffer[PATH_MAX];
+    int len;
+    struct stat st;
+    /* find the path of the executable.  We use a number of techniques that may fail
+     * or work on different systems, and take the first working one we find.  Fall
+     * back to not overriding the compiled-in installation path */
+    if ((len = readlink("/proc/self/exe", buffer, sizeof(buffer))) > 0 ||
+        (len = readlink("/proc/curproc/exe", buffer, sizeof(buffer))) > 0 ||
+        (len = readlink("/proc/curproc/file", buffer, sizeof(buffer))) > 0 ||
+        (len = readlink("/proc/self/path/a.out", buffer, sizeof(buffer))) > 0) {
+        buffer[len] = 0;
+    } else if (argv[0][0] == '/') {
+        snprintf(buffer, sizeof(buffer), "%s", argv[0]);
+    } else if (strchr(argv[0], '/')) {
+        convertToAbsPath(argv[0], buffer);
+    } else if (getenv("_")) {
+        strncpy(buffer, getenv("_"), sizeof(buffer));
+        buffer[sizeof(buffer) - 1] = 0;
+    } else {
+        buffer[0] = 0; }
+
+    if (char *p = strrchr(buffer, '/')) {
+        ++p;
+        exe_name = p;
+        snprintf(p, buffer + sizeof(buffer) - p, "p4include");
+        if (stat(buffer, &st) >= 0 && S_ISDIR(st.st_mode))
+            p4includePath = strdup(buffer);
+        snprintf(p, buffer + sizeof(buffer) - p, "p4_14include");
+        if (stat(buffer, &st) >= 0 && S_ISDIR(st.st_mode))
+            p4_14includePath = strdup(buffer); }
+
+    return Util::Options::process(argc, argv);
+}
+
 FILE* CompilerOptions::preprocess() {
     FILE* in = nullptr;
 
@@ -145,8 +206,8 @@ FILE* CompilerOptions::preprocess() {
 #else
         std::string cmd("cpp");
 #endif
-        cmd += cstring(" -undef -nostdinc -I") +
-                p4includePath + " " + preprocessor_options + " " + file;
+        cmd += cstring(" -undef -nostdinc") + " " + preprocessor_options
+            + " -I" + (isv1() ? p4_14includePath : p4includePath) + " " + file;
         if (Log::verbose())
             std::cerr << "Invoking preprocessor " << std::endl << cmd << std::endl;
         in = popen(cmd.c_str(), "r");
@@ -221,13 +282,13 @@ void CompilerOptions::dumpPass(const char* manager, unsigned seq, const char* pa
                 P4::ToP4 toP4(stream, Log::verbose(), file);
                 node->apply(toP4);
             }
+            break;
         }
     }
 }
 
 DebugHook CompilerOptions::getDebugHook() const {
-    auto dp = std::bind(&CompilerOptions::dumpPass, this,
-                        std::placeholders::_1, std::placeholders::_2,
-                        std::placeholders::_3, std::placeholders::_4);
+    using namespace std::placeholders;
+    auto dp = std::bind(&CompilerOptions::dumpPass, this, _1, _2, _3, _4);
     return dp;
 }

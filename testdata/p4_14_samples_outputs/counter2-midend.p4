@@ -29,7 +29,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
-    @name("NoAction_1") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
     @name("act") action act_0(bit<9> port) {
         standard_metadata.egress_spec = port;
@@ -40,7 +40,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
             @default_only NoAction_0();
         }
         key = {
-            hdr.ethernet.dstAddr: ternary;
+            hdr.ethernet.dstAddr: ternary @name("hdr.ethernet.dstAddr") ;
         }
         size = 6100;
         default_action = NoAction_0();

@@ -7,6 +7,12 @@ is available at
 http://p4.org/wp-content/uploads/2016/12/P4_16-prerelease-Dec_16.html.
 For the P4 programming language see http://p4.org.
 
+This repository depends on several submodules. 
+* You can clone `p4c` and these submodules in one step using the following command: 
+```git clone --recursive```
+* Alternatively, if you've already cloned `p4c`, you can clone the submodules using the command:
+```git submodule update --init --recursive```
+
 The code contains three sample compiler back-ends:
 * p4c-bm2-ss: can be used to target the P4 `simple_switch` written using
   the BMv2 behavioral model https://github.com/p4lang/behavioral-model
@@ -25,8 +31,7 @@ programs.
 The code and documentation are hosted in the following git repository:
 https://github.com/p4lang/p4c
 
-The code is currently alpha quality.  Currently there is no way to
-install the compiler.
+The code is currently alpha quality.
 
 # Dependences
 
@@ -42,13 +47,15 @@ following tools are required to build and run the compiler and tests:
 
 - Boehm-Weiser garbage-collector C++ library
 
-- GNU Bison and Flex (parser and lexical analyzer generators)
+- GNU Bison and Flex for the parser and lexical analyzer generators.
+
+- Google Protocol Buffers 3.0 for control plane API generation
 
 - GNU multiple precision library GMP
 
 - C++ boost library (minimally used)
 
-- Python 2.7 for scripting (especially for running tests)
+- Python 2.7 for scripting and running tests
 
 The compiler is modular, and it contains multiple back-ends.  New ones can be added easily.
 Each back-end may have additional dependences.  This repository contains the following two
@@ -60,7 +67,15 @@ back-ends; please read the following documents for installing more dependences:
 
 Most dependences can be installed using `apt-get install`:
 
-`sudo apt-get install g++ git automake libtool libgc-dev bison flex libgmp-dev libboost-dev python2.7 python-scapy python-ipaddr tcpdump`
+`sudo apt-get install g++ git automake libtool libgc-dev bison flex libgmp-dev libboost-dev pkg-config python python-scapy python-ipaddr tcpdump`
+
+An exception is Google Protocol Buffers; `p4c` depends on version 3.0, which is not available until Ubuntu 16.10. For earlier releases of Ubuntu, you'll need to install from source. You can find instructions [here](https://github.com/google/protobuf/blob/master/src/README.md). Check out the newest tag in the 3.0 series (`v3.0.2` as of this writing) before you build.
+
+`git checkout v3.0.2`
+
+Please note that while newer versions should work for `p4c` itself, you may run
+into trouble with some extensions unless you install version 3.0, so you may
+want to install from source even on newer releases of Ubuntu.
 
 ## macOS dependences
 
@@ -97,6 +112,13 @@ Installing on macOS:
   ```
   brew link --force bison
   ```
+
+  Homebrew offers a `protobuf` formula. It installs version 3.2, which should
+  work for p4c itself but may cause problems with some extensions. It's
+  preferable to install Protocol Buffers 3.0 from source using the instructions
+  [here](https://github.com/google/protobuf/blob/master/src/README.md). Check
+  out the newest tag in the 3.0 series (`v3.0.2` as of this writing) before you
+  build.
 
 # Development tools
 

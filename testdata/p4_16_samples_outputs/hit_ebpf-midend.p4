@@ -45,7 +45,7 @@ parser prs(packet_in p, out Headers_t headers) {
 
 control pipe(inout Headers_t headers, out bool pass) {
     bool hasReturned_0;
-    @name("NoAction_1") action NoAction_0() {
+    @name("NoAction") action NoAction_0() {
     }
     @name("Reject") action Reject_0(IPv4Address add) {
         pass = false;
@@ -53,7 +53,7 @@ control pipe(inout Headers_t headers, out bool pass) {
     }
     @name("Check_src_ip") table Check_src_ip() {
         key = {
-            headers.ipv4.srcAddr: exact;
+            headers.ipv4.srcAddr: exact @name("headers.ipv4.srcAddr") ;
         }
         actions = {
             Reject_0();
