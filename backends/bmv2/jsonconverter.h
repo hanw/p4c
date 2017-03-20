@@ -103,6 +103,7 @@ class JsonConverter final {
  private:
     Util::JsonArray *headerTypes;
     std::map<cstring, cstring> headerTypesCreated;
+    std::map<cstring, unsigned> headerInstancesCreated;
     Util::JsonArray *headerInstances;
     Util::JsonArray *headerStacks;
     Util::JsonArray *field_lists;

@@ -1799,16 +1799,21 @@ JsonConverter::createHeaderTypeAndInstance(cstring prefix, cstring varName,
         pushFields(st, fields);
     }
 
-    // create the instance
-    auto json = new Util::JsonObject();
-    json->emplace("name", varName);
-    unsigned id = nextId("headers");
-    json->emplace("id", id);
-    json->emplace("header_type", fullExternalName);
-    json->emplace("metadata", !st->is<IR::Type_Header>());
-    json->emplace("pi_omit", true);  // Don't expose in PI.
-    headerInstances->append(json);
-    return id;
+    if (!headerInstancesCreated.count(varName)) {
+        // create the instance
+        auto json = new Util::JsonObject();
+        json->emplace("name", varName);
+        unsigned id = nextId("headers");
+        headerInstancesCreated[varName] = id;
+        json->emplace("id", id);
+        json->emplace("header_type", fullExternalName);
+        json->emplace("metadata", !st->is<IR::Type_Header>());
+        json->emplace("pi_omit", true);  // Don't expose in PI.
+        headerInstances->append(json);
+        return id;
+    } else {
+        return headerInstancesCreated[varName];
+    }
 }
 
 void JsonConverter::createStack(cstring prefix, cstring varName,
@@ -1867,10 +1872,7 @@ void JsonConverter::addLocals() {
     for (auto v : structure.variables) {
         LOG1("Creating local " << v);
         auto type = typeMap->getType(v, true);
-        auto type2 = v->type;
-
         if (auto st = type->to<IR::Type_StructLike>()) {
-            // TODO(pierce): using correct name for v here?
             createNestedStruct("", v->name, st);
         } else if (auto stack = type->to<IR::Type_Stack>()) {
             createStack("", v->name, stack);
@@ -2031,6 +2033,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     (void)nextId("learn_lists");    // idem
 
     headerTypesCreated.clear();
+    headerInstancesCreated.clear();
 
     addLocals();
     padScalars();
