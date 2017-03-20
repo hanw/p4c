@@ -109,6 +109,7 @@ class RenameSymbols : public Transform {
     const IR::Node* postorder(IR::P4Table* decl) override;
     const IR::Node* postorder(IR::P4Action* decl) override;
     const IR::Node* postorder(IR::Parameter* param) override;
+    const IR::Node* preorder(IR::Type_Package *package) override;
 };
 
 // Finds parameters for tables and actions that will be given unique names

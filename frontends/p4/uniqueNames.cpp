@@ -85,6 +85,12 @@ IR::ID* RenameSymbols::getName() const {
     return name;
 }
 
+// don't rename package locals
+const IR::Node *RenameSymbols::preorder(IR::Type_Package *package) {
+    prune();
+    return package;
+}
+
 const IR::Node* RenameSymbols::postorder(IR::Declaration_Variable* decl) {
     auto name = getName();
     if (name != nullptr && *name != decl->name)
