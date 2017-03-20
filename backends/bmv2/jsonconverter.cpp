@@ -1625,10 +1625,14 @@ void JsonConverter::addExternAttributes(const IR::Declaration_Instance *di,
                 BUG("%1%: unhandled constant constructor param",
                     constVal->toString());
             }
+        // TODO(pierce): is this still necessary with enums?
         } else if (arg->is<IR::Declaration_ID>()) {
             auto declID = arg->to<IR::Declaration_ID>();
             j->emplace("type", "string");
             j->emplace("value", declID->toString());
+        } else if (arg->type->is<IR::Type_Enum>()) {
+            j->emplace("type", "string");
+            j->emplace("value", arg->toString());
         } else {
             BUG("%1%: unknown constructor param type", arg->type);
         }
