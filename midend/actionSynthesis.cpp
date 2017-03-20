@@ -112,11 +112,6 @@ bool DoSynthesizeActions::mustMove(const IR::MethodCallStatement* statement) {
 }
 
 bool DoSynthesizeActions::mustMove(const IR::AssignmentStatement *assign) {
-    if (auto mc = assign->right->to<IR::MethodCallExpression>()) {
-        auto mi = MethodInstance::resolve(mc, refMap, typeMap);
-        if (!mi->is<ExternMethod>())
-            return true;
-    }
     return true;
 }
 

@@ -124,19 +124,12 @@ class JsonConverter final {
     void createStack(cstring prefix, cstring varName, const IR::Type_Stack *stack);
     unsigned nextId(cstring group);
     void addLocals();
-//    void addTypesAndInstances(const IR::Parameter *param, const IR::Type_Struct *type);
-//    void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
-//                           Util::JsonArray* result, Util::JsonArray* fieldLists,
-//                           Util::JsonArray* calculations, Util::JsonArray* learn_lists);
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                            Util::JsonArray* result);
     Util::IJson* convertTable(const CFG::TableNode* node,
                               Util::JsonArray* counters,
                               Util::JsonArray* action_profiles);
     Util::IJson* convertIf(const CFG::IfNode* node, cstring parent);
-//    Util::JsonArray* createActions(Util::JsonArray* fieldLists,
-//                                   Util::JsonArray* calculations,
-//                                   Util::JsonArray* learn_lists);
     unsigned createAction(const IR::P4Action *action);
     Util::IJson* toJson(const IR::P4Parser* cont, cstring name);
     Util::IJson* toJson(const IR::ParserState* state);
@@ -194,6 +187,8 @@ class JsonConverter final {
 
     // resolve control/parser params to package locals
     const IR::IDeclaration *resolveParameter(const IR::Parameter *param);
+
+    const IR::InstantiatedBlock *getInstantiatedBlock(cstring name);
 
  public:
     explicit JsonConverter(const CompilerOptions& options);

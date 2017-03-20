@@ -1639,7 +1639,6 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
                                            Util::JsonArray* counters,
                                            Util::JsonArray* meters,
                                            Util::JsonArray *externs) {
-//    const IR::P4Control* cont = block->container;
     enclosingBlock = cont;
 
     LOG1("Processing " << cont);
@@ -1942,6 +1941,14 @@ void JsonConverter::addMetaInformation() {
   toplevel.emplace("__meta__", meta);
 }
 
+
+const IR::InstantiatedBlock *JsonConverter::getInstantiatedBlock(cstring name) {
+    BUG_CHECK(toplevelBlock != nullptr, "Must set toplevelBlock first");
+    auto block = toplevelBlock->getMain()->getParameterValue(name);
+    CHECK_NULL(block);
+    return block->to<IR::InstantiatedBlock>();
+}
+
 const IR::IDeclaration *JsonConverter::resolveParameter(
         const IR::Parameter *param) {
     if (param == nullptr) {
@@ -1954,15 +1961,18 @@ const IR::IDeclaration *JsonConverter::resolveParameter(
     BUG_CHECK(enclosingBlock != nullptr, "Trying to resolve parameter but "
               "enclosing block is null");
 
-    for (auto a : *mainInstance->arguments) {
-        auto cc = a->to<IR::ConstructorCallExpression>();
-        auto cct = typeMap->getType(cc->constructedType);
-
-        auto iapply = cct->to<IR::Type_Type>()->type->to<IR::IApply>();
+    for (; parameterIt != package->constructorParams->parameters->end();
+         ++parameterIt) {
+        const IR::IApply *iapply = nullptr;
+        auto b = getInstantiatedBlock((*parameterIt)->toString());
+        if (b->is<IR::ParserBlock>()) {
+            iapply = b->to<IR::ParserBlock>()->container->to<IR::IApply>();
+        } else if (b->is<IR::ControlBlock>()) {
+            iapply = b->to<IR::ControlBlock>()->container->to<IR::IApply>();
+        }
         if (enclosingBlock == iapply) {
             break;
         }
-        ++parameterIt;
     }
 
     for (auto c : *package->body->components) {
@@ -1980,7 +1990,6 @@ const IR::IDeclaration *JsonConverter::resolveParameter(
             auto applyPIt = applyMethodType->parameters->parameters->begin();
             auto enclosingApplyMethod = enclosingBlock->getApplyMethodType();
             for (auto p : *enclosingApplyMethod->parameters->parameters) {
-                auto t = typeMap->equivalent(p->to<IR::Type>(), param->to<IR::Type>());
                 if (param->getName() == p->getName()) {
                     return ResolveToPackageObjects::getInstance()->
                         getParameterMapping(*applyPIt);
@@ -2005,13 +2014,6 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
 
     ResolveToPackageObjects resolver(typeMap, refMap);
     toplevelBlock->getProgram()->apply(resolver);
-
-//    auto package = toplevelBlock->getMain();
-//
-//    if (package == nullptr) {
-//        ::error("No output to generate");
-//        return;
-//    }
 
     structure.analyze(toplevelBlock, typeMap);
         if (::errorCount() > 0) {
@@ -2061,14 +2063,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
         }
     }
 
-//    auto acts = createActions(field_lists, calculations, learn_lists);
-//    if (::errorCount() > 0) {
-//        return;
-//    }
-//    toplevel.emplace("actions", acts);
-
-    auto package = typeMap->getType(mainInstance)->to<IR::Type_Package>();
-    auto packageBlock = toplevelBlock->getMain();
+    auto package = toplevelBlock->getMain()->type;
 
     if (package == nullptr) {
         ::error("No output to generate");
@@ -2079,51 +2074,26 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
 //    auto isCalled [](const IR::) {
 
     auto packageParamIt = package->constructorParams->parameters->begin();
-    for (auto arg : *mainInstance->arguments) {
-        BUG_CHECK(arg->is<IR::ConstructorCallExpression>(), "Arguments to "
-                  "package constructors must be control or parser constructor "
-                  "calls: %1%", arg);
-        auto cc = arg->to<IR::ConstructorCallExpression>();
-        auto cctt = typeMap->getType(cc->constructedType)->to<IR::Type_Type>();
-        auto cct = cctt->type;
+    
+    // if isCalled
 
-        // if isCalled
-        if (cct->is<IR::P4Parser>()) {
-            auto parser = cct->to<IR::P4Parser>();
+    for (;packageParamIt != package->constructorParams->parameters->end();
+         ++packageParamIt) {
+        auto block = getInstantiatedBlock((*packageParamIt)->toString());
+        if (block->is<IR::ParserBlock>()) {
+            auto parserBlock = block->to<IR::ParserBlock>();
+            auto parser = parserBlock->container;
             auto parserJson = toJson(parser, (*packageParamIt)->toString());
             prsrs->append(parserJson);
-        } else if (cct->is<IR::P4Control>()) {
-            auto control = cct->to<IR::P4Control>();
-//            auto controlBlock = packageBlock->getParameterValue(
-//                    (*packageParamIt)->toString())->to<IR::ControlBlock>();
+        } else if (block->is<IR::ControlBlock>()) {
+            auto controlBlock = block->to<IR::ControlBlock>();
+            auto control = controlBlock->container;
             auto controlJson = convertControl(
                     control, (*packageParamIt)->toString(),
                     counters, meters, externs);
             pipelines->append(controlJson);
         }
-        ++packageParamIt;
     }
-
-//    for (auto p : *model.getParsers()) {
-//        auto parserBlock = package->getParameterValue(p->toString());
-//        CHECK_NULL(parserBlock);
-//        auto parser = parserBlock->to<IR::ParserBlock>()->container;
-//    
-//        auto parserJson = toJson(parser, p->toString());
-//        prsrs->append(parserJson);
-//    }
-//
-//
-//    for (auto c : *model.getControls()) {
-//        auto controlBlock =
-//            package->getParameterValue(c->toString())->to<IR::ControlBlock>();
-//        auto control = convertControl(controlBlock, c->toString(),
-//                                      counters, meters, externs);
-//        if (::errorCount() > 0) {
-//            return; 
-//        }
-//        pipelines->append(control);
-//    }
 }
 
 Util::IJson* JsonConverter::toJson(const IR::P4Parser* parser, cstring name) {
