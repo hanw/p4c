@@ -1086,47 +1086,6 @@ int JsonConverter::createFieldList(const IR::Expression* expr, cstring group,
     return id;
 }
 
-//Util::JsonArray* JsonConverter::createActions(Util::JsonArray* field_lists,
-//                                              Util::JsonArray* calculations,
-//                                              Util::JsonArray* learn_lists) {
-//    auto result = new Util::JsonArray();
-//    for (auto it : structure.actions) {
-//        auto action = it.first;
-//        enclosingBlock = it.second;
-//        cstring name = action->externalName();
-//        auto jact = new Util::JsonObject();
-//        jact->emplace("name", name);
-//        unsigned id = nextId("actions");
-//        structure.ids.emplace(action, id);
-//        jact->emplace("id", id);
-//        auto params = mkArrayField(jact, "runtime_data");
-//        for (auto p : *action->parameters->getEnumerator()) {
-//            // The P4 v1.0 compiler removes unused action parameters!
-//            // We have to do the same, although this seems wrong.
-//            if (!refMap->isUsed(p)) {
-//                ::warning("Removing unused action parameter %1% for "
-//                          "compatibility reasons", p);
-//                continue;
-//            }
-//
-//            auto param = new Util::JsonObject();
-//            param->emplace("name", p->name);
-//            auto type = typeMap->getType(p, true);
-//            if (!type->is<IR::Type_Bits>())
-//                ::error("%1%: Action parameters can only be bit<> "
-//                        "or int<> on this target", p);
-//                param->emplace("bitwidth", type->width_bits());
-//                params->append(param);
-//            }
-//            auto body = mkArrayField(jact, "primitives");
-//            convertActionBody(action->body->components, body, 
-//                              field_lists, calculations, learn_lists);
-//            result->append(jact);
-//    }
-//    enclosingBlock = nullptr;
-//    return result;
-//}
-
 // returns id of action created
 unsigned JsonConverter::createAction(const IR::P4Action *action) {
     cstring name = action->externalName();
