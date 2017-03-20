@@ -1610,10 +1610,12 @@ Util::JsonObject *JsonConverter::createExternInstance(cstring name, cstring type
 }
 
 void JsonConverter::addExternAttributes(const IR::Declaration_Instance *di,
+                                        const IR::ExternBlock *block,
                                         Util::JsonArray *attributes) {
+    auto paramIt = block->getConstructorParameters()->parameters->begin();
     for (auto arg : *di->arguments) {
         auto j = new Util::JsonObject();
-        j->emplace("name", arg->toString()); 
+        j->emplace("name", (*paramIt)->toString()); 
         if (arg->is<IR::Constant>()) {
             auto constVal = arg->to<IR::Constant>();
             if (arg->type->is<IR::Type_Bits>()) {
@@ -1631,6 +1633,7 @@ void JsonConverter::addExternAttributes(const IR::Declaration_Instance *di,
             BUG("%1%: unknown constructor param type", arg->type);
         }
         attributes->append(j);
+        ++paramIt;
     }
 }
 
@@ -1639,6 +1642,9 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
                                            Util::JsonArray* counters,
                                            Util::JsonArray* meters,
                                            Util::JsonArray *externs) {
+    auto instantiatedBlock = getInstantiatedBlock(name);
+    auto controlBlock = instantiatedBlock->to<IR::ControlBlock>();
+
     enclosingBlock = cont;
 
     LOG1("Processing " << cont);
@@ -1702,17 +1708,17 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
             c->is<IR::P4Table>())
             continue;
         if (c->is<IR::Declaration_Instance>()) {
-            // TODO(pierce): should this happen with local variables?
             auto di = c->to<IR::Declaration_Instance>();
-            auto type = typeMap->getType(di);
-            cstring name = c->externalName();
-            if (type->is<IR::Type_Extern>()) {
-                auto externType = type->to<IR::Type_Extern>();
-                auto json = createExternInstance(name, externType->externalName());
+            auto bl = controlBlock->getValue(c);
+            if (bl->is<IR::ExternBlock>()) {
+                auto externBlock = bl->to<IR::ExternBlock>();
+                cstring name = c->name;
+                auto json = createExternInstance(name, externBlock->type->name);
                 auto attributes = mkArrayField(json, "attribute_values");
-                addExternAttributes(di, attributes);
+                addExternAttributes(di, externBlock, attributes);
+                externs->append(json);
+                continue;
             }
-            continue;
         }
         BUG("%1%: not yet handled", c);
     }
@@ -1761,6 +1767,11 @@ void JsonConverter::pushFields(const IR::Type_StructLike *st,
             auto field = pushNewArray(fields);
             field->append(f->name.name);
             field->append(type->size);    // FIXME -- where does length go?
+        } else if (ftype->is<IR::Type_Boolean>()) {
+            auto field = pushNewArray(fields);
+            field->append(f->name.name);
+            field->append(boolWidth);
+            field->append(0);
         } else if (ftype->to<IR::Type_Stack>()) {
             BUG("%1%: nested stack", st);
         } else {
