@@ -147,7 +147,7 @@ bool ToP4::preorder(const IR::P4Program* program) {
         bool isPackageWithDef = a->is<IR::Type_Package>()
                 && a->to<IR::Type_Package>()->hasDefinition();
         if (!a->is<IR::Type_Error>() // errors can come from multiple files
-            && (!isPackageWithDef) // want to see package definitions
+//            && (!isPackageWithDef) // uncomment to see package definitions
             && sourceFile != nullptr) {
             /* FIXME -- when including a user header file (sourceFile != mainFile), do we want
              * to emit an #include of it or not?  Probably not when translating from P4-14, as
@@ -987,6 +987,10 @@ bool ToP4::preorder(const IR::Type_Package * p) {
     // TODO(pierce): this is hacky but fast
     if (p->hasDefinition()) {
         dump(1);
+        builder.emitIndent();
+        visit(p->annotations);
+        builder.append("package ");
+        builder.append(p->name);
         if (p->getConstructorParameters()->size() != 0)
             visit(p->getConstructorParameters());
         builder.spc();
