@@ -1025,7 +1025,15 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                
                 auto self = new Util::JsonObject();
                 self->emplace("type", "extern");
-                self->emplace("value", em->object->getName());
+
+                if (em->object->is<IR::Parameter>()) {
+                    auto param = em->object->to<IR::Parameter>();
+                    auto packageObject = resolveParameter(param);
+                    self->emplace("value", packageObject->getName());
+                } else {
+                    self->emplace("value", em->object->getName());
+                }
+
                 params->append(self);
 
                 for (auto a : *mc->arguments) {
@@ -1086,7 +1094,6 @@ int JsonConverter::createFieldList(const IR::Expression* expr, cstring group,
     return id;
 }
 
-// returns id of action created
 unsigned JsonConverter::createAction(const IR::P4Action *action) {
     cstring name = action->externalName();
     auto jact = new Util::JsonObject();
@@ -1656,8 +1663,9 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
         if (p_type->is<IR::Type_Extern>()) {
             auto ex_type = p_type->to<IR::Type_Extern>();
             if (ex_type->getName() == corelib.packetOut.name) {
-                auto inst =
-                    createExternInstance(p->getName(), ex_type->getName());
+                auto packageObject = resolveParameter(p);
+                auto inst = createExternInstance(packageObject->toString(),
+                                                 ex_type->getName());
                 mkArrayField(inst, "attribute_values");
                 externs->append(inst);
             }
