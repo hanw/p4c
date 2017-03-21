@@ -1,8 +1,8 @@
 
-add index_setter data.f1:0x11111111 data.f2:0x22222222 set_index(index:9, port:1)
-add index_setter data.f1:0x22222222 data.f2:0x33333333 set_index(index:9, port:2)
-add index_setter data.f1:0x33333333 data.f2:0x44444444 set_index(index:9, port:2)
-add index_setter data.f1:0x44444444 data.f2:0x55555555 set_index(index:8, port:3)
+add index_setter headers_data.f1:0x11111111 headers_data.f2:0x22222222 set_index(index:9, port:1)
+add index_setter headers_data.f1:0x22222222 headers_data.f2:0x33333333 set_index(index:9, port:2)
+add index_setter headers_data.f1:0x33333333 headers_data.f2:0x44444444 set_index(index:9, port:2)
+add index_setter headers_data.f1:0x44444444 headers_data.f2:0x55555555 set_index(index:8, port:3)
 
 
 expect 1 11111111 22222222 0101 0202 0303 0404

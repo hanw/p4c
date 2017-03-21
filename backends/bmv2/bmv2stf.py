@@ -354,10 +354,14 @@ class RunBMV2(object):
             self.json = json.load(jf)
         for a in self.json["actions"]:
             self.actions.append(BMV2Action(a))
-        for t in self.json["pipelines"][0]["tables"]:
-            self.tables.append(BMV2Table(t))
-        for t in self.json["pipelines"][1]["tables"]:
-            self.tables.append(BMV2Table(t))
+
+        for p in self.json["pipelines"]:
+            for t in p["tables"]:
+                self.tables.append(BMV2Table(t))
+#        for t in self.json["pipelines"][0]["tables"]:
+#            self.tables.append(BMV2Table(t))
+#        for t in self.json["pipelines"][1]["tables"]:
+#            self.tables.append(BMV2Table(t))
     def filename(self, interface, direction):
         return self.folder + "/" + self.pcapPrefix + interface + "_" + direction + ".pcap"
     def interface_of_filename(self, f):
