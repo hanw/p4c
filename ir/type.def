@@ -302,6 +302,9 @@ class Type_Package : Type_ArchBlock, IApply, IContainer, ISimpleNamespace {
 
     IndexedVector<Declaration>  packageLocals;
     BlockStatement       body;
+
+    // package definitions are optional as this feature is experimental
+    bool hasDefinition() const { return !body->components->empty(); }
 }
 
 class Type_Parser : Type_ArchBlock, IApply {

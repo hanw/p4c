@@ -165,8 +165,9 @@ static int yylex();
                         derivedTypeDeclaration parserDeclaration
                         controlDeclaration enumDeclaration typedefDeclaration
                         typeDeclaration 
-// packageDeclaration
 %type<Type_Package>     packageTypeDeclaration
+                        packageTypeDeclarationWithDefinition
+                        packageTypeDeclarationWithoutDefinition
 %type<Type_Error>       errorDeclaration
 %type<Node>             declaration externDeclaration matchKindDeclaration
 %type<Type_Parser>      parserTypeDeclaration
@@ -252,7 +253,6 @@ declaration
     | errorDeclaration        { addErrors($1); $$ = nullptr; }
     | matchKindDeclaration    { $$ = $1; }
     ;
-//    | packageDeclaration      { $$ = $1; }
 
 nonTypeName
     : IDENTIFIER  { $$ = new IR::ID(@1, $1); }
@@ -304,21 +304,35 @@ direction
     | /* empty */  { $$ = IR::Direction::None; }
     ;
 
-packageTypeDeclaration
+packageTypeDeclarationWithDefinition
     : optAnnotations PACKAGE name { structure.pushContainerType(*$3, false); }
       optTypeParameters           { structure.declareTypes($5->parameters); }
       optConstructorParameters
       '{' controlLocalDeclarations APPLY controlBody '}'
                   { auto pl = new IR::ParameterList();
                     auto cpl = new IR::ParameterList(@7, $7);
-                    $$ = new IR::Type_Package(@3, *$3, $1, $5, pl, cpl, $9, $11); }
+                    $$ = new IR::Type_Package(@3, *$3, $1, $5, pl,
+                                              cpl, $9, $11); }
     ;
 
-//packageDeclaration
-//    : packageTypeDeclaration 
-//      { structure.pop();
-//        $$ = new IR::P4Package($1->name.srcInfo, $1->name, $1); }
-//    ;
+packageTypeDeclarationWithoutDefinition
+    : optAnnotations PACKAGE name { structure.pushContainerType(*$3, false); }
+      optTypeParameters           { structure.declareTypes($5->parameters); }
+      optConstructorParameters ';'
+                  { auto pl = new IR::ParameterList();
+                    auto cpl = new IR::ParameterList(@7, $7);
+                    auto emptyLocals = new IR::IndexedVector<IR::Declaration>();
+                    auto emptyBody = new IR::BlockStatement(
+                            new IR::Annotations(),
+                            new IR::IndexedVector<IR::StatOrDecl>());
+                    $$ = new IR::Type_Package(
+                            @3, *$3, $1, $5, pl,
+                            cpl, emptyLocals, emptyBody); }
+
+packageTypeDeclaration
+    : packageTypeDeclarationWithDefinition    { $$ = $1; }
+    | packageTypeDeclarationWithoutDefinition { $$ = $1; }
+    ;
 
 instantiation
       : annotations typeRef '(' argumentList ')' name ';'

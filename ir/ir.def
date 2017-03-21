@@ -31,33 +31,6 @@
  */
 
 
-//class P4Package : Type_Declaration, ISimpleNamespace, IApply, IContainer {
-//    Type_Package         type;
-////    ParameterList        constructorParams;
-////    IndexedVector<Declaration>  packageLocals;
-////    BlockStatement       body;
-//
-//    TypeParameters getTypeParameters() const override {
-//        return type->getTypeParameters(); }
-//    Util::Enumerator<IDeclaration>* getDeclarations() const override {
-//        return type->packageLocals->getDeclarations(); }
-//    Type_Method getApplyMethodType() const override {
-//        return type->getApplyMethodType(); }
-//    Type_Method getConstructorMethodType() const override;
-//    IDeclaration getDeclByName(cstring name) const override {
-//        return type->packageLocals->getDeclaration(name); }
-//    ParameterList getConstructorParameters() const override {
-//        return type->constructorParams; }
-//#apply
-//    validate {
-//        if (!(name == type->name))
-//            BUG("Name mismatch for %1%: %2% != %3%", this, name, type->name);
-//        type->packageLocals->check_null();
-//    }
-//    toString { return cstring("package") + externalName(); }
-//}
-
-
 class ParserState : ISimpleNamespace, Declaration, IAnnotated {
     Annotations               annotations;
     IndexedVector<StatOrDecl> components;
