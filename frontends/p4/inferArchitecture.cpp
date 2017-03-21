@@ -61,18 +61,26 @@ bool ArchitecturalBlocks::preorder(const IR::Type_Parser *node) {
 }
 
 bool ArchitecturalBlocks::preorder(const IR::Type_Package *node) {
-    // TODO(pierce): shouldn't these be constructor parameters?
-    for (auto param : *node->constructorParams->parameters) {
-        BUG_CHECK(param->type->is<IR::Type_Specialized>(),
-                  "Unexpected Package param type");
-        auto baseType = param->type->to<IR::Type_Specialized>()->baseType;
-        auto typeObj = typeMap->getType(baseType)->getP4Type();
-        if (typeObj->is<IR::Type_Parser>()) {
-            archModel->addParser(new Parser_Model(param->toString()));
-            visit(typeObj->to<IR::Type_Parser>());
-        } else if (typeObj->is<IR::Type_Control>()) {
-            archModel->addControl(new Control_Model(param->toString()));
-            visit(typeObj->to<IR::Type_Control>());
+    for (auto p : *node->constructorParams->parameters) {
+        const IR::Type *type = nullptr;
+        if (p->type->is<IR::Type_Name>()) {
+            type = typeMap->getType(p->type);
+            if (type->is<IR::Type_Type>()) {
+                type = typeMap->getTypeType(p->type, false);
+            }
+        } else if (p->type->is<IR::Type_Specialized>()) {
+            auto baseType = p->type->to<IR::Type_Specialized>()->baseType;
+            type = typeMap->getType(baseType)->getP4Type();
+        }
+
+        BUG_CHECK(type != nullptr, "Package parameter type not found: %1%", p);
+
+        if (type->is<IR::Type_Parser>()) {
+            archModel->addParser(new Parser_Model(p->toString()));
+            visit(type->to<IR::Type_Parser>());
+        } else if (type->is<IR::Type_Control>()) {
+            archModel->addControl(new Control_Model(p->toString()));
+            visit(type->to<IR::Type_Control>());
         }
     }
     return false;

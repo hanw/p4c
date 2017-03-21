@@ -396,8 +396,6 @@ const IR::Type* TypeInference::canonicalize(const IR::Type* type) {
         auto cl = canonicalizeLocals(tp->packageLocals);
         if (pl == nullptr || tps == nullptr || cl == nullptr)
             return nullptr;
-        if (!checkParameters(pl, true))
-            return nullptr;
         if (pl != tp->constructorParams || tps != tp->typeParameters
             || cl != tp->packageLocals)
             return new IR::Type_Package(tp->srcInfo, tp->name, tp->annotations,
@@ -888,7 +886,7 @@ const IR::Node* TypeInference::preorder(IR::Declaration_Instance* decl) {
     return decl;
 }
 
-// Unified container
+// Return type created by constructor
 const IR::Type*
 TypeInference::containerInstantiation(
     const IR::Node* node,  // can be Declaration_Instance or ConstructorCallExpression
@@ -898,9 +896,7 @@ TypeInference::containerInstantiation(
     auto constructor = container->getConstructorMethodType();
     constructor = cloneWithFreshTypeVariables(
         constructor->to<IR::IMayBeGenericType>())->to<IR::Type_Method>();
-//    auto freshContainer = cloneWithFreshTypeVariables(container)->to<IR::IContainer>();
    CHECK_NULL(constructor);
-//   CHECK_NULL(freshContainer);
 
     // We build a type for the callExpression and unify it with the method expression
     // Allocate a fresh variable for the return type; it will be hopefully bound in the process.
@@ -921,9 +917,6 @@ TypeInference::containerInstantiation(
                                             new IR::Vector<IR::Type>(),
                                             rettype, args);
     TypeConstraints constraints;
-    if (container->is<IR::Type_Package>()) {
-        printf("");
-    }
     constraints.addEqualityConstraint(
         constructor, callType);
     auto tvs = constraints.solve(node, true);
@@ -1002,7 +995,11 @@ const IR::Node* TypeInference::postorder(IR::Type_InfInt* type) {
 }
 
 const IR::Node* TypeInference::postorder(IR::Type_Package* p) {
-    (void)setTypeType(p, false);
+    if (p->hasDefinition()) {
+        (void)setTypeType(p, false);
+    } else {
+        (void)setTypeType(p);
+    }
     return p;
 }
 

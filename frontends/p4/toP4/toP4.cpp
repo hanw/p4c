@@ -144,8 +144,10 @@ bool ToP4::preorder(const IR::P4Program* program) {
     for (auto a : *program->declarations) {
         // Check where this declaration originates
         cstring sourceFile = ifSystemFile(a);
+        bool isPackageWithDef = a->is<IR::Type_Package>()
+                && a->to<IR::Type_Package>()->hasDefinition();
         if (!a->is<IR::Type_Error>() // errors can come from multiple files
-            && !a->is<IR::Type_Package>() // want to see package definitions
+            && (!isPackageWithDef) // want to see package definitions
             && sourceFile != nullptr) {
             /* FIXME -- when including a user header file (sourceFile != mainFile), do we want
              * to emit an #include of it or not?  Probably not when translating from P4-14, as
@@ -366,19 +368,6 @@ bool ToP4::preorder(const IR::Type_Varbits* t) {
     builder.appendFormat("varbit<%d>", t->size);
     return false;
 }
-
-//bool ToP4::preorder(const IR::Type_Package* package) {
-//    dump(2);
-//    builder.emitIndent();
-//    visit(package->annotations);
-//    builder.append("package ");
-//    builder.append(package->name);
-//    visit(package->typeParameters);
-//    visit(package->applyParams);
-//
-//    if (isDeclaration) builder.endOfStatement();
-//    return false;
-//}
 
 bool ToP4::process(const IR::Type_StructLike* t, const char* name) {
     dump(1);
@@ -995,26 +984,35 @@ bool ToP4::preorder(const IR::Parameter* p) {
 }
 
 bool ToP4::preorder(const IR::Type_Package * p) {
-    dump(1);
-    bool decl = isDeclaration;
-    isDeclaration = false;
-//    visit(p->type);
-    isDeclaration = decl;
-    if (p->getConstructorParameters()->size() != 0)
-        visit(p->getConstructorParameters());
-    builder.spc();
-    builder.blockStart();
-    for (auto s : *p->packageLocals) {
-        builder.emitIndent();
-        visit(s);
-        builder.newline();
-    }
+    // TODO(pierce): this is hacky but fast
+    if (p->hasDefinition()) {
+        dump(1);
+        if (p->getConstructorParameters()->size() != 0)
+            visit(p->getConstructorParameters());
+        builder.spc();
+        builder.blockStart();
+        for (auto s : *p->packageLocals) {
+            builder.emitIndent();
+            visit(s);
+            builder.newline();
+        }
 
-    builder.emitIndent();
-    builder.append("apply ");
-    visit(p->body);
-    builder.newline();
-    builder.blockEnd(true);
+        builder.emitIndent();
+        builder.append("apply ");
+        visit(p->body);
+        builder.newline();
+        builder.blockEnd(true);
+    } else {
+        dump(2);
+        builder.emitIndent();
+        visit(p->annotations);
+        builder.append("package ");
+        builder.append(p->name);
+        visit(p->typeParameters);
+        visit(p->constructorParams);
+
+        if (isDeclaration) builder.endOfStatement();
+    }
     return false;
 }
 

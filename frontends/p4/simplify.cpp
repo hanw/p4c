@@ -28,8 +28,8 @@ const IR::Node* DoSimplifyControlFlow::postorder(IR::BlockStatement* statement) 
     if (parent->is<IR::SwitchCase>() ||
         parent->is<IR::P4Control>() ||
         parent->is<IR::Function>() ||
-        parent->is<IR::P4Action>()) { // ||
-//        parent->is<IR::P4Package>()) {
+        parent->is<IR::P4Action>() ||
+        parent->is<IR::Type_Package>()) {
         // Cannot remove block from switch or toplevel control block
         return statement;
     }
