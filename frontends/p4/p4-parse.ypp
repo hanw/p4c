@@ -166,8 +166,8 @@ static int yylex();
                         controlDeclaration enumDeclaration typedefDeclaration
                         typeDeclaration 
 %type<Type_Package>     packageTypeDeclaration
-                        packageTypeDeclarationWithDefinition
                         packageTypeDeclarationWithoutDefinition
+                        packageTypeDeclarationWithDefinition
 %type<Type_Error>       errorDeclaration
 %type<Node>             declaration externDeclaration matchKindDeclaration
 %type<Type_Parser>      parserTypeDeclaration
@@ -304,21 +304,10 @@ direction
     | /* empty */  { $$ = IR::Direction::None; }
     ;
 
-packageTypeDeclarationWithDefinition
+packageTypeDeclaration
     : optAnnotations PACKAGE name { structure.pushContainerType(*$3, false); }
       optTypeParameters           { structure.declareTypes($5->parameters); }
       optConstructorParameters
-      '{' controlLocalDeclarations APPLY controlBody '}'
-                  { auto pl = new IR::ParameterList();
-                    auto cpl = new IR::ParameterList(@7, $7);
-                    $$ = new IR::Type_Package(@3, *$3, $1, $5, pl,
-                                              cpl, $9, $11); }
-    ;
-
-packageTypeDeclarationWithoutDefinition
-    : optAnnotations PACKAGE name { structure.pushContainerType(*$3, false); }
-      optTypeParameters           { structure.declareTypes($5->parameters); }
-      optConstructorParameters ';'
                   { auto pl = new IR::ParameterList();
                     auto cpl = new IR::ParameterList(@7, $7);
                     auto emptyLocals = new IR::IndexedVector<IR::Declaration>();
@@ -329,9 +318,16 @@ packageTypeDeclarationWithoutDefinition
                             @3, *$3, $1, $5, pl,
                             cpl, emptyLocals, emptyBody); }
 
-packageTypeDeclaration
-    : packageTypeDeclarationWithDefinition    { $$ = $1; }
-    | packageTypeDeclarationWithoutDefinition { $$ = $1; }
+packageTypeDeclarationWithoutDefinition
+    : packageTypeDeclaration ';'
+                  { $$ = $1; }
+    ;
+
+packageTypeDeclarationWithDefinition
+    : packageTypeDeclaration
+      '{' controlLocalDeclarations APPLY controlBody '}'
+                  { ($$ = $1)->packageLocals = $3;
+                    $$->body = $5; }
     ;
 
 instantiation
@@ -629,7 +625,8 @@ typeDeclaration
     | typedefDeclaration ';'           { $$ = $1; }
     | parserTypeDeclaration ';'        { structure.pop(); $$ = $1; }
     | controlTypeDeclaration ';'       { structure.pop(); $$ = $1; }
-    | packageTypeDeclaration           { structure.pop(); $$ = $1; }
+    | packageTypeDeclarationWithDefinition    { structure.pop(); $$ = $1; }
+    | packageTypeDeclarationWithoutDefinition { structure.pop(); $$ = $1; }
     ;
 
 derivedTypeDeclaration
