@@ -18,5 +18,5 @@ package top(proto _c);
 ../testdata/p4_16_errors/extern.p4(19): error: Could not find type of control c
 control c(in X x) {
         ^
-error: Could not find type of <Type_Name>(45) c
-error: Could not find type of <Type_Name>(43) top
+error: Could not find type of <Type_Name>(52) c
+error: Could not find type of <Type_Name>(50) top
