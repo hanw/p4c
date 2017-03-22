@@ -30,7 +30,6 @@
   precedence   -> int getPrecedence() const
  */
 
-
 class ParserState : ISimpleNamespace, Declaration, IAnnotated {
     Annotations               annotations;
     IndexedVector<StatOrDecl> components;
@@ -468,8 +467,7 @@ class ControlBlock : InstantiatedBlock {
 
 class PackageBlock : InstantiatedBlock {
     Type_Package type;
-    ParameterList getConstructorParameters() const override {
-        return type->constructorParams; }
+    ParameterList getConstructorParameters() const override { return type->constructorParams; }
 #nodbprint
 }
 

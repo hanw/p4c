@@ -32,7 +32,6 @@ const IR::Node* MoveDeclarations::postorder(IR::P4Action* action)  {
     return action;
 }
 
-// was P4Package
 const IR::Node* MoveDeclarations::postorder(IR::Type_Package* package)  {
     LOG1("Visiting " << package << " toMove " << toMove.size());
     auto decls = new IR::IndexedVector<IR::Declaration>();

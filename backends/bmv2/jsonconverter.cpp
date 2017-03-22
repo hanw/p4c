@@ -2091,9 +2091,10 @@ Util::IJson* JsonConverter::toJson(const IR::P4Parser* parser, cstring name) {
 
     for (auto state : *parser->states) {
         auto json = toJson(state);
-        if (json != nullptr)
+        if (json != nullptr) {
             states->append(json);
         }
+    }
     return result;
 }
 

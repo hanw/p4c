@@ -31,7 +31,7 @@ error {
 
 extern packet_in {
     // T must be a fixed-size header type
-    void extract<T>(out T hdr_p_in);
+    void extract<T>(out T hdr);
     // T must be a header containing exactly 1 varbit field
     void extract<T>(out T variableSizeHeader,
                     in bit<32> variableFieldSizeInBits);
@@ -44,7 +44,7 @@ extern packet_in {
 }
 
 extern packet_out {
-    void emit<T>(in T hdr_p_out_emit);
+    void emit<T>(in T hdr);
     void emit<T>(in bool condition, in T data);
 }
 

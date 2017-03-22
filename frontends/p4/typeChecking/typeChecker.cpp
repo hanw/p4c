@@ -870,6 +870,8 @@ const IR::Node* TypeInference::preorder(IR::Declaration_Instance* decl) {
     } else if (simpleType->is<IR::IContainer>()) {
         if (decl->initializer != nullptr) {
             typeError("%1%: initializers only allowed for extern instances", decl->initializer);
+            prune();
+            return decl;
         }
         auto type = containerInstantiation(decl, decl->arguments, simpleType->to<IR::IContainer>());
         if (type == nullptr) {
@@ -896,7 +898,7 @@ TypeInference::containerInstantiation(
     auto constructor = container->getConstructorMethodType();
     constructor = cloneWithFreshTypeVariables(
         constructor->to<IR::IMayBeGenericType>())->to<IR::Type_Method>();
-   CHECK_NULL(constructor);
+    CHECK_NULL(constructor);
 
     // We build a type for the callExpression and unify it with the method expression
     // Allocate a fresh variable for the return type; it will be hopefully bound in the process.
@@ -917,17 +919,14 @@ TypeInference::containerInstantiation(
                                             new IR::Vector<IR::Type>(),
                                             rettype, args);
     TypeConstraints constraints;
-    constraints.addEqualityConstraint(
-        constructor, callType);
+    constraints.addEqualityConstraint(constructor, callType);
     auto tvs = constraints.solve(node, true);
     typeMap->addSubstitutions(tvs);
-
     if (tvs == nullptr)
         return nullptr;
 
     auto returnType = tvs->lookup(rettype);
     BUG_CHECK(returnType != nullptr, "Cannot infer constructor result type %1%", node);
-
     return returnType;
 }
 
@@ -994,13 +993,23 @@ const IR::Node* TypeInference::postorder(IR::Type_InfInt* type) {
     return type;
 }
 
-const IR::Node* TypeInference::postorder(IR::Type_Package* p) {
-    if (p->hasDefinition()) {
-        (void)setTypeType(p, false);
+const IR::Node* TypeInference::postorder(IR::Type_Package* type) {
+    if (type->hasDefinition()) {
+        (void)setTypeType(type, false);
     } else {
-        (void)setTypeType(p);
+        auto canon = setTypeType(type);
+        if (canon != nullptr) {
+            for (auto p : *type->getConstructorParameters()->parameters) {
+                auto ptype = getType(p);
+                if (ptype == nullptr)
+                    // error
+                    return type;
+                if (ptype->is<IR::P4Parser>() || ptype->is<IR::P4Control>())
+                    ::error("%1%: Invalid package parameter type", p);
+            }
+        }
     }
-    return p;
+    return type;
 }
 
 const IR::Node* TypeInference::postorder(IR::Type_ArchBlock* decl) {

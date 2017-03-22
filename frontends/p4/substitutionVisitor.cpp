@@ -50,9 +50,6 @@ const IR::Node* TypeVariableSubstitutionVisitor::preorder(IR::TypeParameters *tp
 const IR::Node* TypeVariableSubstitutionVisitor::preorder(IR::Type_Var* typeVariable) {
     LOG1("Visiting " << dbp(getOriginal()));
     const IR::Type* type = bindings->lookup(getOriginal<IR::Type_Var>());
-    if (getOriginal()->id == 563) {
-        printf("");
-    }
     if (type == nullptr)
         return typeVariable;
     LOG1("Replacing " << getOriginal() << " with " << type);

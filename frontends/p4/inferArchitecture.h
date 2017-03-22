@@ -49,9 +49,6 @@ class ArchitecturalBlocks : public Inspector {
     bool preorder(const IR::Type_Package *node) override;
 
     bool preorder(const IR::P4Program* program) override;
-
-    // don't care
-    bool preorder(const IR::Node *node) override;
 };
 
 class InferArchitecture : public PassManager {

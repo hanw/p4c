@@ -253,7 +253,6 @@ class GeneralInliner : public AbstractInliner {
     }
     // controlled visiting order
     const IR::Node* preorder(IR::MethodCallStatement* statement) override;
-//    const IR::Node* preorder(IR::P4Package* caller) override;
     const IR::Node* preorder(IR::P4Control* caller) override;
     const IR::Node* preorder(IR::P4Parser* caller) override;
     const IR::Node* preorder(IR::ParserState* state) override;

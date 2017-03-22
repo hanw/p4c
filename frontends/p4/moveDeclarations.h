@@ -48,7 +48,6 @@ class MoveDeclarations : public Transform {
             // Otherwise move to the control's beginning.
             push();
         return action; }
-    // was P4Package
     const IR::Node* preorder(IR::Type_Package* package) override
     { push(); return package; }
     const IR::Node* preorder(IR::P4Control* control) override
@@ -59,7 +58,6 @@ class MoveDeclarations : public Transform {
     { push(); return function; }
     const IR::Node* postorder(IR::P4Action* action) override;
     const IR::Node* postorder(IR::P4Control* control) override;
-    // was P4Package
     const IR::Node* postorder(IR::Type_Package* package) override;
     const IR::Node* postorder(IR::P4Parser* parser) override;
     const IR::Node* postorder(IR::Function* function) override;

@@ -106,8 +106,4 @@ bool ArchitecturalBlocks::preorder(const IR::Type_Extern *node) {
     return false;
 }
 
-bool ArchitecturalBlocks::preorder(const IR::Node *node) {
-    return false;
-}
-
 } // namespace P4

@@ -437,7 +437,7 @@ const IR::Node* DoSimplifyExpressions::postorder(IR::Function* function) {
     return function;
 }
 
-// TODO(pierce): should we allow this for p4package? -- was P4Package
+// TODO(pierce): should we allow this for Type_Package?
 const IR::Node* DoSimplifyExpressions::postorder(IR::Type_Package* package) {
     if (toInsert.empty())
         return package;
@@ -513,7 +513,7 @@ const IR::Node* DoSimplifyExpressions::postorder(IR::AssignmentStatement* statem
 }
 
 const IR::Node* DoSimplifyExpressions::postorder(IR::MethodCallStatement* statement) {
-    if (findContext<IR::Type_Package>() != nullptr) { // was P4Package
+    if (findContext<IR::Type_Package>() != nullptr) { // skip package bodies
         return statement;
     }
     DismantleExpression dm(refMap, typeMap);

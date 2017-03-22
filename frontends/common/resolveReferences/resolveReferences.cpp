@@ -286,10 +286,6 @@ bool ResolveReferences::preorder(const IR::This* pointer) {
 }
 
 bool ResolveReferences::preorder(const IR::PathExpression* path) {
-    if (findContext<IR::Type_Package>()) {
-        auto c = findContext<IR::Type_Package>();
-        printf("");
-    }
     resolvePath(path->path, false); return true; }
 
 bool ResolveReferences::preorder(const IR::Type_Name* type) {

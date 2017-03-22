@@ -61,7 +61,7 @@ BUILT_SOURCES += \
 	frontends/p4/p4-parse.cpp
 
 noinst_HEADERS += \
-    frontends/p4/callGraph.h \
+	frontends/p4/callGraph.h \
 	frontends/p4/cloner.h \
 	frontends/p4/coreLibrary.h \
 	frontends/p4/createBuiltins.h \
