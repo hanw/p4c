@@ -129,18 +129,18 @@ extern void truncate(in bit<32> length);
 parser Parser<H, M>(packet_in b,
                     out H parsedHdr,
                     inout M meta,
-                    inout standard_metadata_t sm);
-control VerifyChecksum<H, M>(in H hdr11,
+                    inout standard_metadata_t standard_metadata);
+control VerifyChecksum<H, M>(in H hdr,
                              inout M meta);
-control Ingress<H, M>(inout H hdr22,
+control Ingress<H, M>(inout H hdr,
                       inout M meta,
-                      inout standard_metadata_t sm);
-control Egress<H, M>(inout H hdr33,
+                      inout standard_metadata_t standard_metadata);
+control Egress<H, M>(inout H hdr,
                      inout M meta,
-                     inout standard_metadata_t sm);
-control ComputeChecksum<H, M>(inout H hdr44,
+                     inout standard_metadata_t standard_metadata);
+control ComputeChecksum<H, M>(inout H hdr,
                               inout M meta);
-control Deparser<H>(packet_out b, in H hdr55);
+control Deparser<H>(packet_out b, in H hdr);
 
 package V1Switch<H, M>(Parser<H, M> p,
                        VerifyChecksum<H, M> vr,
