@@ -312,11 +312,14 @@ void ResolveReferences::postorder(const IR::P4Control *c) {
 }
 
 bool ResolveReferences::preorder(const IR::Type_Package *p) {
+    auto cs = checkShadow;
+    checkShadow = false;
     refMap->usedName(p->name.name);
     addToContext(p);
     addToContext(p->typeParameters);
     addToContext(p->applyParams);
     addToContext(p->constructorParams);
+    checkShadow = cs;
     return true;
 }
 
@@ -325,7 +328,6 @@ void ResolveReferences::postorder(const IR::Type_Package *p) {
     removeFromContext(p->applyParams);
     removeFromContext(p->typeParameters);
     removeFromContext(p);
-    checkShadowing(p);
 }
 
 bool ResolveReferences::preorder(const IR::P4Parser *p) {
