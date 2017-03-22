@@ -111,6 +111,9 @@ class DoSimplifyExpressions : public Transform {
     }
 
     const IR::Node* preorder(IR::P4Program* program) override {
+        if (refMap->isV1() && !refMap->isTargetingBMV2()) {
+            prune(); // skip for P4 v1
+        } 
         return program;
     }
     // was P4Package
