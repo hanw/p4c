@@ -73,7 +73,10 @@ bool ArchitecturalBlocks::preorder(const IR::Type_Package *node) {
             type = typeMap->getType(baseType)->getP4Type();
         }
 
-        BUG_CHECK(type != nullptr, "Package parameter type not found: %1%", p);
+        if (type == nullptr) {
+            // TODO(pierce): not an architectural block? Log this
+            continue;
+        }
 
         if (type->is<IR::Type_Parser>()) {
             archModel->addParser(new Parser_Model(p->toString()));
