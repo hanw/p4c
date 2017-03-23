@@ -709,16 +709,6 @@ class ExpressionConverter : public Inspector {
         // This is useful for action bodies mostly
         auto decl = converter->refMap->getDeclaration(expression->path, true);
         if (auto param = decl->to<IR::Parameter>()) {
-// TODO(pierce): what does this do? Changing the emplaced json doesn't
-// change the output...
-//            if (param == converter->stdMetadataParameter) {
-//                // This is a flat struct
-//                auto result = new Util::JsonObject();
-//                result->emplace("type", "header");
-//                result->emplace("value", converter->jsonMetadataParameterName);
-//                map.emplace(expression, result);
-//                return;
-//            }
             if (converter->structure.nonActionParameters.find(param) !=
                 converter->structure.nonActionParameters.end()) {
                 map.emplace(expression, new Util::JsonValue(param->name.name));
@@ -771,7 +761,7 @@ class ExpressionConverter : public Inspector {
             }
             map.emplace(expression, result);
         } else if (auto inst = decl->to<IR::Declaration_Instance>()) {
-            // TODO: trying to evaluate extern as expression -- BUG
+            BUG("%1%: trying to evaluate extern in expression", inst);
         }
     }
 
@@ -1656,19 +1646,16 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
         }
     }
 
-    // special handling for packet out extern
-    // TODO(pierce): handle other externs-as-parameters this way also?
+    // special handling for exters as parameters
     for (auto p : *cont->type->applyParams->parameters) {
-        auto p_type = typeMap->getType(p);
-        if (p_type->is<IR::Type_Extern>()) {
-            auto ex_type = p_type->to<IR::Type_Extern>();
-            if (ex_type->getName() == corelib.packetOut.name) {
-                auto packageObject = resolveParameter(p);
-                auto inst = createExternInstance(packageObject->toString(),
-                                                 ex_type->getName());
-                mkArrayField(inst, "attribute_values");
-                externs->append(inst);
-            }
+        auto type = typeMap->getType(p);
+        if (type->is<IR::Type_Extern>()) {
+            auto ex = type->to<IR::Type_Extern>();
+            auto packageObject = resolveParameter(p);
+            auto inst = createExternInstance(packageObject->toString(),
+                                             ex->getName());
+            mkArrayField(inst, "attribute_values");
+            externs->append(inst);
         }
     }
 

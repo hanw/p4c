@@ -116,8 +116,7 @@ class DoSimplifyExpressions : public Transform {
         } 
         return program;
     }
-    // was P4Package
-    const IR::Node* postorder(IR::Type_Package* package) override;
+    const IR::Node* preorder(IR::Type_Package* package) override;
     const IR::Node* postorder(IR::P4Parser* parser) override;
     const IR::Node* postorder(IR::Function* function) override;
     const IR::Node* postorder(IR::P4Control* control) override;

@@ -437,14 +437,8 @@ const IR::Node* DoSimplifyExpressions::postorder(IR::Function* function) {
     return function;
 }
 
-// TODO(pierce): should we allow this for Type_Package?
-const IR::Node* DoSimplifyExpressions::postorder(IR::Type_Package* package) {
-    if (toInsert.empty())
-        return package;
-    auto locals = new IR::IndexedVector<IR::Declaration>(*package->packageLocals);
-    locals->append(toInsert);
-    package->packageLocals = locals;
-    toInsert.clear();
+const IR::Node *DoSimplifyExpressions::preorder(IR::Type_Package* package) {
+    prune();
     return package;
 }
 
@@ -513,9 +507,6 @@ const IR::Node* DoSimplifyExpressions::postorder(IR::AssignmentStatement* statem
 }
 
 const IR::Node* DoSimplifyExpressions::postorder(IR::MethodCallStatement* statement) {
-    if (findContext<IR::Type_Package>() != nullptr) { // skip package bodies
-        return statement;
-    }
     DismantleExpression dm(refMap, typeMap);
     auto parts = dm.dismantle(statement->methodCall, false, true);
     CHECK_NULL(parts);
