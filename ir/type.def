@@ -285,6 +285,8 @@ abstract Type_ArchBlock : Type_Declaration, IMayBeGenericType, IAnnotated {
     TypeParameters getTypeParameters() const override { return typeParameters; }
 }
 
+// TODO: should package with definition inherit from control, while package
+// without definition stays separate?
 class Type_Package : Type_ArchBlock, IApply, IContainer, ISimpleNamespace {
     ParameterList applyParams; // always empty
     ParameterList constructorParams;

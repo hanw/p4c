@@ -2056,14 +2056,14 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     }
 
 // TODO(pierce): lambda that returns bool if a certain block's "apply" is called
-//    auto isCalled [](const IR::) {
+//    auto isCalled  = [](const IR::) {
 
     auto packageParamIt = package->constructorParams->parameters->begin();
     
-    // if isCalled
 
     for (;packageParamIt != package->constructorParams->parameters->end();
          ++packageParamIt) {
+    // if isCalled
         auto block = getInstantiatedBlock((*packageParamIt)->toString());
         if (block->is<IR::ParserBlock>()) {
             auto parserBlock = block->to<IR::ParserBlock>();

@@ -307,6 +307,7 @@ void ResolveReferences::postorder(const IR::P4Control *c) {
     removeFromContext(c->type->typeParameters);
 }
 
+// TODO(pierce): check shadow or not?
 bool ResolveReferences::preorder(const IR::Type_Package *p) {
     auto cs = checkShadow;
     checkShadow = false;

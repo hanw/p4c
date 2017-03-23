@@ -64,7 +64,6 @@ const IR::Node* DoRemoveReturns::preorder(IR::P4Action* action) {
     return result;
 }
 
-// was P4Package
 const IR::Node* DoRemoveReturns::preorder(IR::Type_Package* pack) {
     HasExits he;
     (void)pack->body->apply(he);

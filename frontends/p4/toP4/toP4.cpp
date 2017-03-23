@@ -144,6 +144,7 @@ bool ToP4::preorder(const IR::P4Program* program) {
     for (auto a : *program->declarations) {
         // Check where this declaration originates
         cstring sourceFile = ifSystemFile(a);
+        // TODO(pierce): do this with compiler flag instead?
         bool isPackageWithDef = a->is<IR::Type_Package>()
                 && a->to<IR::Type_Package>()->hasDefinition();
         if (!a->is<IR::Type_Error>() // errors can come from multiple files
