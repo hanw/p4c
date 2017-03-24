@@ -1193,6 +1193,8 @@ bool JsonConverter::handleTableImplementation(const IR::Property* implementation
         if (implementationType->name
             == model.tableImplementations.actionSelector.name) {
             BUG_CHECK(arguments->size() == 3, "%1%: expected 3 arguments", arguments);
+// TODO(pierce): action_selectors
+            BUG("Action selectors are temporarily not supported.");
             isSimpleTable = false;
             auto selector = new Util::JsonObject();
             table->emplace("type", "indirect_ws");
@@ -1244,6 +1246,8 @@ bool JsonConverter::handleTableImplementation(const IR::Property* implementation
             table->emplace("type", "indirect");
         } else if (type_extern_name
                    == model.tableImplementations.actionSelector.name) {
+// TODO(pierce): action_selectors
+            BUG("Action selectors are temporarily not supported.");
             table->emplace("type", "indirect_ws");
         } else {
             ::error("%1%: unexpected type for implementation", dcltype);
@@ -1255,7 +1259,12 @@ bool JsonConverter::handleTableImplementation(const IR::Property* implementation
         return false;
     }
 
-    table->emplace("action_profile", apname);
+// TODO(pierce): action_selectors
+//    table->emplace("action_profile", apname);
+
+// TODO(pierce): using the old json format for now while we figure out how to
+// support action profiles/selectors in an architecture independent way
+    table->emplace("act_prof_name", apname);
     return isSimpleTable;
 }
 
