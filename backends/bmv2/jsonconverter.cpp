@@ -1956,14 +1956,18 @@ const IR::IDeclaration *JsonConverter::resolveParameter(
     }
 
     for (auto c : *package->body->components) {
-        BUG_CHECK(c->is<IR::MethodCallStatement>(), "Only method call "
-                  "statements are allowed in package apply body: %1%", c);
+        if (!c->is<IR::MethodCallStatement>()) {
+            ::error("Only method call statements are allowed in "
+                    "package apply body: %1%", c);
+        }
         auto methodCall = c->to<IR::MethodCallStatement>()->methodCall;
         auto member = methodCall->method->to<IR::Member>();
         if (member->expr->toString() == (*parameterIt)->toString()) {
             auto mi = P4::MethodInstance::resolve(methodCall, refMap, typeMap);
-            BUG_CHECK(mi->isApply(), "Only apply method calls are allowed in "
-                      "package body");
+            if (!mi->isApply()) {
+                ::error("Only apply method calls are allowed in "
+                      "package body: %1%", methodCall);
+            }
             auto apply = mi->to<P4::ApplyMethod>()->applyObject;
             auto applyMethodType = apply->getApplyMethodType();
 
@@ -1991,6 +1995,18 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     CHECK_NULL(typeMap);
     CHECK_NULL(refMap);
     CHECK_NULL(enumMap);
+
+    auto package = toplevelBlock->getMain()->type;
+
+    if (package == nullptr) {
+        ::error("No output to generate");
+        return;
+    }
+
+    if (!package->hasDefinition()) {
+        ::error("BMV2 requires compilation with a package definition.");
+        return;
+    }
 
     ResolveToPackageObjects resolver(typeMap, refMap);
     toplevelBlock->getProgram()->apply(resolver);
@@ -2033,33 +2049,28 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     auto prsrs = mkArrayField(&toplevel, "parsers");
     actions = mkArrayField(&toplevel, "actions");
 
-    // get the declaration instance of the package
-    for (auto decl : *toplevelBlock->getProgram()->getDeclarations()) {
-        if (decl->getName() == "main" && decl->is<IR::Declaration_Instance>()) {
-            auto mainInst = decl->to<IR::Declaration_Instance>();
-            BUG_CHECK(!mainInst->type->is<IR::Type_Package>(),
-                      "Main instance is not of Type_Package: %1%", mainInst);
-            this->mainInstance = mainInst;
-            break;
+    auto isCalled = [package, refMap, typeMap](const IR::Parameter *p) -> bool {
+        for (auto c : *package->body->components) {
+            if (!c->is<IR::MethodCallStatement>()) {
+                ::error("Only method call statements are allowed in "
+                        "package apply body: %1%", c);
+            }
+            auto mce = c->to<IR::MethodCallStatement>()->methodCall;
+            auto mi = P4::MethodInstance::resolve(mce, refMap, typeMap);
+            if (!mi->isApply()) {
+                ::error("Only apply method calls are allowed in "
+                        "package apply body: %1%", mce);
+            }
+            if (p->toString() == mi->object->toString()) return true;
         }
-    }
-
-    auto package = toplevelBlock->getMain()->type;
-
-    if (package == nullptr) {
-        ::error("No output to generate");
-        return;
-    }
-
-// TODO(pierce): lambda that returns bool if a certain block's "apply" is called
-//    auto isCalled  = [](const IR::) {
+        return false;
+    };
 
     auto packageParamIt = package->constructorParams->parameters->begin();
-    
-
     for (;packageParamIt != package->constructorParams->parameters->end();
          ++packageParamIt) {
-    // if isCalled
+        if (!isCalled(*packageParamIt)) continue;
+        if (::errorCount() > 0) return;
         auto block = getInstantiatedBlock((*packageParamIt)->toString());
         if (block->is<IR::ParserBlock>()) {
             auto parserBlock = block->to<IR::ParserBlock>();
