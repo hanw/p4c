@@ -24,6 +24,7 @@ limitations under the License.
 #include "midend/convertEnums.h"
 #include "analyzer.h"
 #include <iomanip>
+#include <initializer_list>
 // Currently we are requiring a v1model to be used
 
 // This is based on the specification of the BMv2 JSON input format
@@ -121,7 +122,7 @@ class JsonConverter final {
     unsigned createHeaderTypeAndInstance(cstring prefix, cstring varName,
                                          const IR::Type_StructLike *type);
     void createNestedStruct(cstring prefix, cstring varName,
-                           const IR::Type_StructLike *type);
+                           const IR::Type_StructLike *type, bool usePrefix);
     void createStack(cstring prefix, cstring varName, const IR::Type_Stack *stack);
     unsigned nextId(cstring group);
     void addLocals();
@@ -158,10 +159,6 @@ class JsonConverter final {
     // returns id of created field list
     int createFieldList(const IR::Expression* expr, cstring group,
                         cstring listName, Util::JsonArray* fieldLists);
-    void generateUpdate(const IR::BlockStatement *block,
-                        Util::JsonArray* checksums, Util::JsonArray* calculations);
-    void generateUpdate(const IR::P4Control* cont,
-                        Util::JsonArray* checksums, Util::JsonArray* calculations);
 
     // Operates on a select keyset
     void convertSimpleKey(const IR::Expression* keySet,
@@ -191,6 +188,13 @@ class JsonConverter final {
     const IR::IDeclaration *resolveParameter(const IR::Parameter *param);
 
     const IR::InstantiatedBlock *getInstantiatedBlock(cstring name);
+
+    cstring buildQualifiedName(std::vector<cstring> nodes, cstring delim = ".") {
+        if (refMap->isV1()) { // name annotations provide unique names in V1
+            return *(--(nodes.end()));
+        }
+        return cstring::join(nodes.begin(), nodes.end(), ".");
+    }
 
  public:
     explicit JsonConverter(const CompilerOptions& options);

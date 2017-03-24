@@ -429,8 +429,8 @@ class ExpressionConverter : public Inspector {
             auto param = enclosingParamReference(mem->expr);
             auto packageObject = converter->resolveParameter(param);
             if (packageObject != nullptr) {
-                elementAccess = packageObject->externalName() + "_"
-                        + mem->member.name;
+                elementAccess = converter->buildQualifiedName(
+                        {packageObject->externalName(), mem->member.name});
             } else {
                 elementAccess = mem->member.name;
             }
@@ -496,16 +496,22 @@ class ExpressionConverter : public Inspector {
                 if (type->is<IR::Type_Stack>()) {
                     result->emplace("type", "header_stack");
                     result->emplace("value",
-                            packageObject->externalName() + "_"
-                            + expression->member.name);
+                            converter->buildQualifiedName(
+                                {packageObject->externalName(),
+                                 expression->member.name}
+                            )
+                    );
                 } else {
                     // This may be wrong, but the caller will handle it 
                     // properly (e.g., this can be a method,
                     // such as packet.lookahead)
                     result->emplace("type", "header");
                     result->emplace("value",
-                            packageObject->externalName() + "_"
-                            + expression->member.name);
+                            converter->buildQualifiedName(
+                                {packageObject->externalName(),
+                                 expression->member.name}
+                            )
+                    );
                 }
             }
         } else {
@@ -1807,24 +1813,25 @@ void JsonConverter::createStack(cstring prefix, cstring varName,
     headerStacks->append(json);
 }
 
-// TODO(pierce): write a method to join names with "_" ?
 void JsonConverter::createNestedStruct(cstring prefix, cstring varName,
-                                       const IR::Type_StructLike *st) {
+                                       const IR::Type_StructLike *st,
+                                       bool usePrefix) {
     checkStructure(st);
-    if (hasStructLikeMembers(st)) {
+    if (!hasStructLikeMembers(st)) {
+        createHeaderTypeAndInstance(prefix, varName, st);
+    } else {
         for (auto f : *st->fields) {
+            cstring newPrefix = buildQualifiedName({prefix, st->name});
             if (f->type->is<IR::Type_StructLike>()) {
-                createNestedStruct(prefix + "_" + st->name + "_",
-                                   varName + "_" + f->name,
-                                   f->type->to<IR::Type_StructLike>());
+                createNestedStruct(usePrefix ? newPrefix : "",
+                                   buildQualifiedName({varName, f->name}),
+                                   f->type->to<IR::Type_StructLike>(), usePrefix);
             } else if (f->type->is<IR::Type_Stack>()) {
-                createStack(prefix + "_" + st->name + "_",
-                            varName + "_" + f->name,
+                createStack(usePrefix ? newPrefix : "",
+                            buildQualifiedName({varName, f->name}),
                             f->type->to<IR::Type_Stack>());
             }
         }
-    } else {
-        createHeaderTypeAndInstance(prefix, varName, st);
     }
 }
 
@@ -1842,7 +1849,7 @@ void JsonConverter::addLocals() {
         LOG1("Creating local " << v);
         auto type = typeMap->getType(v, true);
         if (auto st = type->to<IR::Type_StructLike>()) {
-            createNestedStruct("", v->name, st);
+            createNestedStruct("", v->name, st, !refMap->isV1());
         } else if (auto stack = type->to<IR::Type_Stack>()) {
             createStack("", v->name, stack);
         } else if (type->is<IR::Type_Bits>()) {
@@ -1865,8 +1872,10 @@ void JsonConverter::addLocals() {
             field->append(0);
             scalars_width += 32;
         } else if (type->is<IR::Type_Extern>()) {
-            // TODO(pierce): create extern instance here
+            // handled elsewhere
         } else if (type->is<IR::Type_Var>()) {
+            // Now that we have package definitions with locals instantiated with
+            // generic types, we tend to see this. Currently I'm just skipping it.
         } else {
             BUG("%1%: type not yet handled on this target", type);
         }
