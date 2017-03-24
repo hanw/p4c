@@ -767,7 +767,7 @@ class ExpressionConverter : public Inspector {
             }
             map.emplace(expression, result);
         } else if (auto inst = decl->to<IR::Declaration_Instance>()) {
-            BUG("%1%: trying to evaluate extern in expression", inst);
+            BUG("%1%: trying to evaluate complex type in expression", inst);
         }
     }
 
