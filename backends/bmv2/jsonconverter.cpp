@@ -24,7 +24,6 @@ limitations under the License.
 #include "frontends/p4/enumInstance.h"
 #include "analyzer.h"
 #include "lower.h"
-#include "frontends/p4/inferArchitecture.h"
 
 namespace BMV2 {
 
@@ -916,8 +915,7 @@ class ResolveToPackageObjects : public Inspector {
 ResolveToPackageObjects *ResolveToPackageObjects::instance = nullptr;
 
 JsonConverter::JsonConverter(const CompilerOptions& options)
-        : options(options), corelib(P4::P4CoreLibrary::instance),
-          model(*P4::ArchitecturalBlocks::getInstance()->getModel()),
+        : options(options), corelib(P4::P4CoreLibrary::instance), model(),
           refMap(nullptr), typeMap(nullptr), toplevelBlock(nullptr),
           conv(new ExpressionConverter(this)) { }
 

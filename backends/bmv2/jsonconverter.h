@@ -32,7 +32,7 @@ limitations under the License.
 
 namespace BMV2 {
 
-class BMV2_Model : public ::P4_16::V2Model {
+class BMV2_Model {
  private:
     struct TableAttributes_Model {
         TableAttributes_Model() : 
@@ -57,9 +57,9 @@ class BMV2_Model : public ::P4_16::V2Model {
     };
 
  public:
-    BMV2_Model(const ::P4_16::V2Model &model)
-            : ::P4_16::V2Model(model), tableAttributes(),
-              tableImplementations(), selectorMatchType("selector"),
+    BMV2_Model()
+            : tableAttributes(), tableImplementations(),
+              selectorMatchType("selector"),
               rangeMatchType("range") { }
 
     ::Model::Elem             selectorMatchType;
