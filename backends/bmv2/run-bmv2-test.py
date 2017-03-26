@@ -162,6 +162,10 @@ def run_model(options, tmpdir, jsonfile):
     testfile = dirname + "/" + base + ".stf"
     print("Check for ", testfile)
     if not os.path.isfile(testfile):
+        # If no stf file is present just use the empty file
+        testfile = dirname + "/empty.stf"
+    if not os.path.isfile(testfile):
+        # If no empty.stf present, don't try to run the model at all
         return SUCCESS
 
     bmv2 = RunBMV2(tmpdir, options, jsonfile)
@@ -213,7 +217,7 @@ def process_file(options, argv):
         else:
             result = SUCCESS
 
-    if result == SUCCESS:
+    if result == SUCCESS and not expected_error:
         result = run_model(options, tmpdir, jsonfile);
 
     if options.cleanupTmp:

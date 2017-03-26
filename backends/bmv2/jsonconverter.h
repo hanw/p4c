@@ -88,7 +88,6 @@ class JsonConverter final {
     const IR::IApply *enclosingBlock{nullptr};
 
     ExpressionConverter*   conv;
-
     const unsigned         boolWidth = 1;
     // We place scalar user metadata fields (i.e., bit<>, bool)
     // in the "scalars" metadata object, so we may need to rename

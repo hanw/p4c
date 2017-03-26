@@ -129,6 +129,7 @@ class TypeInference : public Transform {
         const IR::IndexedVector<IR::Declaration>* locals);
 
     // various helpers
+    bool containsHeader(const IR::Type* canonType);
     void validateFields(const IR::Type* type,
                         std::function<bool(const IR::Type*)> checker) const;
     const IR::Node* binaryBool(const IR::Operation_Binary* op);

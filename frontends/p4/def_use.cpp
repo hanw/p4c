@@ -19,6 +19,7 @@ limitations under the License.
 #include "frontends/p4/methodInstance.h"
 #include "frontends/p4/tableApply.h"
 #include "parserCallGraph.h"
+#include "lib/ordered_set.h"
 
 namespace P4 {
 
@@ -356,20 +357,22 @@ void ComputeWriteSet::enterScope(const IR::ParameterList* parameters,
     auto startPoints = new ProgramPoints(entryPoint);
     auto uninit = new ProgramPoints(ProgramPoint::beforeStart);
 
-    for (auto p : *parameters->parameters) {
-        StorageLocation* loc = definitions->storageMap->getOrAdd(p);
-        if (loc == nullptr)
-            continue;
-        if (p->direction == IR::Direction::In ||
-            p->direction == IR::Direction::InOut ||
-            p->direction == IR::Direction::None)
-            defs->set(loc, startPoints);
-        else if (p->direction == IR::Direction::Out)
-            defs->set(loc, uninit);
-        auto valid = loc->getValidBits();
-        defs->set(valid, startPoints);
-        auto lastIndex = loc->getLastIndexField();
-        defs->set(lastIndex, startPoints);
+    if (parameters != nullptr) {
+        for (auto p : *parameters->parameters) {
+            StorageLocation* loc = definitions->storageMap->getOrAdd(p);
+            if (loc == nullptr)
+                continue;
+            if (p->direction == IR::Direction::In ||
+                p->direction == IR::Direction::InOut ||
+                p->direction == IR::Direction::None)
+                defs->set(loc, startPoints);
+            else if (p->direction == IR::Direction::Out)
+                defs->set(loc, uninit);
+            auto valid = loc->getValidBits();
+            defs->set(valid, startPoints);
+            auto lastIndex = loc->getLastIndexField();
+            defs->set(lastIndex, startPoints);
+        }
     }
     if (locals != nullptr) {
         for (auto d : *locals) {
@@ -393,11 +396,13 @@ void ComputeWriteSet::enterScope(const IR::ParameterList* parameters,
 void ComputeWriteSet::exitScope(const IR::ParameterList* parameters,
                                 const IR::IndexedVector<IR::Declaration>* locals) {
     currentDefinitions = currentDefinitions->clone();
-    for (auto p : *parameters->parameters) {
-        StorageLocation* loc = definitions->storageMap->getStorage(p);
-        if (loc == nullptr)
-            continue;
-        currentDefinitions->remove(loc);
+    if (parameters != nullptr) {
+        for (auto p : *parameters->parameters) {
+            StorageLocation* loc = definitions->storageMap->getStorage(p);
+            if (loc == nullptr)
+                continue;
+            currentDefinitions->remove(loc);
+        }
     }
     if (locals != nullptr) {
         for (auto d : *locals) {
@@ -695,7 +700,7 @@ bool ComputeWriteSet::preorder(const IR::P4Parser* parser) {
     ComputeParserCG pcg(storageMap->refMap, &transitions);
 
     (void)parser->apply(pcg);
-    std::set<const IR::ParserState*> toRun;  // worklist
+    ordered_set<const IR::ParserState*> toRun;  // worklist
     toRun.emplace(startState);
 
     while (!toRun.empty()) {
@@ -875,7 +880,7 @@ bool ComputeWriteSet::preorder(const IR::Function* function) {
 bool ComputeWriteSet::preorder(const IR::P4Table* table) {
     LOG1("CWS Visiting " << dbp(table));
     ProgramPoint pt(callingContext, table);
-    enterScope(table->parameters, nullptr, pt, false);
+    enterScope(nullptr, nullptr, pt, false);
 
     // non-deterministic call of one of the actions in the table
     auto after = new Definitions();
@@ -888,7 +893,7 @@ bool ComputeWriteSet::preorder(const IR::P4Table* table) {
         visit(ale->expression);
         after = after->join(currentDefinitions);
     }
-    exitScope(table->parameters, nullptr);
+    exitScope(nullptr, nullptr);
     currentDefinitions = after;
     return false;
 }

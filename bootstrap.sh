@@ -1,10 +1,10 @@
 #!/bin/sh
-# Copyright 2013-present Barefoot Networks, Inc. 
-# 
+# Copyright 2013-present Barefoot Networks, Inc.
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
@@ -30,12 +30,17 @@ tools/gen-unified-makefile.py --max-chunk-size 10 \
 mkdir -p extensions # place where additional back-ends are expected
 echo "Running autoconf/configure tools"
 rm -f aclocal.m4  # Needed to ensure we see updates to extension addconfig.ac files.
+case "$(uname)" in
+    Darwin) #MAC OS
+        glibtoolize
+        ;;
+    *)
+        libtoolize
+        ;;
+esac
 autoreconf -i
 mkdir -p build # recommended folder for build
 sourcedir=`pwd`
 cd build
-# TODO: the "prefix" is needed for finding the p4include folder.
-# It should be an absolute path.  This may need to change
-# when we have a proper installation procedure.
-../configure CXX=clang-3.6 CXXFLAGS="-g -O0" LDFLAGS="-lstdc++" --prefix=$sourcedir $*
+../configure CXXFLAGS="-g -O0" --disable-doxygen-doc $*
 echo "### Configured for building in 'build' folder"

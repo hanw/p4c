@@ -77,8 +77,9 @@ class FrontEndLast : public PassManager {
     FrontEndLast() { setName("FrontEndLast"); }
 };
 
-const IR::P4Program*
-FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program) {
+// TODO: remove skipSideEffectOrdering flag
+const IR::P4Program *FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program,
+                                   bool skipSideEffectOrdering) {
     if (program == nullptr)
         return nullptr;
 
@@ -110,16 +111,17 @@ FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program) {
         new ConstantFolding(&refMap, &typeMap),
         new StrengthReduction(),
         new SimplifyControlFlow(&refMap, &typeMap),
-        new RemoveAllUnusedDeclarations(&refMap),
+        new RemoveAllUnusedDeclarations(&refMap, true),
         new SimplifyParsers(&refMap),
         new ResetHeaders(&refMap, &typeMap),
         new UniqueNames(&refMap),  // Give each local declaration a unique internal name
         new MoveDeclarations(),  // Move all local declarations to the beginning
         new MoveInitializers(),
-        new SideEffectOrdering(&refMap, &typeMap),
+        new SideEffectOrdering(&refMap, &typeMap, skipSideEffectOrdering),
         new SimplifyControlFlow(&refMap, &typeMap),
         new MoveDeclarations(),  // Move all local declarations to the beginning
         new SimplifyDefUse(&refMap, &typeMap),
+        new UniqueParameters(&refMap, &typeMap),
         new SimplifyControlFlow(&refMap, &typeMap),
         new SpecializeAll(&refMap, &typeMap),
         new RemoveParserControlFlow(&refMap, &typeMap),

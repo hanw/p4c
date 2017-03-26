@@ -32,10 +32,14 @@ midend_UNIFIED = \
 	midend/removeReturns.cpp \
 	midend/removeLeftSlices.cpp \
 	midend/simplifyKey.cpp \
-	midend/simplifySelect.cpp \
+	midend/simplifySelectCases.cpp \
+	midend/simplifySelectList.cpp \
 	midend/validateProperties.cpp \
-	midend/isolateMethodCalls.cpp \
-	midend/noMatch.cpp
+	midend/expandLookahead.cpp \
+	midend/noMatch.cpp \
+	midend/tableHit.cpp
+
+midend_NONUNIFIED = midend/isolateMethodCalls.cpp
 
 noinst_HEADERS += \
 	midend/actionsInlining.h \
@@ -58,9 +62,12 @@ noinst_HEADERS += \
 	midend/removeParameters.h \
 	midend/removeReturns.h \
 	midend/simplifyKey.h \
-	midend/simplifySelect.h \
+	midend/simplifySelectCases.h \
+	midend/simplifySelectList.h \
 	midend/validateProperties.h \
-	midend/isolateMethodCalls.h \
-	midend/noMatch.h
+	midend/expandLookahead.h \
+	midend/noMatch.h \
+	midend/tableHit.h \
+	midend/isolateMethodCalls.h
 
 cpplint_FILES += $(midend_UNIFIED) $(midend_NONUNIFIED)

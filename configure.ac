@@ -17,6 +17,8 @@ AC_PROG_RANLIB
 AX_CXX_COMPILE_STDCXX_11([noext],[mandatory])
 AC_LANG(C++)
 
+AM_PATH_PYTHON
+
 AC_CHECK_FUNCS([clock_gettime])
 AC_CHECK_FUNCS([memchr])
 AC_CHECK_FUNCS([memrchr])
@@ -83,6 +85,8 @@ AX_PYTHON_MODULE([shutil], [fatal], [python])
 AX_PYTHON_MODULE([tempfile], [fatal], [python])
 AX_PYTHON_MODULE([subprocess], [fatal], [python])
 AX_PYTHON_MODULE([re], [fatal], [python])
+
+DX_INIT_DOXYGEN([P4C], [$(top_srcdir)/docs/doxygen/doxygen.cfg], [$(builddir)/doxygen-out])
 
 dnl The following lines are just including all "addconfig.ac" files
 dnl found in subdirectories

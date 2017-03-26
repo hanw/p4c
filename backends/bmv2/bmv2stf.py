@@ -363,9 +363,9 @@ class RunBMV2(object):
 #        for t in self.json["pipelines"][1]["tables"]:
 #            self.tables.append(BMV2Table(t))
     def filename(self, interface, direction):
-        return self.folder + "/" + self.pcapPrefix + interface + "_" + direction + ".pcap"
+        return self.folder + "/" + self.pcapPrefix + str(interface) + "_" + direction + ".pcap"
     def interface_of_filename(self, f):
-        return os.path.basename(f).rstrip('.pcap').lstrip(self.pcapPrefix).rsplit('_', 1)[0]
+        return int(os.path.basename(f).rstrip('.pcap').lstrip(self.pcapPrefix).rsplit('_', 1)[0])
     def do_cli_command(self, cmd):
         if self.options.verbose:
             print(cmd)
@@ -384,6 +384,7 @@ class RunBMV2(object):
             self.do_cli_command(self.parse_table_set_default(cmd))
         elif first == "packet":
             interface, data = nextWord(cmd)
+            interface = int(interface)
             data = ''.join(data.split())
             time.sleep(self.packetDelay)
             try:
@@ -395,6 +396,7 @@ class RunBMV2(object):
             self.packetDelay = 0
         elif first == "expect":
             interface, data = nextWord(cmd)
+            interface = int(interface)
             data = ''.join(data.split())
             if data != '':
                 self.expected.setdefault(interface, []).append(data)
@@ -468,7 +470,7 @@ class RunBMV2(object):
         # return list of interface names suitable for bmv2
         result = []
         for interface in sorted(self.interfaces):
-            result.append("-i " + interface + "@" + self.pcapPrefix + interface)
+            result.append("-i " + str(interface) + "@" + self.pcapPrefix + str(interface))
         return result
     def generate_model_inputs(self, stffile):
         self.stffile = stffile
@@ -478,6 +480,7 @@ class RunBMV2(object):
                 first, cmd = nextWord(line)
                 if first == "packet" or first == "expect":
                     interface, cmd = nextWord(cmd)
+                    interface = int(interface)
                     if not interface in self.interfaces:
                         # Can't open the interfaces yet, as that would block
                         ifname = self.interfaces[interface] = self.filename(interface, "in")
@@ -494,6 +497,7 @@ class RunBMV2(object):
             reportError("Could not find a free port for Thrift")
             return FAILURE
         thriftPort = str(9090 + rand)
+        rv = SUCCESS
 
         try:
             runswitch = [ "psa", "--log-file", self.switchLogFile, "--log-flush",
@@ -534,12 +538,9 @@ class RunBMV2(object):
             cli.stdin.close()
             for interface, fp in self.interfaces.iteritems():
                 fp.close()
-            cli.wait()
-            if cli.returncode != 0:
-                reportError("CLI process failed with exit code", cli.returncode)
-                return FAILURE
             # Give time to the model to execute
             time.sleep(2)
+            cli.terminate()
             sw.terminate()
             sw.wait()
             # This only works on Unix: negative returncode is
@@ -548,11 +549,15 @@ class RunBMV2(object):
                 reportError("psa died with return code", sw.returncode);
             elif self.options.verbose:
                 print("psa exit code", sw.returncode)
+            cli.wait()
+            if cli.returncode != 0 and cli.returncode != -15:
+                reportError("CLI process failed with exit code", cli.returncode)
+                rv = FAILURE
         finally:
             concurrent.release(rand)
         if self.options.verbose:
             print("Execution completed")
-        return SUCCESS
+        return rv
     def comparePacket(self, expected, received):
         received = ''.join(ByteToHex(str(received)).split()).upper()
         expected = ''.join(expected.split()).upper()
@@ -591,26 +596,41 @@ class RunBMV2(object):
             if self.options.observationLog:
                 observationLog = open(self.options.observationLog, 'w')
                 for pkt in packets:
-                    observationLog.write('%s %s\n' % (
+                    observationLog.write('%d %s\n' % (
                         interface,
                         ''.join(ByteToHex(str(pkt)).split()).upper()))
                 observationLog.close()
 
             # Check for expected packets.
             if interface not in self.expected:
+                # This continue can falsely make a test succeed, if the
+                # interface type is not the one stored in expected. We need to
+                # be more careful on declaring success.
+                #
+                # One possible fix is to check for all expected and determine
+                # which file to look into, or, remove the ones we found from the
+                # self.expected list, and return success only if the list is
+                # empty. The latter is what is implemented below.
                 continue
             expected = self.expected[interface]
             if len(expected) != len(packets):
-                reportError("Expected", len(expected), "packets on port", interface,
+                reportError("Expected", len(expected), "packets on port", str(interface),
                             "got", len(packets))
                 self.showLog()
                 return FAILURE
             for i in range(0, len(expected)):
                 cmp = self.comparePacket(expected[i], packets[i])
                 if cmp != SUCCESS:
-                    reportError("Packet", i, "on port", interface, "differs")
+                    reportError("Packet", i, "on port", str(interface), "differs")
                     return FAILURE
-        return SUCCESS
+            # remove successfully checked interfaces
+            del self.expected[interface]
+        if len(self.expected) != 0:
+            # didn't find all the expects we were expecting
+            reportError("Expected packects on ports", self.expected.keys(), "not received")
+            return FAILURE
+        else:
+            return SUCCESS
 
 def run_model(options, tmpdir, jsonfile, testfile):
     bmv2 = RunBMV2(tmpdir, options, jsonfile)

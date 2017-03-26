@@ -274,7 +274,8 @@ class DiscoverStructure : public Inspector {
 
  public:
     explicit DiscoverStructure(ProgramParts* structure, P4::TypeMap *tm)
-        : structure(structure), typeMap(tm) {}
+        : structure(structure), typeMap(tm)
+    { setName("DiscoverStructure"); }
 
     void postorder(const IR::ParameterList* paramList) override {
         bool inAction = findContext<IR::P4Action>() != nullptr;

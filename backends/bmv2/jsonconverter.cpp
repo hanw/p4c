@@ -320,41 +320,44 @@ class ExpressionConverter : public Inspector {
         BUG("%1%: unhandled case", expression);
     }
 
-    void postorder(const IR::Shr* expression) override {
-        // special handling for shift of a lookahead -> current
-        auto l = get(expression->left);
-        if (l->is<Util::JsonObject>()) {
-            auto jo = l->to<Util::JsonObject>();
-            auto type = jo->get("type");
-            if (type != nullptr && type->is<Util::JsonValue>()) {
-                auto val = type->to<Util::JsonValue>();
-                if (val->isString() && val->getString() == "lookahead") {
-                    auto r = jo->get("value");
-                    CHECK_NULL(r);
-                    auto arr = r->to<Util::JsonArray>();
-                    CHECK_NULL(arr);
-                    auto second = arr->at(1);
-                    BUG_CHECK(second->is<Util::JsonValue>(),
-                              "%1%: expected a value", second);
-                    auto max = second->to<Util::JsonValue>()->getInt();
-
-                    BUG_CHECK(expression->right->is<IR::Constant>(),
-                                     "Not implemented: %1%", expression);
-                    auto amount = expression->right->to<IR::Constant>()->asInt();
-
-                    auto j = new Util::JsonObject();
-                    j->emplace("type", "lookahead");
-                    auto v = mkArrayField(j, "value");
-                    v->append(amount);
-                    v->append(max - amount);
-                    map.emplace(expression, j);
-                    return;
-                }
-            }
-        }
-        binary(expression);
-    }
-
+//<<<<<<< HEAD
+//    void postorder(const IR::Shr* expression) override {
+//        // special handling for shift of a lookahead -> current
+//        auto l = get(expression->left);
+//        if (l->is<Util::JsonObject>()) {
+//            auto jo = l->to<Util::JsonObject>();
+//            auto type = jo->get("type");
+//            if (type != nullptr && type->is<Util::JsonValue>()) {
+//                auto val = type->to<Util::JsonValue>();
+//                if (val->isString() && val->getString() == "lookahead") {
+//                    auto r = jo->get("value");
+//                    CHECK_NULL(r);
+//                    auto arr = r->to<Util::JsonArray>();
+//                    CHECK_NULL(arr);
+//                    auto second = arr->at(1);
+//                    BUG_CHECK(second->is<Util::JsonValue>(),
+//                              "%1%: expected a value", second);
+//                    auto max = second->to<Util::JsonValue>()->getInt();
+//
+//                    BUG_CHECK(expression->right->is<IR::Constant>(),
+//                                     "Not implemented: %1%", expression);
+//                    auto amount = expression->right->to<IR::Constant>()->asInt();
+//
+//                    auto j = new Util::JsonObject();
+//                    j->emplace("type", "lookahead");
+//                    auto v = mkArrayField(j, "value");
+//                    v->append(amount);
+//                    v->append(max - amount);
+//                    map.emplace(expression, j);
+//                    return;
+//                }
+//            }
+//        }
+//        binary(expression);
+//    }
+//
+//=======
+//>>>>>>> fc65efe282f4fdb73f86157ace8eb4c2e3145004
     void postorder(const IR::Cast* expression) override {
         // nothing to do for casts - the ArithmeticFixup pass
         // should have handled them already
@@ -362,30 +365,33 @@ class ExpressionConverter : public Inspector {
         map.emplace(expression, j);
     }
 
-    void postorder(const IR::Slice* expression) override {
-        // Special case for parser select: look for
-        // packet.lookahead<T>()[h:l]. Convert to current(l, h - l).
-        // Only correct within a select() expression, but we cannot check that
-        // since the caller invokes the converter directly with the select argument.
-        auto m = get(expression->e0);
-        if (m->is<Util::JsonObject>()) {
-            auto val = m->to<Util::JsonObject>()->get("type");
-            if (val != nullptr && val->is<Util::JsonValue>() &&
-                *val->to<Util::JsonValue>() == "lookahead") {
-                int h = expression->getH();
-                int l = expression->getL();
-                auto j = new Util::JsonObject();
-                j->emplace("type", "lookahead");
-                auto bounds = mkArrayField(j, "value");
-                bounds->append(l);
-                bounds->append(h + 1);
-                map.emplace(expression, j);
-                return;
-            }
-        }
-        BUG("%1%: unhandled case", expression);
-    }
-
+//<<<<<<< HEAD
+//    void postorder(const IR::Slice* expression) override {
+//        // Special case for parser select: look for
+//        // packet.lookahead<T>()[h:l]. Convert to current(l, h - l).
+//        // Only correct within a select() expression, but we cannot check that
+//        // since the caller invokes the converter directly with the select argument.
+//        auto m = get(expression->e0);
+//        if (m->is<Util::JsonObject>()) {
+//            auto val = m->to<Util::JsonObject>()->get("type");
+//            if (val != nullptr && val->is<Util::JsonValue>() &&
+//                *val->to<Util::JsonValue>() == "lookahead") {
+//                int h = expression->getH();
+//                int l = expression->getL();
+//                auto j = new Util::JsonObject();
+//                j->emplace("type", "lookahead");
+//                auto bounds = mkArrayField(j, "value");
+//                bounds->append(l);
+//                bounds->append(h + 1);
+//                map.emplace(expression, j);
+//                return;
+//            }
+//        }
+//        BUG("%1%: unhandled case", expression);
+//    }
+//
+//=======
+//>>>>>>> fc65efe282f4fdb73f86157ace8eb4c2e3145004
     void postorder(const IR::Constant* expression) override {
         auto result = new Util::JsonObject();
         result->emplace("type", "hexstr");
@@ -486,7 +492,8 @@ class ExpressionConverter : public Inspector {
             auto ptype = converter->typeMap->getType(param, true);
             // TODO(pierce): not sure this check scales
             // TODO(pierce): consider the current version of this in master
-            if (ptype->is<IR::Type_Struct>() && type->is<IR::Type_Bits>()) { 
+            if (ptype->is<IR::Type_Struct>()
+                && (type->is<IR::Type_Bits>() || type->is<IR::Type_Boolean>())) { 
                 result->emplace("type", "field");
                 auto e = mkArrayField(result, "value");
                 e->append(packageObject->externalName());
@@ -1268,7 +1275,7 @@ JsonConverter::convertTable(const CFG::TableNode* node,
                             Util::JsonArray* action_profiles,
                             Util::JsonArray* actions) {
     auto table = node->table;
-    LOG1("Processing " << table);
+    LOG3("Processing " << dbp(table));
     auto result = new Util::JsonObject();
     cstring name = table->externalName();
     result->emplace("name", name);
@@ -1371,7 +1378,59 @@ JsonConverter::convertTable(const CFG::TableNode* node,
         size = model.tableAttributes.defaultTableSize;
 
     result->emplace("max_size", size);
+//<<<<<<< HEAD
     result->emplace("with_counters", false);
+//=======
+//    auto ctrs = table->properties->getProperty(v1model.tableAttributes.directCounter.name);
+//    if (ctrs != nullptr) {
+//        if (ctrs->value->is<IR::ExpressionValue>()) {
+//            auto expr = ctrs->value->to<IR::ExpressionValue>()->expression;
+//            if (expr->is<IR::ConstructorCallExpression>()) {
+//                auto type = typeMap->getType(expr, true);
+//                if (type == nullptr)
+//                    return result;
+//                if (!type->is<IR::Type_Extern>()) {
+//                    ::error("%1%: Unexpected type %2% for property", ctrs, type);
+//                    return result;
+//                }
+//                auto te = type->to<IR::Type_Extern>();
+//                if (te->name != v1model.directCounter.name && te->name != v1model.counter.name) {
+//                    ::error("%1%: Unexpected type %2% for property", ctrs, type);
+//                    return result;
+//                }
+//                result->emplace("with_counters", true);
+//                auto jctr = new Util::JsonObject();
+//                cstring ctrname = ctrs->externalName("counter");
+//                jctr->emplace("name", ctrname);
+//                jctr->emplace("id", nextId("counter_arrays"));
+//                bool direct = te->name == v1model.directCounter.name;
+//                jctr->emplace("is_direct", direct);
+//                jctr->emplace("binding", name);
+//                counters->append(jctr);
+//            } else if (expr->is<IR::PathExpression>()) {
+//                auto pe = expr->to<IR::PathExpression>();
+//                auto decl = refMap->getDeclaration(pe->path, true);
+//                if (!decl->is<IR::Declaration_Instance>()) {
+//                    ::error("%1%: expected an instance", decl->getNode());
+//                    return result;
+//                }
+//                cstring ctrname = decl->externalName();
+//                auto it = directCountersMap.find(ctrname);
+//                LOG3("Looking up " << ctrname);
+//                if (it != directCountersMap.end()) {
+//                    ::error("%1%: Direct cannot be attached to multiple tables %2% and %3%",
+//                            decl, it->second, table);
+//                    return result;
+//                }
+//                directCountersMap.emplace(ctrname, table);
+//            } else {
+//                ::error("%1%: expected a counter", ctrs);
+//            }
+//        }
+//    } else {
+//        result->emplace("with_counters", false);
+//    }
+//>>>>>>> fc65efe282f4fdb73f86157ace8eb4c2e3145004
 
     bool sup_to = false;
     auto timeout =
@@ -1389,7 +1448,49 @@ JsonConverter::convertTable(const CFG::TableNode* node,
         }
     }
     result->emplace("support_timeout", sup_to);
+//<<<<<<< HEAD
     result->emplace("direct_meters", Util::JsonValue::null);
+//=======
+//
+//    auto dm = table->properties->getProperty(v1model.tableAttributes.directMeter.name);
+//    if (dm != nullptr) {
+//        if (dm->value->is<IR::ExpressionValue>()) {
+//            auto expr = dm->value->to<IR::ExpressionValue>()->expression;
+//            if (!expr->is<IR::PathExpression>()) {
+//                ::error("%1%: expected a reference to a meter declaration", expr);
+//            } else {
+//                auto pe = expr->to<IR::PathExpression>();
+//                auto decl = refMap->getDeclaration(pe->path, true);
+//                auto type = typeMap->getType(expr, true);
+//                if (type == nullptr)
+//                    return result;
+//                if (type->is<IR::Type_SpecializedCanonical>())
+//                    type = type->to<IR::Type_SpecializedCanonical>()->baseType;
+//                if (!type->is<IR::Type_Extern>()) {
+//                    ::error("%1%: Unexpected type %2% for property", dm, type);
+//                    return result;
+//                }
+//                auto te = type->to<IR::Type_Extern>();
+//                if (te->name != v1model.directMeter.name) {
+//                    ::error("%1%: Unexpected type %2% for property", dm, type);
+//                    return result;
+//                }
+//                if (!decl->is<IR::Declaration_Instance>()) {
+//                    ::error("%1%: expected an instance", decl->getNode());
+//                    return result;
+//                }
+//                meterMap.setTable(decl, table);
+//                meterMap.setSize(decl, size);
+//                cstring name = decl->externalName();
+//                result->emplace("direct_meters", name);
+//            }
+//        } else {
+//            ::error("%1%: expected a meter", dm);
+//        }
+//    } else {
+//        result->emplace("direct_meters", Util::JsonValue::null);
+//    }
+//>>>>>>> fc65efe282f4fdb73f86157ace8eb4c2e3145004
 
     auto action_ids = mkArrayField(result, "action_ids");
     auto table_actions = mkArrayField(result, "actions");
@@ -1573,7 +1674,7 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
 
     enclosingBlock = cont;
 
-    LOG1("Processing " << cont);
+    LOG3("Processing " << dbp(cont));
     auto result = new Util::JsonObject();
     result->emplace("name", name);
     result->emplace("id", nextId("control"));
@@ -1597,6 +1698,7 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
     SharedActionSelectorCheck selector_check(this);
     cont->apply(selector_check);
 
+    // Tables are created prior to the other local declarations
     for (auto node : cfg->allNodes) {
         if (node->is<CFG::TableNode>()) {
             auto j = convertTable(node->to<CFG::TableNode>(),
@@ -1839,15 +1941,11 @@ void JsonConverter::createNestedStruct(cstring prefix, cstring varName,
 void JsonConverter::addLocals() {
     // We synthesize a "header_type" for each local which has a struct type
     // and we pack all the scalar-typed locals into a scalarsStruct
-    scalarsStruct = new Util::JsonObject();
-    scalarsName = refMap->newName("scalars");
-    scalarsStruct->emplace("name", scalarsName);
-    scalarsStruct->emplace("id", nextId("header_types"));
-    scalars_width = 0;
-    auto scalarFields = mkArrayField(scalarsStruct, "fields");
+    auto scalarFields = scalarsStruct->get("fields")->to<Util::JsonArray>();
+    CHECK_NULL(scalarFields);
 
     for (auto v : structure.variables) {
-        LOG1("Creating local " << v);
+        LOG3("Creating local " << v);
         auto type = typeMap->getType(v, true);
         if (auto st = type->to<IR::Type_StructLike>()) {
             createNestedStruct("", v->name, st, !refMap->isV1());
@@ -2027,6 +2125,13 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     (void)nextId("field_lists");    // field list IDs must start at 1; 0 is reserved
     (void)nextId("learn_lists");    // idem
 
+    scalarsStruct = new Util::JsonObject();
+    scalarsName = refMap->newName("scalars");
+    scalarsStruct->emplace("name", scalarsName);
+    scalarsStruct->emplace("id", nextId("header_types"));
+    scalars_width = 0;
+    auto scalarFields = mkArrayField(scalarsStruct, "fields");
+
     headerTypesCreated.clear();
     headerInstancesCreated.clear();
 
@@ -2178,6 +2283,20 @@ Util::IJson* JsonConverter::convertParserStatement(const IR::StatOrDecl* stat) {
                 }
                 return result;
             }
+        } else if (minst->is<P4::BuiltInMethod>()) {
+            auto bi = minst->to<P4::BuiltInMethod>();
+            if (bi->name == IR::Type_Header::setValid || bi->name == IR::Type_Header::setInvalid) {
+                auto mem = new IR::Member(Util::SourceInfo(), bi->appliedTo, "$valid$");
+                typeMap->setType(mem, IR::Type_Void::get());
+                auto jexpr = conv->convert(mem, true, false);
+                result->emplace("op", "set");
+                params->append(jexpr);
+
+                auto bl = new IR::BoolLiteral(bi->name == IR::Type_Header::setValid);
+                auto r = conv->convert(bl, true, true, true);
+                params->append(r);
+                return result;
+            }
         }
     }
     ::error("%1%: not supported in parser on this target", stat);
@@ -2201,6 +2320,9 @@ void JsonConverter::convertSimpleKey(const IR::Expression* keySet,
         mask = mk->right->to<IR::Constant>()->value;
     } else if (keySet->is<IR::Constant>()) {
         value = keySet->to<IR::Constant>()->value;
+        mask = -1;
+    } else if (keySet->is<IR::BoolLiteral>()) {
+        value = keySet->to<IR::BoolLiteral>()->value ? 1 : 0;
         mask = -1;
     } else {
         ::error("%1% must evaluate to a compile-time constant", keySet);
@@ -2251,8 +2373,8 @@ unsigned JsonConverter::combine(const IR::Expression* keySet,
                 mask = Util::shift_left(mask, w) + mask_value;
                 noMask = false;
             }
-            LOG1("Shifting " << " into key " << key_value << " &&& "
-                 << mask_value << " result is " << value << " &&& " << mask);
+            LOG3("Shifting " << " into key " << key_value << " &&& " << mask_value <<
+                 " result is " << value << " &&& " << mask);
             index++;
         }
 
