@@ -1011,13 +1011,23 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                    << "_"
                    << em->method->toString();
 
+                // special handling for packet out
                 if (em->originalExternType->name.name == corelib.packetOut.name
                     && em->method->name.name == corelib.packetOut.emit.name) {
                     conv->simpleExpressionsOnly = true;
-                    if (mc->arguments->size() == 1
-                        && typeMap->getType(mc->arguments->at(0))->is<IR::Type_Stack>()) {
+                    if (mc->arguments->size() == 1 && typeMap->getType(
+                        mc->arguments->at(0))->is<IR::Type_Stack>()) {
                         ss.str(std::string()); // clear the primitive name
                         ss << "_packet_out_emit_stack";
+                    }
+
+                    // shouldn't this happen a little earlier?
+                    auto arg = mc->arguments->at(0);
+                    auto type = typeMap->getType(arg, true);
+                    if (!(type->is<IR::Type_Stack>()
+                        || type->is<IR::Type_Header>())) {
+                        ::error("%1%: emit only supports header and stack "
+                                "arguments, not %2%", arg, type);
                     }
                 }
 
