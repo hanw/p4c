@@ -1088,7 +1088,8 @@ int JsonConverter::createFieldList(const IR::Expression* expr, cstring group,
     return id;
 }
 
-unsigned JsonConverter::createAction(const IR::P4Action *action) {
+unsigned JsonConverter::createAction(const IR::P4Action *action,
+                                     Util::JsonArray *actions) {
     cstring name = action->externalName();
     auto jact = new Util::JsonObject();
     jact->emplace("name", name);
@@ -1193,8 +1194,6 @@ bool JsonConverter::handleTableImplementation(const IR::Property* implementation
         if (implementationType->name
             == model.tableImplementations.actionSelector.name) {
             BUG_CHECK(arguments->size() == 3, "%1%: expected 3 arguments", arguments);
-// TODO(pierce): action_selectors
-            BUG("Action selectors are temporarily not supported.");
             isSimpleTable = false;
             auto selector = new Util::JsonObject();
             table->emplace("type", "indirect_ws");
@@ -1246,8 +1245,6 @@ bool JsonConverter::handleTableImplementation(const IR::Property* implementation
             table->emplace("type", "indirect");
         } else if (type_extern_name
                    == model.tableImplementations.actionSelector.name) {
-// TODO(pierce): action_selectors
-            BUG("Action selectors are temporarily not supported.");
             table->emplace("type", "indirect_ws");
         } else {
             ::error("%1%: unexpected type for implementation", dcltype);
@@ -1258,13 +1255,7 @@ bool JsonConverter::handleTableImplementation(const IR::Property* implementation
         ::error("%1%: unexpected value for property", propv);
         return false;
     }
-
-// TODO(pierce): action_selectors
-//    table->emplace("action_profile", apname);
-
-// TODO(pierce): using the old json format for now while we figure out how to
-// support action profiles/selectors in an architecture independent way
-    table->emplace("act_prof_name", apname);
+    table->emplace("action_profile", apname);
     return isSimpleTable;
 }
 
@@ -1274,8 +1265,8 @@ cstring JsonConverter::convertHashAlgorithm(cstring algorithm) const {
 
 Util::IJson*
 JsonConverter::convertTable(const CFG::TableNode* node,
-                            Util::JsonArray* counters,
-                            Util::JsonArray* action_profiles) {
+                            Util::JsonArray* action_profiles,
+                            Util::JsonArray* actions) {
     auto table = node->table;
     LOG1("Processing " << table);
     auto result = new Util::JsonObject();
@@ -1380,20 +1371,6 @@ JsonConverter::convertTable(const CFG::TableNode* node,
         size = model.tableAttributes.defaultTableSize;
 
     result->emplace("max_size", size);
-//    auto ctrs =
-//        table->properties->getProperty(model.tableAttributes.directCounter.name);
-//    if (ctrs != nullptr) {
-//        result->emplace("with_counters", true);
-//        auto jctr = new Util::JsonObject();
-//        cstring ctrname = ctrs->externalName("counter");
-//        jctr->emplace("name", ctrname);
-//        jctr->emplace("id", nextId("counter_arrays"));
-//        jctr->emplace("is_direct", true);
-//        jctr->emplace("binding", name);
-//        counters->append(jctr);
-//    } else {
-//        result->emplace("with_counters", false);
-//    }
     result->emplace("with_counters", false);
 
     bool sup_to = false;
@@ -1412,33 +1389,10 @@ JsonConverter::convertTable(const CFG::TableNode* node,
         }
     }
     result->emplace("support_timeout", sup_to);
-
-//   auto dm = table->properties->getProperty(v1model.tableAttributes.directMeter.name);
-//   if (dm != nullptr) {
-//       if (dm->value->is<IR::ExpressionValue>()) {
-//           auto expr = dm->value->to<IR::ExpressionValue>()->expression;
-//           if (!expr->is<IR::PathExpression>()) {
-//               ::error("%1%: expected a reference to a meter declaration", expr);
-//           } else {
-//               auto pe = expr->to<IR::PathExpression>();
-//               auto decl = refMap->getDeclaration(pe->path, true);
-//               meterMap.setTable(decl, table);
-//               meterMap.setSize(decl, size);
-//               BUG_CHECK(decl->is<IR::Declaration_Instance>(),
-//                         "%1%: expected an instance", decl->getNode());
-//               cstring name = decl->externalName();
-//               result->emplace("direct_meters", name);
-//           }
-//       } else {
-//           ::error("%1%: expected a Boolean", timeout);
-//       }
-//   } else {
-//       result->emplace("direct_meters", Util::JsonValue::null);
-//   }
     result->emplace("direct_meters", Util::JsonValue::null);
 
     auto action_ids = mkArrayField(result, "action_ids");
-    auto actions = mkArrayField(result, "actions");
+    auto table_actions = mkArrayField(result, "actions");
     auto al = table->getActionList();
 
     std::map<cstring, cstring> useActionName;
@@ -1451,10 +1405,10 @@ JsonConverter::convertTable(const CFG::TableNode* node,
         auto decl = refMap->getDeclaration(a->getPath(), true);
         BUG_CHECK(decl->is<IR::P4Action>(), "%1%: should be an action name", a);
         auto action = decl->to<IR::P4Action>();
-        unsigned id = createAction(action);
+        unsigned id = createAction(action, actions);
         action_ids->append(id);
         auto name = action->externalName();
-        actions->append(name);
+        table_actions->append(name);
         useActionName.emplace(action->name, name);
     }
 
@@ -1612,9 +1566,8 @@ void JsonConverter::addExternAttributes(const IR::Declaration_Instance *di,
 
 Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
                                            cstring name,
-                                           Util::JsonArray* counters,
-                                           Util::JsonArray* meters,
-                                           Util::JsonArray *externs) {
+                                           Util::JsonArray *externs,
+                                           Util::JsonArray *actions) {
     auto instantiatedBlock = getInstantiatedBlock(name);
     auto controlBlock = instantiatedBlock->to<IR::ControlBlock>();
 
@@ -1646,8 +1599,8 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
 
     for (auto node : cfg->allNodes) {
         if (node->is<CFG::TableNode>()) {
-            auto j = convertTable(node->to<CFG::TableNode>(), counters,
-                                  action_profiles);
+            auto j = convertTable(node->to<CFG::TableNode>(),
+                                  action_profiles, actions);
             if (::errorCount() > 0)
                 return nullptr;
             tables->append(j);
@@ -1659,7 +1612,7 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
         }
     }
 
-    // special handling for exters as parameters
+    // special handling for externs as parameters
     for (auto p : *cont->type->applyParams->parameters) {
         auto type = typeMap->getType(p);
         if (type->is<IR::Type_Extern>()) {
@@ -1681,19 +1634,60 @@ Util::IJson* JsonConverter::convertControl(const IR::P4Control* cont,
         if (c->is<IR::Declaration_Instance>()) {
             auto di = c->to<IR::Declaration_Instance>();
             auto bl = controlBlock->getValue(c);
+            cstring diName = c->name;
             if (bl->is<IR::ExternBlock>()) {
-                auto externBlock = bl->to<IR::ExternBlock>();
-                cstring name = c->name;
-                auto json = createExternInstance(name, externBlock->type->name);
-                auto attributes = mkArrayField(json, "attribute_values");
-                addExternAttributes(di, externBlock, attributes);
-                externs->append(json);
+                auto eb = bl->to<IR::ExternBlock>();
+                // Special handling for action_profile/action_selector externs
+                // as they appear in v1model.p4
+                if (eb->type->name == model.tableImplementations.actionProfile.name ||
+                    eb->type->name == model.tableImplementations.actionSelector.name) {
+                    auto action_profile = new Util::JsonObject();
+                    action_profile->emplace("name", diName);
+                    action_profile->emplace("id", nextId("action_profiles"));
+
+                    auto add_size = [&action_profile, &eb](const cstring &pname) {
+                      auto sz = eb->getParameterValue(pname);
+                      BUG_CHECK(sz->is<IR::Constant>(),
+                                "%1%: expected a constant", sz);
+                      action_profile->emplace("max_size",
+                                              sz->to<IR::Constant>()->value);
+                    };
+
+                    if (eb->type->name
+                        == model.tableImplementations.actionProfile.name) {
+                        add_size(eb->getConstructorParameters()->parameters->at(0)->name);
+                    } else {
+                        add_size(eb->getConstructorParameters()->parameters->at(1)->name);
+                        auto selector = new Util::JsonObject();
+                        auto hash = eb->getParameterValue(
+                                eb->getConstructorParameters()->parameters->at(0)->name);
+                        BUG_CHECK(hash->is<IR::Declaration_ID>(),
+                                  "%1%: expected a member", hash);
+                        auto algo = convertHashAlgorithm(
+                                hash->to<IR::Declaration_ID>()->name);
+                        selector->emplace("algo", algo);
+                        const auto &input = selector_check.get_selector_input(
+                            c->to<IR::Declaration_Instance>());
+                        auto j_input = mkArrayField(selector, "input");
+                        for (auto expr : input) {
+                            auto jk = conv->convert(expr);
+                            j_input->append(jk);
+                        }
+                        action_profile->emplace("selector", selector);
+                    }
+                    action_profiles->append(action_profile);
+                    continue;
+                } else {
+                    auto json = createExternInstance(diName, eb->type->name);
+                    auto attributes = mkArrayField(json, "attribute_values");
+                    addExternAttributes(di, eb, attributes);
+                    externs->append(json);
+                }
                 continue;
             }
         }
         BUG("%1%: not yet handled", c);
     }
-
     return result;
 }
 
@@ -2046,15 +2040,11 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     addEnums();
 
     field_lists = mkArrayField(&toplevel, "field_lists");
-    auto calculations = mkArrayField(&toplevel, "calculations");
-    auto learn_lists = mkArrayField(&toplevel, "learn_lists");
 
     auto pipelines = mkArrayField(&toplevel, "pipelines");
-    auto counters = mkArrayField(&toplevel, "counter_arrays");
-    auto meters = mkArrayField(&toplevel, "meter_arrays");
     auto externs = mkArrayField(&toplevel, "extern_instances");
     auto prsrs = mkArrayField(&toplevel, "parsers");
-    actions = mkArrayField(&toplevel, "actions");
+    auto actions = mkArrayField(&toplevel, "actions");
 
     auto isCalled = [package, refMap, typeMap](const IR::Parameter *p) -> bool {
         for (auto c : *package->body->components) {
@@ -2088,8 +2078,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
             auto controlBlock = block->to<IR::ControlBlock>();
             auto control = controlBlock->container;
             auto controlJson = convertControl(
-                    control, (*packageParamIt)->toString(),
-                    counters, meters, externs);
+                    control, (*packageParamIt)->toString(), externs, actions);
             pipelines->append(controlJson);
         }
     }

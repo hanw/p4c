@@ -82,7 +82,6 @@ class JsonConverter final {
     ProgramParts           structure;
     cstring                scalarsName;  // name of struct in JSON holding all scalars
     const IR::ToplevelBlock* toplevelBlock;
-    const IR::Declaration_Instance *mainInstance{nullptr};
 
     // this stores the enclosing IApply when converting expressions
     // -- for reference when looking up parameter bindings
@@ -108,7 +107,6 @@ class JsonConverter final {
     Util::JsonArray *headerInstances;
     Util::JsonArray *headerStacks;
     Util::JsonArray *field_lists;
-    Util::JsonArray *actions;
 
     Util::JsonObject *scalarsStruct;
     unsigned scalars_width = 0;
@@ -129,10 +127,10 @@ class JsonConverter final {
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                            Util::JsonArray* result);
     Util::IJson* convertTable(const CFG::TableNode* node,
-                              Util::JsonArray* counters,
-                              Util::JsonArray* action_profiles);
+                              Util::JsonArray* action_profiles,
+                              Util::JsonArray* actions);
     Util::IJson* convertIf(const CFG::IfNode* node, cstring parent);
-    unsigned createAction(const IR::P4Action *action);
+    unsigned createAction(const IR::P4Action *action, Util::JsonArray *actions);
     Util::IJson* toJson(const IR::P4Parser* cont, cstring name);
     Util::IJson* toJson(const IR::ParserState* state);
     void convertDeparserBody(const IR::Vector<IR::StatOrDecl>* body,
@@ -144,8 +142,7 @@ class JsonConverter final {
                              const IR::ExternBlock *block,
                              Util::JsonArray *attributes);
     Util::IJson* convertControl(const IR::P4Control *cont, cstring name,
-                                Util::JsonArray* counters, Util::JsonArray* meters,
-                                Util::JsonArray *externs);
+                                Util::JsonArray *externs, Util::JsonArray* actions);
     cstring createCalculation(cstring algo, const IR::Expression* fields,
                               Util::JsonArray* calculations);
     Util::IJson* nodeName(const CFG::Node* node) const;
