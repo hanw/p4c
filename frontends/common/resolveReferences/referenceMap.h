@@ -31,7 +31,6 @@ class NameGenerator {
 
 class ReferenceMap final : public ProgramMap, public NameGenerator {
     bool isv1;  // if true this is a map for a P4 v1.0 program (P4-14)
-    bool targetBMV2; // TODO(pierce): probably shouldn't go here, but where?
     // Maps each path in the program to the corresponding declaration
     std::map<const IR::Path*, const IR::IDeclaration*> pathToDeclaration;
     std::set<const IR::IDeclaration*> used;
@@ -48,11 +47,9 @@ class ReferenceMap final : public ProgramMap, public NameGenerator {
     void setDeclaration(const IR::This* pointer, const IR::IDeclaration* decl);
     void dbprint(std::ostream& cout) const;
     void setIsV1(bool isv1) { this->isv1 = isv1; }
-    void setIsTargetingBMV2(bool t) { this->targetBMV2 = t; }
     cstring newName(cstring base);
     void clear();
     bool isV1() const { return isv1; }
-    bool isTargetingBMV2() const { return targetBMV2; }
     bool isUsed(const IR::IDeclaration* decl) const { return used.count(decl) > 0; }
     void usedName(cstring name) { usedNames.insert(name); }
 };

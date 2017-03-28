@@ -1984,7 +1984,9 @@ void JsonConverter::addLocals() {
             // handled elsewhere
         } else if (type->is<IR::Type_Var>()) {
             // Now that we have package definitions with locals instantiated with
-            // generic types, we tend to see this. Currently I'm just skipping it.
+            // generic types, we tend to see this. Currently I'm just skipping it,
+            // as the same local (but with the type variable solved for) will also
+            // appear in the structure.variables array.
         } else {
             BUG("%1%: type not yet handled on this target", type);
         }

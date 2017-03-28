@@ -87,8 +87,6 @@ const IR::P4Program *FrontEnd::run(const CompilerOptions &options, const IR::P4P
     ReferenceMap  refMap;
     TypeMap       typeMap;
     refMap.setIsV1(isv1);
-    refMap.setIsTargetingBMV2(
-            options.preprocessor_options.endsWith("__TARGET_BMV2__"));
 
     PassManager passes = {
         new PrettyPrint(options),
