@@ -1388,59 +1388,7 @@ JsonConverter::convertTable(const CFG::TableNode* node,
         size = model.tableAttributes.defaultTableSize;
 
     result->emplace("max_size", size);
-//<<<<<<< HEAD
-    result->emplace("with_counters", false);
-//=======
-//    auto ctrs = table->properties->getProperty(v1model.tableAttributes.directCounter.name);
-//    if (ctrs != nullptr) {
-//        if (ctrs->value->is<IR::ExpressionValue>()) {
-//            auto expr = ctrs->value->to<IR::ExpressionValue>()->expression;
-//            if (expr->is<IR::ConstructorCallExpression>()) {
-//                auto type = typeMap->getType(expr, true);
-//                if (type == nullptr)
-//                    return result;
-//                if (!type->is<IR::Type_Extern>()) {
-//                    ::error("%1%: Unexpected type %2% for property", ctrs, type);
-//                    return result;
-//                }
-//                auto te = type->to<IR::Type_Extern>();
-//                if (te->name != v1model.directCounter.name && te->name != v1model.counter.name) {
-//                    ::error("%1%: Unexpected type %2% for property", ctrs, type);
-//                    return result;
-//                }
-//                result->emplace("with_counters", true);
-//                auto jctr = new Util::JsonObject();
-//                cstring ctrname = ctrs->externalName("counter");
-//                jctr->emplace("name", ctrname);
-//                jctr->emplace("id", nextId("counter_arrays"));
-//                bool direct = te->name == v1model.directCounter.name;
-//                jctr->emplace("is_direct", direct);
-//                jctr->emplace("binding", name);
-//                counters->append(jctr);
-//            } else if (expr->is<IR::PathExpression>()) {
-//                auto pe = expr->to<IR::PathExpression>();
-//                auto decl = refMap->getDeclaration(pe->path, true);
-//                if (!decl->is<IR::Declaration_Instance>()) {
-//                    ::error("%1%: expected an instance", decl->getNode());
-//                    return result;
-//                }
-//                cstring ctrname = decl->externalName();
-//                auto it = directCountersMap.find(ctrname);
-//                LOG3("Looking up " << ctrname);
-//                if (it != directCountersMap.end()) {
-//                    ::error("%1%: Direct cannot be attached to multiple tables %2% and %3%",
-//                            decl, it->second, table);
-//                    return result;
-//                }
-//                directCountersMap.emplace(ctrname, table);
-//            } else {
-//                ::error("%1%: expected a counter", ctrs);
-//            }
-//        }
-//    } else {
-//        result->emplace("with_counters", false);
-//    }
-//>>>>>>> fc65efe282f4fdb73f86157ace8eb4c2e3145004
+    result->emplace("with_counters", false); // now implemented with externs
 
     bool sup_to = false;
     auto timeout =
@@ -1458,49 +1406,8 @@ JsonConverter::convertTable(const CFG::TableNode* node,
         }
     }
     result->emplace("support_timeout", sup_to);
-//<<<<<<< HEAD
-    result->emplace("direct_meters", Util::JsonValue::null);
-//=======
-//
-//    auto dm = table->properties->getProperty(v1model.tableAttributes.directMeter.name);
-//    if (dm != nullptr) {
-//        if (dm->value->is<IR::ExpressionValue>()) {
-//            auto expr = dm->value->to<IR::ExpressionValue>()->expression;
-//            if (!expr->is<IR::PathExpression>()) {
-//                ::error("%1%: expected a reference to a meter declaration", expr);
-//            } else {
-//                auto pe = expr->to<IR::PathExpression>();
-//                auto decl = refMap->getDeclaration(pe->path, true);
-//                auto type = typeMap->getType(expr, true);
-//                if (type == nullptr)
-//                    return result;
-//                if (type->is<IR::Type_SpecializedCanonical>())
-//                    type = type->to<IR::Type_SpecializedCanonical>()->baseType;
-//                if (!type->is<IR::Type_Extern>()) {
-//                    ::error("%1%: Unexpected type %2% for property", dm, type);
-//                    return result;
-//                }
-//                auto te = type->to<IR::Type_Extern>();
-//                if (te->name != v1model.directMeter.name) {
-//                    ::error("%1%: Unexpected type %2% for property", dm, type);
-//                    return result;
-//                }
-//                if (!decl->is<IR::Declaration_Instance>()) {
-//                    ::error("%1%: expected an instance", decl->getNode());
-//                    return result;
-//                }
-//                meterMap.setTable(decl, table);
-//                meterMap.setSize(decl, size);
-//                cstring name = decl->externalName();
-//                result->emplace("direct_meters", name);
-//            }
-//        } else {
-//            ::error("%1%: expected a meter", dm);
-//        }
-//    } else {
-//        result->emplace("direct_meters", Util::JsonValue::null);
-//    }
-//>>>>>>> fc65efe282f4fdb73f86157ace8eb4c2e3145004
+    // no implemented via externs
+    result->emplace("direct_meters", Util::JsonValue::null); 
 
     auto action_ids = mkArrayField(result, "action_ids");
     auto table_actions = mkArrayField(result, "actions");

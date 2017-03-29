@@ -58,6 +58,7 @@ extern counter {
 
 extern direct_counter {
     direct_counter(CounterType type);
+    void count();
 }
 
 extern meter {
