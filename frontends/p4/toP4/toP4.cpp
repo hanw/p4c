@@ -144,8 +144,12 @@ bool ToP4::preorder(const IR::P4Program* program) {
     for (auto a : *program->declarations) {
         // Check where this declaration originates
         cstring sourceFile = ifSystemFile(a);
-        if (!a->is<IR::Type_Error>() &&  // errors can come from multiple files
-            sourceFile != nullptr) {
+        // TODO(pierce): do this with compiler flag instead?
+        bool isPackageWithDef = a->is<IR::Type_Package>()
+                && a->to<IR::Type_Package>()->hasDefinition();
+        if (!a->is<IR::Type_Error>() // errors can come from multiple files
+//            && (!isPackageWithDef) // uncomment to see package definitions
+            && sourceFile != nullptr) {
             /* FIXME -- when including a user header file (sourceFile != mainFile), do we want
              * to emit an #include of it or not?  Probably not when translating from P4-14, as
              * that would create a P4-16 file that tries to include a P4-14 header.  Unless we
@@ -363,18 +367,6 @@ bool ToP4::preorder(const IR::Type_Boolean*) {
 
 bool ToP4::preorder(const IR::Type_Varbits* t) {
     builder.appendFormat("varbit<%d>", t->size);
-    return false;
-}
-
-bool ToP4::preorder(const IR::Type_Package* package) {
-    dump(2);
-    builder.emitIndent();
-    visit(package->annotations);
-    builder.append("package ");
-    builder.append(package->name);
-    visit(package->typeParameters);
-    visit(package->constructorParams);
-    if (isDeclaration) builder.endOfStatement();
     return false;
 }
 
@@ -719,19 +711,24 @@ bool ToP4::preorder(const IR::SelectExpression* e) {
 }
 
 bool ToP4::preorder(const IR::ListExpression* e) {
-    ListPrint *lp;
-    if (listTerminators.empty())
-        lp = new ListPrint("{ ", " }");
-    else
-        lp = &listTerminators.back();
-    builder.append(lp->start);
+    cstring start, end;
+    if (listTerminators.empty()) {
+        start = "{ ";
+        end = " }";
+    } else {
+        start = listTerminators.back().start;
+        end = listTerminators.back().end;
+    }
+    builder.append(start);
     setVecSep(", ");
     int prec = expressionPrecedence;
     expressionPrecedence = DBPrint::Prec_Low;
+    setListTerm("{ ", " }");
     visit(e->components);
+    doneList();
     expressionPrecedence = prec;
     doneVec();
-    builder.append(lp->end);
+    builder.append(end);
     return false;
 }
 
@@ -992,6 +989,43 @@ bool ToP4::preorder(const IR::Parameter* p) {
     return false;
 }
 
+bool ToP4::preorder(const IR::Type_Package * p) {
+    // TODO(pierce): this is hacky but fast
+    if (p->hasDefinition()) {
+        dump(1);
+        builder.emitIndent();
+        visit(p->annotations);
+        builder.append("package ");
+        builder.append(p->name);
+        if (p->getConstructorParameters()->size() != 0)
+            visit(p->getConstructorParameters());
+        builder.spc();
+        builder.blockStart();
+        for (auto s : *p->packageLocals) {
+            builder.emitIndent();
+            visit(s);
+            builder.newline();
+        }
+
+        builder.emitIndent();
+        builder.append("apply ");
+        visit(p->body);
+        builder.newline();
+        builder.blockEnd(true);
+    } else {
+        dump(2);
+        builder.emitIndent();
+        visit(p->annotations);
+        builder.append("package ");
+        builder.append(p->name);
+        visit(p->typeParameters);
+        visit(p->constructorParams);
+
+        if (isDeclaration) builder.endOfStatement();
+    }
+    return false;
+}
+
 bool ToP4::preorder(const IR::P4Control * c) {
     dump(1);
     bool decl = isDeclaration;
@@ -1176,7 +1210,6 @@ bool ToP4::preorder(const IR::P4Table* c) {
     visit(c->annotations);
     builder.append("table ");
     builder.append(c->name);
-    visit(c->parameters);
     builder.spc();
     builder.blockStart();
     setVecSep("\n", "\n");

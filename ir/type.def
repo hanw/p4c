@@ -102,6 +102,7 @@ class Parameter : Declaration, IAnnotated {
     Direction           direction;
     Type                type;
     Annotations getAnnotations() const override { return annotations; }
+    bool hasOut() const { return direction == IR::Direction::Out || direction == IR::Direction::InOut; }
     dbprint { out << annotations << direction << ' ' << type << ' ' << name; }
 }
 
@@ -285,11 +286,28 @@ abstract Type_ArchBlock : Type_Declaration, IMayBeGenericType, IAnnotated {
     TypeParameters getTypeParameters() const override { return typeParameters; }
 }
 
-class Type_Package : Type_ArchBlock, IContainer {
+// TODO: should package with definition inherit from control, while package
+// without definition stays separate?
+class Type_Package : Type_ArchBlock, IApply, IContainer, ISimpleNamespace {
+    ParameterList applyParams; // always empty
     ParameterList constructorParams;
-    Type_Method getConstructorMethodType() const override;
-    ParameterList getConstructorParameters() const override { return constructorParams; }
+    Type_Method getApplyMethodType() const override;
     toString{ return cstring("package ") + externalName(); }
+
+    Type_Method getConstructorMethodType() const override;
+    ParameterList getConstructorParameters() const override {
+        return constructorParams; }
+
+    Util::Enumerator<IDeclaration>* getDeclarations() const override {
+        return packageLocals->getDeclarations(); }
+    IDeclaration getDeclByName(cstring name) const override {
+        return packageLocals->getDeclaration(name); }
+
+    IndexedVector<Declaration>  packageLocals;
+    BlockStatement       body;
+
+    // package definitions are optional as this feature is experimental
+    bool hasDefinition() const { return !body->components->empty(); }
 }
 
 class Type_Parser : Type_ArchBlock, IApply {

@@ -19,9 +19,12 @@ limitations under the License.
 
 #include "lib/json.h"
 #include "frontends/common/options.h"
-#include "frontends/p4/fromv1.0/v1model.h"
+#include "frontends/common/16model.h"
+#include "frontends/p4/coreLibrary.h"
 #include "midend/convertEnums.h"
 #include "analyzer.h"
+#include <iomanip>
+#include <initializer_list>
 // Currently we are requiring a v1model to be used
 
 // This is based on the specification of the BMv2 JSON input format
@@ -29,46 +32,62 @@ limitations under the License.
 
 namespace BMV2 {
 
-class ExpressionConverter;
-
-class DirectMeterMap final {
- public:
-    struct DirectMeterInfo {
-        const IR::Expression* destinationField;
-        const IR::P4Table* table;
-        unsigned tableSize;
-
-        DirectMeterInfo() : destinationField(nullptr), table(nullptr), tableSize(0) {}
+class BMV2_Model {
+ private:
+    struct TableAttributes_Model {
+        TableAttributes_Model() : 
+                tableImplementation("implementation"),
+                directCounter("counters"),
+                directMeter("meters"), size("size"),
+                supportTimeout("support_timeout") {}
+        ::Model::Elem tableImplementation;
+        ::Model::Elem directCounter;
+        ::Model::Elem directMeter;
+        ::Model::Elem size;
+        ::Model::Elem supportTimeout;
+        const unsigned defaultTableSize = 1024;
+    };
+    
+    struct TableImplementation_Model {
+        TableImplementation_Model() :
+                actionProfile("action_profile"),
+                actionSelector("action_selector") {}
+        ::Model::Elem actionProfile;
+        ::Model::Elem actionSelector;
     };
 
- private:
-    // key is declaration of direct meter
-    std::map<const IR::IDeclaration*, DirectMeterInfo*> directMeter;
-    DirectMeterInfo* createInfo(const IR::IDeclaration* meter);
  public:
-    DirectMeterInfo* getInfo(const IR::IDeclaration* meter);
-    void setDestination(const IR::IDeclaration* meter, const IR::Expression* destination);
-    void setTable(const IR::IDeclaration* meter, const IR::P4Table* table);
-    void setSize(const IR::IDeclaration* meter, unsigned size);
+    BMV2_Model()
+            : tableAttributes(), tableImplementations(),
+              selectorMatchType("selector"),
+              rangeMatchType("range") { }
+
+    ::Model::Elem             selectorMatchType;
+    ::Model::Elem             rangeMatchType;
+    TableAttributes_Model     tableAttributes;
+    TableImplementation_Model tableImplementations;
 };
+
+class ExpressionConverter;
 
 class JsonConverter final {
  public:
     const CompilerOptions& options;
     Util::JsonObject       toplevel;  // output is constructed here
-    P4V1::V1Model&         v1model;
+
     P4::P4CoreLibrary&     corelib;
+    BMV2_Model             model;
     P4::ReferenceMap*      refMap;
     P4::TypeMap*           typeMap;
     ProgramParts           structure;
     cstring                scalarsName;  // name of struct in JSON holding all scalars
     const IR::ToplevelBlock* toplevelBlock;
+
+    // this stores the enclosing IApply when converting expressions
+    // -- for reference when looking up parameter bindings
+    const IR::IApply *enclosingBlock{nullptr};
+
     ExpressionConverter*   conv;
-    DirectMeterMap         meterMap;
-    const IR::Parameter*   headerParameter;
-    const IR::Parameter*   userMetadataParameter;
-    const IR::Parameter*   stdMetadataParameter;
-    cstring                jsonMetadataParameterName = "standard_metadata";
     const unsigned         boolWidth = 1;
     // We place scalar user metadata fields (i.e., bit<>, bool)
     // in the "scalars" metadata object, so we may need to rename
@@ -83,42 +102,49 @@ class JsonConverter final {
  private:
     Util::JsonArray *headerTypes;
     std::map<cstring, cstring> headerTypesCreated;
+    std::map<cstring, unsigned> headerInstancesCreated;
     Util::JsonArray *headerInstances;
     Util::JsonArray *headerStacks;
+    Util::JsonArray *field_lists;
+
     Util::JsonObject *scalarsStruct;
     unsigned scalars_width = 0;
     friend class ExpressionConverter;
 
- protected:
-    void pushFields(cstring prefix, const IR::Type_StructLike *st, Util::JsonArray *fields);
-    cstring createJsonType(const IR::Type_StructLike *type);
-    unsigned nextId(cstring group);
-    void addHeaderStacks(const IR::Type_Struct* headersStruct);
-    void addLocals();
+ private:
     void padScalars();
-    void addTypesAndInstances(const IR::Type_StructLike* type, bool meta);
+
+ protected:
+    void pushFields(const IR::Type_StructLike *st, Util::JsonArray *fields);
+    unsigned createHeaderTypeAndInstance(cstring prefix, cstring varName,
+                                         const IR::Type_StructLike *type);
+    void createNestedStruct(cstring prefix, cstring varName,
+                           const IR::Type_StructLike *type, bool usePrefix);
+    void createStack(cstring prefix, cstring varName, const IR::Type_Stack *stack);
+    unsigned nextId(cstring group);
+    void addLocals();
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
-                           Util::JsonArray* result, Util::JsonArray* fieldLists,
-                           Util::JsonArray* calculations, Util::JsonArray* learn_lists);
+                           Util::JsonArray* result);
     Util::IJson* convertTable(const CFG::TableNode* node,
-                              Util::JsonArray* counters,
-                              Util::JsonArray* action_profiles);
+                              Util::JsonArray* action_profiles,
+                              Util::JsonArray* actions);
     Util::IJson* convertIf(const CFG::IfNode* node, cstring parent);
-    Util::JsonArray* createActions(Util::JsonArray* fieldLists, Util::JsonArray* calculations,
-                                   Util::JsonArray* learn_lists);
-    Util::IJson* toJson(const IR::P4Parser* cont);
+    unsigned createAction(const IR::P4Action *action, Util::JsonArray *actions);
+    Util::IJson* toJson(const IR::P4Parser* cont, cstring name);
     Util::IJson* toJson(const IR::ParserState* state);
-    void convertDeparserBody(const IR::Vector<IR::StatOrDecl>* body, Util::JsonArray* result);
+    void convertDeparserBody(const IR::Vector<IR::StatOrDecl>* body,
+                             Util::JsonArray* result);
     Util::IJson* convertDeparser(const IR::P4Control* state);
     Util::IJson* convertParserStatement(const IR::StatOrDecl* stat);
-    Util::IJson* convertControl(const IR::ControlBlock* block, cstring name,
-                                Util::JsonArray* counters, Util::JsonArray* meters,
-                                Util::JsonArray* registers);
+    Util::JsonObject *createExternInstance(cstring name, cstring type);
+    void addExternAttributes(const IR::Declaration_Instance *di,
+                             const IR::ExternBlock *block,
+                             Util::JsonArray *attributes);
+    Util::IJson* convertControl(const IR::P4Control *cont, cstring name,
+                                Util::JsonArray *externs, Util::JsonArray* actions);
     cstring createCalculation(cstring algo, const IR::Expression* fields,
                               Util::JsonArray* calculations);
     Util::IJson* nodeName(const CFG::Node* node) const;
-    void createForceArith(const IR::Type* stdMetaType, cstring name,
-                          Util::JsonArray* force_list) const;
     cstring convertHashAlgorithm(cstring algorithm) const;
     // Return 'true' if the table is 'simple'
     bool handleTableImplementation(const IR::Property* implementation,
@@ -129,10 +155,6 @@ class JsonConverter final {
     // returns id of created field list
     int createFieldList(const IR::Expression* expr, cstring group,
                         cstring listName, Util::JsonArray* fieldLists);
-    void generateUpdate(const IR::BlockStatement *block,
-                        Util::JsonArray* checksums, Util::JsonArray* calculations);
-    void generateUpdate(const IR::P4Control* cont,
-                        Util::JsonArray* checksums, Util::JsonArray* calculations);
 
     // Operates on a select keyset
     void convertSimpleKey(const IR::Expression* keySet,
@@ -153,12 +175,29 @@ class JsonConverter final {
     // Adds declared enums to json
     void addEnums();
 
+    // Check structure composition
+    bool hasStructLikeMembers(const IR::Type_StructLike *st);
+    bool hasBitMembers(const IR::Type_StructLike *st);
+    void checkStructure(const IR::Type_StructLike *st);
+
+    // resolve control/parser params to package locals
+    const IR::IDeclaration *resolveParameter(const IR::Parameter *param);
+
+    const IR::InstantiatedBlock *getInstantiatedBlock(cstring name);
+
+    cstring buildQualifiedName(std::vector<cstring> nodes, cstring delim = ".") {
+        if (refMap->isV1()) { // name annotations provide unique names in V1
+            return *(--(nodes.end()));
+        }
+        return cstring::join(nodes.begin(), nodes.end(), ".");
+    }
+
  public:
     explicit JsonConverter(const CompilerOptions& options);
-    void convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap, const IR::ToplevelBlock *toplevel,
+    void convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
+                 const IR::ToplevelBlock *toplevel,
                  P4::ConvertEnums::EnumMapping* enumMap);
-    void serialize(std::ostream& out) const
-    { toplevel.serialize(out); }
+    void serialize(std::ostream& out) const { toplevel.serialize(out); }
 };
 
 }  // namespace BMV2

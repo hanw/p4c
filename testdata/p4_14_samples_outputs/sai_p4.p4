@@ -137,6 +137,7 @@ control egress(inout headers hdr, inout metadata meta, inout standard_metadata_t
 }
 
 control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
+    @name("port_counters") direct_counter(CounterType.packets) port_counters;
     @name("fdb_set") action fdb_set(bit<1> type_, bit<9> port_id) {
         meta.ingress_metadata.mac_type = type_;
         meta.intrinsic_metadata.ucast_egress_port = port_id;
@@ -221,7 +222,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         meta.ingress_metadata.v4_enable = admin_v4_state;
         meta.ingress_metadata.v6_enable = admin_v6_state;
     }
-    @name("fdb") table fdb() {
+    @name("fdb") table fdb {
         actions = {
             fdb_set;
             @default_only NoAction;
@@ -232,7 +233,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         }
         default_action = NoAction();
     }
-    @name("learn_notify") table learn_notify() {
+    @name("learn_notify") table learn_notify {
         actions = {
             nop;
             generate_learn_notify;
@@ -245,7 +246,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         }
         default_action = NoAction();
     }
-    @name("neighbor") table neighbor() {
+    @name("neighbor") table neighbor {
         actions = {
             set_dmac;
             @default_only NoAction;
@@ -257,7 +258,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         }
         default_action = NoAction();
     }
-    @name("next_hop") table next_hop() {
+    @name("next_hop") table next_hop {
         actions = {
             set_next_hop;
             @default_only NoAction;
@@ -267,9 +268,27 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         }
         default_action = NoAction();
     }
-    @name("port") table port() {
+    @name("set_in_port") action set_in_port_0(bit<10> port, bit<2> type_, bit<2> oper_status, bit<4> speed, bit<8> admin_state, bit<12> default_vlan, bit<8> default_vlan_priority, bit<1> ingress_filtering, bit<1> drop_untagged, bit<1> drop_tagged, bit<2> port_loopback_mode, bit<2> fdb_learning, bit<3> stp_state, bit<1> update_dscp, bit<14> mtu, bit<8> sflow, bit<8> flood_storm_control, bit<8> broadcast_storm_control, bit<8> multicast_storm_control, bit<2> global_flow_control, bit<16> max_learned_address, bit<8> fdb_learning_limit_violation) {
+        meta.ingress_metadata.port_lag = port;
+        meta.ingress_metadata.mac_limit = max_learned_address;
+        meta.ingress_metadata.port_type = type_;
+        meta.ingress_metadata.oper_status = oper_status;
+        meta.ingress_metadata.flow_ctrl = global_flow_control;
+        meta.ingress_metadata.port_speed = speed;
+        meta.ingress_metadata.drop_vlan = ingress_filtering;
+        meta.ingress_metadata.drop_tagged = drop_tagged;
+        meta.ingress_metadata.drop_untagged = drop_untagged;
+        meta.ingress_metadata.port_mode = port_loopback_mode;
+        meta.ingress_metadata.learning = fdb_learning;
+        meta.ingress_metadata.stp_state = stp_state;
+        meta.ingress_metadata.update_dscp = update_dscp;
+        meta.ingress_metadata.mtu = mtu;
+        meta.ingress_metadata.vlan_id = default_vlan;
+        port_counters.count();
+    }
+    @name("port") table port {
         actions = {
-            set_in_port;
+            set_in_port_0;
             @default_only NoAction;
         }
         key = {
@@ -278,7 +297,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         default_action = NoAction();
         @name("port_counters") counters = direct_counter(CounterType.packets);
     }
-    @name("route") table route() {
+    @name("route") table route {
         actions = {
             route_set_trap;
             route_set_nexthop;
@@ -291,7 +310,7 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         }
         default_action = NoAction();
     }
-    @name("router_interface") table router_interface() {
+    @name("router_interface") table router_interface {
         actions = {
             set_router_interface;
             router_interface_miss;
@@ -302,14 +321,14 @@ control ingress(inout headers hdr, inout metadata meta, inout standard_metadata_
         }
         default_action = NoAction();
     }
-    @name("switch") table switch_0() {
+    @name("switch") table switch_0 {
         actions = {
             set_switch;
             @default_only NoAction;
         }
         default_action = NoAction();
     }
-    @name("virtual_router") table virtual_router() {
+    @name("virtual_router") table virtual_router {
         actions = {
             set_router;
             @default_only NoAction;

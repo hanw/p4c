@@ -71,6 +71,7 @@ class DoRemoveReturns : public Transform {
 
     const IR::Node* preorder(IR::P4Action* action) override;
     const IR::Node* preorder(IR::P4Control* control) override;
+    const IR::Node* preorder(IR::Type_Package* control) override;
     const IR::Node* preorder(IR::P4Parser* parser) override
     { prune(); return parser; }
 };

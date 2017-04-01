@@ -50,13 +50,14 @@ p4_frontend_UNIFIED = \
 	frontends/p4/resetHeaders.cpp \
 	frontends/p4/moveDeclarations.cpp \
 	frontends/p4/tableKeyNames.cpp \
-	frontends/p4/specialize.cpp
+	frontends/p4/specialize.cpp \
+	frontends/p4/inferArchitecture.cpp
 
 p4_frontend_NONUNIFIED = \
 	frontends/p4/p4-parse.ypp
 
 BUILT_SOURCES += \
-        frontends/p4/p4-lex.c \
+	frontends/p4/p4-lex.c \
 	frontends/p4/p4-parse.cpp
 
 noinst_HEADERS += \
@@ -100,13 +101,13 @@ noinst_HEADERS += \
 	frontends/p4/typeMap.h \
 	frontends/p4/uniqueNames.h \
 	frontends/p4/unusedDeclarations.h \
+	frontends/p4/validateParsedProgram.h \
 	frontends/p4/tableKeyNames.h \
-	frontends/p4/validateParsedProgram.h
+	frontends/p4/inferArchitecture.h
 
 cpplint_FILES += frontends/p4/p4-lex.l \
 		 $(p4_frontend_UNIFIED) \
 		 $(p4_frontend_NONUNIFIED)
-
 
 common_frontend_UNIFIED = \
 	frontends/common/options.cpp \

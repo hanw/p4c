@@ -76,8 +76,7 @@ const IR::Node* DoMoveActionsToTables::postorder(IR::MethodCallStatement* statem
     auto props = new IR::TableProperties(Util::SourceInfo(), nm);
     // Synthesize a new table
     cstring tblName = IR::ID(refMap->newName(cstring("tbl_") + ac->action->name.name), nullptr);
-    auto tbl = new IR::P4Table(Util::SourceInfo(), tblName, IR::Annotations::empty,
-                               new IR::ParameterList(), props);
+    auto tbl = new IR::P4Table(Util::SourceInfo(), tblName, IR::Annotations::empty, props);
     tables.push_back(tbl);
 
     // Table invocation statement
@@ -112,16 +111,16 @@ bool DoSynthesizeActions::mustMove(const IR::MethodCallStatement* statement) {
 }
 
 bool DoSynthesizeActions::mustMove(const IR::AssignmentStatement *assign) {
-    if (auto mc = assign->right->to<IR::MethodCallExpression>()) {
-        auto mi = MethodInstance::resolve(mc, refMap, typeMap);
-        if (!mi->is<ExternMethod>())
-            return true;
-        auto em = mi->to<ExternMethod>();
-        auto &v1model = P4V1::V1Model::instance;
-        if (em->originalExternType->name.name == v1model.ck16.name)
-            return false;
-    }
     return true;
+}
+
+const IR::Node* DoSynthesizeActions::preorder(IR::Type_Package* package) {
+    prune();
+    return package;
+}
+
+const IR::Node* DoSynthesizeActions::postorder(IR::Type_Package* package) {
+    return package;
 }
 
 const IR::Node* DoSynthesizeActions::preorder(IR::P4Control* control) {

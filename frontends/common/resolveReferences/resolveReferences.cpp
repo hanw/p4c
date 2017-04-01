@@ -232,7 +232,6 @@ void ResolveReferences::checkShadowing(const IR::INamespace* ns) const {
                 // Methods can overload each other if they have a different number of arguments
                 // Also, the constructor is supposed to have the same name as the class
                 continue;
-
             if (pnode->is<IR::Attribute>() && node->is<IR::AttribLocal>())
                 // attribute locals often match attributes
                 continue;
@@ -307,6 +306,26 @@ void ResolveReferences::postorder(const IR::P4Control *c) {
     removeFromContext(c->type->typeParameters);
 }
 
+// TODO(pierce): check shadow or not?
+bool ResolveReferences::preorder(const IR::Type_Package *p) {
+    auto cs = checkShadow;
+    checkShadow = false;
+    refMap->usedName(p->name.name);
+    addToContext(p);
+    addToContext(p->typeParameters);
+    addToContext(p->applyParams);
+    addToContext(p->constructorParams);
+    checkShadow = cs;
+    return true;
+}
+
+void ResolveReferences::postorder(const IR::Type_Package *p) {
+    removeFromContext(p->constructorParams);
+    removeFromContext(p->applyParams);
+    removeFromContext(p->typeParameters);
+    removeFromContext(p);
+}
+
 bool ResolveReferences::preorder(const IR::P4Parser *p) {
     refMap->usedName(p->name.name);
     addToContext(p->type->typeParameters);
@@ -335,12 +354,7 @@ void ResolveReferences::postorder(const IR::Function* function) {
 
 bool ResolveReferences::preorder(const IR::P4Table* t) {
     refMap->usedName(t->name.name);
-    addToContext(t->parameters);
     return true;
-}
-
-void ResolveReferences::postorder(const IR::P4Table* t) {
-    removeFromContext(t->parameters);
 }
 
 bool ResolveReferences::preorder(const IR::TableProperties *p) {

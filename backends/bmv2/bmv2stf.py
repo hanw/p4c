@@ -347,21 +347,25 @@ class RunBMV2(object):
         self.json = None
         self.tables = []
         self.actions = []
-        self.switchLogFile = "switch.log"  # .txt is added by BMv2
+        self.switchLogFile = "psa.log"  # .txt is added by BMv2
         self.readJson()
     def readJson(self):
         with open(self.jsonfile) as jf:
             self.json = json.load(jf)
         for a in self.json["actions"]:
             self.actions.append(BMV2Action(a))
-        for t in self.json["pipelines"][0]["tables"]:
-            self.tables.append(BMV2Table(t))
-        for t in self.json["pipelines"][1]["tables"]:
-            self.tables.append(BMV2Table(t))
+
+        for p in self.json["pipelines"]:
+            for t in p["tables"]:
+                self.tables.append(BMV2Table(t))
+#        for t in self.json["pipelines"][0]["tables"]:
+#            self.tables.append(BMV2Table(t))
+#        for t in self.json["pipelines"][1]["tables"]:
+#            self.tables.append(BMV2Table(t))
     def filename(self, interface, direction):
         return self.folder + "/" + self.pcapPrefix + str(interface) + "_" + direction + ".pcap"
     def interface_of_filename(self, f):
-        return os.path.basename(f).rstrip('.pcap').lstrip(self.pcapPrefix).rsplit('_', 1)[0]
+        return int(os.path.basename(f).rstrip('.pcap').lstrip(self.pcapPrefix).rsplit('_', 1)[0])
     def do_cli_command(self, cmd):
         if self.options.verbose:
             print(cmd)
@@ -496,8 +500,7 @@ class RunBMV2(object):
         rv = SUCCESS
 
         try:
-            runswitch = [FindExe("behavioral-model", "simple_switch"),
-                         "--log-file", self.switchLogFile, "--log-flush",
+            runswitch = [ "psa", "--log-file", self.switchLogFile, "--log-flush",
                          "--use-files", str(wait), "--thrift-port", thriftPort,
                          "--device-id", str(rand)] + self.interfaceArgs() + ["../" + self.jsonfile]
             if self.options.verbose:
@@ -523,7 +526,7 @@ class RunBMV2(object):
                 # need to wait if there are none
                 time.sleep(0.5)
 
-            runcli = [FindExe("behavioral-model", "simple_switch_CLI"), "--thrift-port", thriftPort]
+            runcli = ["psa_CLI", "--thrift-port", thriftPort]
             if self.options.verbose:
                 print("Running", " ".join(runcli))
             cli = subprocess.Popen(runcli, cwd=self.folder, stdin=subprocess.PIPE)
@@ -542,11 +545,10 @@ class RunBMV2(object):
             sw.wait()
             # This only works on Unix: negative returncode is
             # minus the signal number that killed the process.
-            if sw.returncode != 0 and sw.returncode != -15:  # 15 is SIGTERM
-                reportError("simple_switch died with return code", sw.returncode);
-                rv = FAILURE
+            if sw.returncode != -15:  # 15 is SIGTERM
+                reportError("psa died with return code", sw.returncode);
             elif self.options.verbose:
-                print("simple_switch exit code", sw.returncode)
+                print("psa exit code", sw.returncode)
             cli.wait()
             if cli.returncode != 0 and cli.returncode != -15:
                 reportError("CLI process failed with exit code", cli.returncode)
@@ -594,26 +596,41 @@ class RunBMV2(object):
             if self.options.observationLog:
                 observationLog = open(self.options.observationLog, 'w')
                 for pkt in packets:
-                    observationLog.write('%s %s\n' % (
+                    observationLog.write('%d %s\n' % (
                         interface,
                         ''.join(ByteToHex(str(pkt)).split()).upper()))
                 observationLog.close()
 
             # Check for expected packets.
             if interface not in self.expected:
+                # This continue can falsely make a test succeed, if the
+                # interface type is not the one stored in expected. We need to
+                # be more careful on declaring success.
+                #
+                # One possible fix is to check for all expected and determine
+                # which file to look into, or, remove the ones we found from the
+                # self.expected list, and return success only if the list is
+                # empty. The latter is what is implemented below.
                 continue
             expected = self.expected[interface]
             if len(expected) != len(packets):
-                reportError("Expected", len(expected), "packets on port", interface,
+                reportError("Expected", len(expected), "packets on port", str(interface),
                             "got", len(packets))
                 self.showLog()
                 return FAILURE
             for i in range(0, len(expected)):
                 cmp = self.comparePacket(expected[i], packets[i])
                 if cmp != SUCCESS:
-                    reportError("Packet", i, "on port", interface, "differs")
+                    reportError("Packet", i, "on port", str(interface), "differs")
                     return FAILURE
-        return SUCCESS
+            # remove successfully checked interfaces
+            del self.expected[interface]
+        if len(self.expected) != 0:
+            # didn't find all the expects we were expecting
+            reportError("Expected packects on ports", self.expected.keys(), "not received")
+            return FAILURE
+        else:
+            return SUCCESS
 
 def run_model(options, tmpdir, jsonfile, testfile):
     bmv2 = RunBMV2(tmpdir, options, jsonfile)

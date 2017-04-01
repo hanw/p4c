@@ -181,12 +181,15 @@ Evaluator::processConstructor(
         popBlock(block);
         return block;
     } else if (decl->is<IR::Type_Package>()) {
-        auto block = new IR::PackageBlock(node->srcInfo, node, instanceType,
-                                          decl->to<IR::Type_Package>());
+        auto pack = decl->to<IR::Type_Package>();
+        auto block = new IR::PackageBlock(node->srcInfo, node, instanceType, pack);
         pushBlock(block);
         auto values = evaluateArguments(arguments, current);
-        if (values != nullptr)
+        if (values != nullptr) {
             block->instantiate(values);
+            for (auto a : *pack->packageLocals)
+                visit(a);
+        }
         popBlock(block);
         return block;
     }

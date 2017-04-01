@@ -43,6 +43,7 @@ limitations under the License.
 #include "simplifyDefUse.h"
 #include "simplifyParsers.h"
 #include "specialize.h"
+#include "inferArchitecture.h"
 #include "tableKeyNames.h"
 #include "parserControlFlow.h"
 
@@ -76,6 +77,7 @@ class FrontEndLast : public PassManager {
     FrontEndLast() { setName("FrontEndLast"); }
 };
 
+// TODO: remove skipSideEffectOrdering flag
 const IR::P4Program *FrontEnd::run(const CompilerOptions &options, const IR::P4Program* program,
                                    bool skipSideEffectOrdering) {
     if (program == nullptr)
@@ -107,19 +109,21 @@ const IR::P4Program *FrontEnd::run(const CompilerOptions &options, const IR::P4P
         new ConstantFolding(&refMap, &typeMap),
         new StrengthReduction(),
         new SimplifyControlFlow(&refMap, &typeMap),
-        new RemoveAllUnusedDeclarations(&refMap),
+        new RemoveAllUnusedDeclarations(&refMap, true),
         new SimplifyParsers(&refMap),
         new ResetHeaders(&refMap, &typeMap),
         new UniqueNames(&refMap),  // Give each local declaration a unique internal name
         new MoveDeclarations(),  // Move all local declarations to the beginning
         new MoveInitializers(),
-        skipSideEffectOrdering ? nullptr : new SideEffectOrdering(&refMap, &typeMap),
+        new SideEffectOrdering(&refMap, &typeMap, skipSideEffectOrdering),
         new SimplifyControlFlow(&refMap, &typeMap),
         new MoveDeclarations(),  // Move all local declarations to the beginning
         new SimplifyDefUse(&refMap, &typeMap),
+        new UniqueParameters(&refMap, &typeMap),
         new SimplifyControlFlow(&refMap, &typeMap),
         new SpecializeAll(&refMap, &typeMap),
         new RemoveParserControlFlow(&refMap, &typeMap),
+        new InferArchitecture(&typeMap, &refMap),
         new FrontEndLast(),
     };
 

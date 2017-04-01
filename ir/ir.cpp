@@ -113,6 +113,11 @@ const Method* Type_Extern::lookupMethod(cstring name, int paramCount) const {
 }
 
 const Type_Method*
+Type_Package::getApplyMethodType() const {
+    return new Type_Method(Util::SourceInfo(), new IR::TypeParameters(), nullptr, applyParams);
+}
+
+const Type_Method*
 Type_Parser::getApplyMethodType() const {
     return new Type_Method(Util::SourceInfo(), new IR::TypeParameters(), nullptr, applyParams);
 }
@@ -154,7 +159,7 @@ P4Table::getApplyMethodType() const {
     auto rettype = new IR::Type_Struct(Util::SourceInfo(), ID(name),
                                        IR::Annotations::empty, fields);
     auto applyMethod = new IR::Type_Method(Util::SourceInfo(), new TypeParameters(),
-                                           rettype, parameters);
+                                           rettype, new IR::ParameterList());
     return applyMethod;
 }
 

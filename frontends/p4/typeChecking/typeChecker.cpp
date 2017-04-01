@@ -212,6 +212,39 @@ const IR::ParameterList* TypeInference::canonicalizeParameters(const IR::Paramet
         return params;
 }
 
+// TODO(pierce): experimental
+const IR::IndexedVector<IR::Declaration>* TypeInference::canonicalizeLocals(
+        const IR::IndexedVector<IR::Declaration>* locals) {
+    if (locals == nullptr)
+        return locals;
+
+    bool changes = false;
+    auto vec = new IR::IndexedVector<IR::Declaration>();
+    for (auto l : *locals->getEnumerator()) {
+        auto localType = getType(l);
+        BUG_CHECK(!localType->is<IR::Type_Type>(),
+                  "%1%: Unexpected local type", localType);
+        if (localType == nullptr)
+            return nullptr;
+        if (l->is<IR::Declaration_Variable>()) {
+            auto declVar = l->to<IR::Declaration_Variable>();
+            if (localType != declVar->type) {
+                declVar = new IR::Declaration_Variable(declVar->srcInfo,
+                    declVar->name, declVar->annotations, localType,
+                    declVar->initializer);
+                l = declVar->to<IR::Declaration>();
+                changes = true;
+            }
+        }
+        setType(l, localType);
+        vec->push_back(l);
+    }
+    if (changes)
+        return vec;
+    else
+        return locals;
+}
+
 bool TypeInference::checkParameters(const IR::ParameterList* paramList, bool forbidModules) const {
     for (auto p : *paramList->parameters) {
         auto type = getType(p);
@@ -360,10 +393,13 @@ const IR::Type* TypeInference::canonicalize(const IR::Type* type) {
         auto tp = type->to<IR::Type_Package>();
         auto pl = canonicalizeParameters(tp->constructorParams);
         auto tps = tp->typeParameters;
-        if (pl == nullptr || tps == nullptr)
+        auto cl = canonicalizeLocals(tp->packageLocals);
+        if (pl == nullptr || tps == nullptr || cl == nullptr)
             return nullptr;
-        if (pl != tp->constructorParams || tps != tp->typeParameters)
-            return new IR::Type_Package(tp->srcInfo, tp->name, tp->annotations, tps, pl);
+        if (pl != tp->constructorParams || tps != tp->typeParameters
+            || cl != tp->packageLocals)
+            return new IR::Type_Package(tp->srcInfo, tp->name, tp->annotations,
+                                        tps, tp->applyParams, pl, cl, tp->body);
         return type;
     } else if (type->is<IR::P4Control>()) {
         auto cont = type->to<IR::P4Control>();
@@ -847,6 +883,7 @@ const IR::Node* TypeInference::preorder(IR::Declaration_Instance* decl) {
     } else {
         typeError("%1%: cannot allocate objects of type %2%", decl, type);
     }
+
     prune();
     return decl;
 }
@@ -956,23 +993,27 @@ const IR::Node* TypeInference::postorder(IR::Type_InfInt* type) {
     return type;
 }
 
-const IR::Node* TypeInference::postorder(IR::Type_ArchBlock* decl) {
-    (void)setTypeType(decl);
-    return decl;
-}
-
-const IR::Node* TypeInference::postorder(IR::Type_Package* decl) {
-    auto canon = setTypeType(decl);
-    if (canon != nullptr) {
-        for (auto p : *decl->getConstructorParameters()->parameters) {
-            auto ptype = getType(p);
-            if (ptype == nullptr)
-                // error
-                return decl;
-            if (ptype->is<IR::P4Parser>() || ptype->is<IR::P4Control>())
-                ::error("%1%: Invalid package parameter type", p);
+const IR::Node* TypeInference::postorder(IR::Type_Package* type) {
+    if (type->hasDefinition()) {
+        (void)setTypeType(type, false);
+    } else {
+        auto canon = setTypeType(type);
+        if (canon != nullptr) {
+            for (auto p : *type->getConstructorParameters()->parameters) {
+                auto ptype = getType(p);
+                if (ptype == nullptr)
+                    // error
+                    return type;
+                if (ptype->is<IR::P4Parser>() || ptype->is<IR::P4Control>())
+                    ::error("%1%: Invalid package parameter type", p);
+            }
         }
     }
+    return type;
+}
+
+const IR::Node* TypeInference::postorder(IR::Type_ArchBlock* decl) {
+    (void)setTypeType(decl);
     return decl;
 }
 
@@ -2368,6 +2409,18 @@ const IR::Node* TypeInference::postorder(IR::DefaultExpression* expression) {
     return expression;
 }
 
+bool TypeInference::containsHeader(const IR::Type* type) {
+    if (type->is<IR::Type_Header>() || type->is<IR::Type_Stack>() || type->is<IR::Type_Union>())
+        return true;
+    if (type->is<IR::Type_Struct>()) {
+        auto st = type->to<IR::Type_Struct>();
+        for (auto f : *st->fields)
+            if (containsHeader(f->type))
+                return true;
+    }
+    return false;
+}
+
 const IR::Node* TypeInference::postorder(IR::SelectExpression* expression) {
     if (done()) return expression;
     auto selectType = getType(expression->select);
@@ -2382,6 +2435,9 @@ const IR::Node* TypeInference::postorder(IR::SelectExpression* expression) {
     for (auto ct : *tuple->components) {
         if (ct->is<IR::ITypeVar>()) {
             typeError("Cannot infer type for %1%", ct);
+            return expression;
+        } else if (containsHeader(ct)) {
+            typeError("Expression with type %1% cannot be used in select %2%", ct, expression);
             return expression;
         }
     }

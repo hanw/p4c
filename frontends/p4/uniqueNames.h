@@ -109,9 +109,10 @@ class RenameSymbols : public Transform {
     const IR::Node* postorder(IR::P4Table* decl) override;
     const IR::Node* postorder(IR::P4Action* decl) override;
     const IR::Node* postorder(IR::Parameter* param) override;
+    const IR::Node* preorder(IR::Type_Package *package) override;
 };
 
-// Finds parameters for tables and actions that will be given unique names
+// Finds parameters for actions that will be given unique names
 class FindParameters : public Inspector {
     ReferenceMap* refMap;  // used to generate new names
     RenameMap*    renameMap;
@@ -130,14 +131,13 @@ class FindParameters : public Inspector {
     FindParameters(ReferenceMap* refMap, RenameMap* renameMap) :
             refMap(refMap), renameMap(renameMap)
     { CHECK_NULL(refMap); CHECK_NULL(renameMap); setName("FindParameters"); }
-    void postorder(const IR::P4Table* table) override
-    { doParameters(table->parameters, false); }
     void postorder(const IR::P4Action* action) override {
         bool inTable = renameMap->isInTable(action);
         doParameters(action->parameters, !inTable);
     }
 };
 
+// Give each parameter of a table and action a new unique name
 class UniqueParameters : public PassManager {
  private:
     RenameMap    *renameMap;

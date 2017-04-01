@@ -217,7 +217,7 @@ def process_file(options, argv):
         else:
             result = SUCCESS
 
-    if result == SUCCESS:
+    if result == SUCCESS and not expected_error:
         result = run_model(options, tmpdir, jsonfile);
 
     if options.cleanupTmp:
@@ -284,7 +284,7 @@ def main(argv):
         print("Error parsing config.h")
         sys.exit(FAILURE)
 
-    options.hasBMv2 = "HAVE_SIMPLE_SWITCH" in config.vars
+    options.hasBMv2 = "HAVE_PSA" in config.vars
     if not options.hasBMv2:
         reportError("config.h indicates that BMv2 is not installed; will skip running BMv2 tests")
 

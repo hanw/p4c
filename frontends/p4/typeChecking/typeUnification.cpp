@@ -75,7 +75,8 @@ bool TypeUnification::unifyFunctions(const IR::Node* errorPosition,
             if (reportErrors)
                 ::error("%1%: Read-only value used for out/inout parameter %2%", arg->srcInfo, dit);
             return false;
-        } else if (dit->direction == IR::Direction::None && !arg->compileTimeConstant) {
+        } else if (dit->direction == IR::Direction::None && !arg->compileTimeConstant
+                   && !arg->type->is<IR::Type_Extern>()) {
             if (optarg) continue;
             if (reportErrors)
                 ::error("%1%: not a compile-time constant when binding to %2%", arg->srcInfo, dit);

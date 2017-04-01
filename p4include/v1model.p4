@@ -58,6 +58,7 @@ extern counter {
 
 extern direct_counter {
     direct_counter(CounterType type);
+    void count();
 }
 
 extern meter {
@@ -121,6 +122,11 @@ extern void truncate(in bit<32> length);
 // M should be a struct of structs
 // H should be a struct of headers or stacks
 
+
+// TODO(pierce): calling the standard_metadata_t parameters in these types
+// "standard_metadata" causes the standard_metadata package local to get renamed
+// -- why?
+
 parser Parser<H, M>(packet_in b,
                     out H parsedHdr,
                     inout M meta,
@@ -143,6 +149,23 @@ package V1Switch<H, M>(Parser<H, M> p,
                        Egress<H, M> eg,
                        ComputeChecksum<H, M> ck,
                        Deparser<H> dep
-                       );
+                       ) {
+
+    standard_metadata_t standard_metadata;
+    packet_in           p_in;
+    packet_out          p_out;
+
+    H headers;
+    M usermeta;
+
+    apply {
+        p.apply(p_in, headers, usermeta, standard_metadata);
+        vr.apply(headers, usermeta);
+        ig.apply(headers, usermeta, standard_metadata);
+        eg.apply(headers, usermeta, standard_metadata);
+        ck.apply(headers, usermeta);
+        dep.apply(p_out, headers);
+    }
+}
 
 #endif  /* _V1_MODEL_P4_ */

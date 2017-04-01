@@ -94,6 +94,8 @@ class DoSynthesizeActions : public Transform {
     { CHECK_NULL(refMap); CHECK_NULL(typeMap); setName("DoSynthesizeActions"); }
     const IR::Node* preorder(IR::P4Parser* parser) override
     { prune(); return parser; }
+    const IR::Node* postorder(IR::Type_Package* package) override; // was P4Package
+    const IR::Node* preorder(IR::Type_Package* package) override; // was P4Package
     const IR::Node* postorder(IR::P4Control* control) override;
     const IR::Node* preorder(IR::P4Control* control) override;
     const IR::Node* preorder(IR::P4Action* action) override
