@@ -1,5 +1,5 @@
 /*
-Copyright 2013-present Barefoot Networks, Inc. 
+Copyright 2013-present Barefoot Networks, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -39,14 +39,17 @@ struct Type_Model : public Elem {
     explicit Type_Model(cstring name) : Elem(name) {}
 };
 
+/// Enum_Model : Type_Model
 struct Enum_Model : public Type_Model {
     explicit Enum_Model(cstring name) : Type_Model(name) {}
 };
 
+/// Extern_Model : Type_Model
 struct Extern_Model : public Type_Model {
     explicit Extern_Model(cstring name) : Type_Model(name) {}
 };
 
+/// Param_Model : Elem
 struct Param_Model : public Elem {
     Type_Model type;
     unsigned   index;
@@ -61,5 +64,15 @@ class Model {
 };
 
 }  // namespace Model
+
+inline std::ostream& operator<<(std::ostream &out, Model::Type_Model& m) {
+    out << "Type_Model(" << m.toString() << ")";
+    return out;
+}
+
+inline std::ostream& operator<<(std::ostream &out, Model::Param_Model& p) {
+    out << "Param_Model(" << p.toString() << ")" << p.type;
+    return out;
+}
 
 #endif /* P4C_FRONTENDS_COMMON_MODEL_H_ */

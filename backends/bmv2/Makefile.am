@@ -36,6 +36,11 @@ cpplint_FILES += $(p4c_bm2_ss_UNIFIED) $(p4c_bm2_ss_NONUNIFIED)
 
 ir_DEF_FILES += $(srcdir)/backends/bmv2/bmv2.def
 
+noinst_LTLIBRARIES += libbackendbmv2.la
+libbackendbmv2_la_LIBADD = libfrontend.la
+libbackendbmv2_la_SOURCES = \
+	$(p4c_bm2_ss_UNIFIED)
+
 # Tests
 -include bmv2tests.mk
 
