@@ -45,14 +45,21 @@ TEST(arch, psa_infer) {
         extern packet_in {
             void extract<T> (out T hdr);
         }
-        parser Parser<H,M>(packet_in buffer, out H parsed_hdr, inout M user_meta);
+        extern packet_out {
+            void emit<T> (in T hdr);
+        }
+        parser Parser<H,M>(packet_in buffer, out H parsed_hdr, @metadata inout M user_meta);
         enum CounterType_t { packets, bytes, packets_and_bytes  }
         extern Counter<W> {
             Counter(int<32> number, W size_in_bits, CounterType_t type);
             void count(in W index, in W increment);
         }
-        control ingress<H, M> (inout H hdr, inout M meta);
-        package PSA<H, M> (Parser<H,M> pr, ingress<H,M> ig);
+        control Ingress<H, M> (inout H hdr, @metadata inout M meta);
+        @deparser
+        control Deparser<H> (packet_out buffer, in H hdr);
+        package PSA<H, M> (Parser<H,M> pr, Ingress<H,M> ig, Deparser<H> dp);
+
+        // user program
         struct ParsedHeaders {
             bit<32> hdr;
         }
@@ -66,9 +73,14 @@ TEST(arch, psa_infer) {
             apply{
             }
         }
+        control MyDeparser (packet_out buffer, in ParsedHeaders hdr) {
+            apply {
+            }
+        }
         MyParser() pr;
         MyIngress() ig;
-        PSA(pr, ig) main;
+        MyDeparser() dp;
+        PSA(pr, ig, dp) main;
     )");
     const IR::P4Program* pgm = parse_string(program);
     ReferenceMap refMap;
@@ -80,7 +92,6 @@ TEST(arch, psa_infer) {
         new InferArchitecture(&typeMap)
     });
     pgm = pgm->apply(passes);
-    // dump(pgm);
     // midend pass
     CompilerOptions options;
     BMV2::JsonConverter converter(options);
@@ -95,6 +106,7 @@ TEST(arch, psa_infer) {
         new VisitFunctor([this, evaluator, &toplevel]() { toplevel = evaluator->getToplevelBlock(); })
     });
     pgm = pgm->apply(midpass);
+    dump(pgm);
     converter.convert(&refMap, &typeMap, toplevel, &enumMap);
     converter.serialize(std::cout);
 }

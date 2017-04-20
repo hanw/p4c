@@ -1152,10 +1152,10 @@ int JsonConverter::createFieldList(const IR::Expression* expr, cstring group, cs
     return id;
 }
 
-Util::JsonArray* JsonConverter::createActions(Util::JsonArray* fieldLists,
-                                              Util::JsonArray* calculations,
-                                              Util::JsonArray* learn_lists) {
-    auto result = new Util::JsonArray();
+void JsonConverter::createActions(Util::JsonArray* actions,
+                                  Util::JsonArray* fieldLists,
+                                  Util::JsonArray* calculations,
+                                  Util::JsonArray* learn_lists) {
     for (auto it : structure.actions) {
         auto action = it.first;
         auto control = it.second;
@@ -1198,9 +1198,8 @@ Util::JsonArray* JsonConverter::createActions(Util::JsonArray* fieldLists,
         }
         auto body = mkArrayField(jact, "primitives");
         convertActionBody(action->body->components, body, fieldLists, calculations, learn_lists);
-        result->append(jact);
+        actions->append(jact);
     }
-    return result;
 }
 
 Util::IJson* JsonConverter::nodeName(const CFG::Node* node) const {
@@ -1870,11 +1869,6 @@ Util::IJson* JsonConverter::convertControl(const IR::ControlBlock* block, cstrin
                                            Util::JsonArray *counters, Util::JsonArray* meters,
                                            Util::JsonArray* registers) {
     const IR::P4Control* cont = block->container;
-    // the index is the same for ingress and egress
-    stdMetadataParameter = cont->type->applyParams->getParameter(
-        v1model.ingress.standardMetadataParam.index);
-    userMetadataParameter = cont->type->applyParams->getParameter(
-        v1model.ingress.metadataParam.index);
 
     LOG3("Processing " << dbp(cont));
     auto result = new Util::JsonObject();
@@ -2231,41 +2225,108 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     CHECK_NULL(enumMap);
 
     auto package = toplevelBlock->getMain();
-    if (package == nullptr) {
-        ::error("No output to generate");
-        return;
-    }
+    // main -> type of main -> arguments -> metadata
+    auto package_type = package->type;
+    auto parser_type = package_type->getConstructorParameters()->parameters;
+    LOG1(" package type parameters " << parser_type);
+    ERROR_IF_NULL(package, "No output to generate");
 
-    if (package->type->name != v1model.sw.name) {
-        ::error("This back-end requires the program to be compiled for the %1% model",
-                v1model.sw.name);
-        return;
-    }
-
+    // what for?
     structure.analyze(toplevelBlock);
-    if (::errorCount() > 0)
-        return;
+    CHECK_ERROR();
 
-    auto parserBlock = package->getParameterValue(v1model.sw.parser.name);
-    CHECK_NULL(parserBlock);
-    auto parser = parserBlock->to<IR::ParserBlock>()->container;
-    auto hdr = parser->type->applyParams->getParameter(v1model.parser.headersParam.index);
-    auto headersType = typeMap->getType(hdr->getNode(), true);
-    auto ht = headersType->to<IR::Type_Struct>();
-    if (ht == nullptr) {
-        ::error("Expected headers %1% to be a struct", headersType);
-        return;
-    }
-    toplevel.emplace("program", options.file);
+    // layout root attributes as specified in
+    // http://github.com/p4lang/behavioral-model/docs/JSON_format.md
     addMetaInformation();
-
     headerTypes = mkArrayField(&toplevel, "header_types");
     headerInstances = mkArrayField(&toplevel, "headers");
     headerStacks = mkArrayField(&toplevel, "header_stacks");
     auto fieldLists = mkArrayField(&toplevel, "field_lists");
+    addErrors();
+    addEnums();
+    auto parsers = mkArrayField(&toplevel, "parsers");
+    auto parse_vsets = mkArrayField(&toplevel, "parse_vsets");
+    auto deparsers = mkArrayField(&toplevel, "deparsers");
+    auto meters = mkArrayField(&toplevel, "meter_arrays");
+    auto counters = mkArrayField(&toplevel, "counter_arrays");
+    auto registers = mkArrayField(&toplevel, "register_arrays");
+    auto actions = mkArrayField(&toplevel, "actions");
+    auto pipelines = mkArrayField(&toplevel, "pipelines");
+    auto calculations = mkArrayField(&toplevel, "calculations");
+    auto checksums = mkArrayField(&toplevel, "checksums");
+    auto learn_lists = mkArrayField(&toplevel, "learn_lists");
+    auto extern_instances = mkArrayField(&toplevel, "extern_instances");
+
+    // this is not specified in JSON_format.md
+    toplevel.emplace("program", options.file);
+
+    // fixing id
     (void)nextId("field_lists");  // field list IDs must start at 1; 0 is reserved
     (void)nextId("learn_lists");  // idem
 
+    // populate parser block attributes
+    for (auto p : *package->getConstructorParameters()) {
+        auto pv = package->getParameterValue(p->name);
+        if (pv->is<IR::ParserBlock>()) {
+            auto parserBlock = pv->to<IR::ParserBlock>();
+            auto parser = parserBlock->container;
+            auto parserJson = toJson(parser);
+            parsers->append(parserJson);
+
+            // handle metadata and header
+            auto param_list = parserBlock->container->type->applyParams->to<IR::ParameterList>();
+            if (param_list != NULL) {
+                for (auto param : *param_list) {
+                    dump(param);
+                    auto ptype = typeMap->getType(param->getNode(), true);
+                    LOG1("param " << param << " type " << ptype);
+                    dump(ptype);
+                    auto type = ptype->to<IR::Type_Struct>();
+                    if (type) {
+                        LOG1("find struct");
+                        //headerTypesCreated.clear();
+                        //addTypesAndInstances(ht, false);
+                        //addHeaderStacks(ht);
+                        //CHECK_ERROR();
+                    }
+                }
+            }
+        }
+        LOG1("package constructor param " << p << " name = " << p->name);
+        LOG1("package parameter value " << package->getParameterValue(p->name));
+    }
+
+    // populate control block attributes
+    for (auto p : *package->getConstructorParameters()) {
+        auto pv = package->getParameterValue(p->name);
+        if (pv->is<IR::ControlBlock>()){
+            auto controlBlock = pv->to<IR::ControlBlock>();
+            auto control == controlBlock->container;
+
+            auto atns = control->type->annotations->to<IR::Annotations>();
+            for (auto m : atns->annotations) {
+                auto atn = m->to<IR::Annotation>();
+                if (atn != NULL) {
+                    auto name = atn->name;
+                    if (name == "deparser") {
+                        auto deparserJson = convertDeparser(control);
+                        deparsers->append(deparserJson);
+                    } else if (name == "checksum") {
+                        dump(cb);
+                    } else if (name == "update") {
+                        dump(cb);
+                    } else if (name == "control"){
+                        auto controlJson = convertControl(control, p->name, counters, meters, registers);
+                        pipelines->append(controlJson);
+                    } else {
+                        BUG("Unsupported control block type ", name);
+                    }
+                }
+            }
+        }
+    }
+
+    // populate scalars, what are they?
     scalarsStruct = new Util::JsonObject();
     scalarsName = refMap->newName("scalars");
     scalarsStruct->emplace("name", scalarsName);
@@ -2273,107 +2334,49 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     scalars_width = 0;
     mkArrayField(scalarsStruct, "fields");
 
-    headerTypesCreated.clear();
-    addTypesAndInstances(ht, false);
-    addHeaderStacks(ht);
-    if (::errorCount() > 0)
-        return;
-
-    userMetadataParameter = parser->type->applyParams->getParameter(
-        v1model.parser.metadataParam.index);
-    stdMetadataParameter = parser->type->applyParams->getParameter(
-        v1model.parser.standardMetadataParam.index);
-    auto mdType = typeMap->getType(userMetadataParameter, true);
-    auto mt = mdType->to<IR::Type_Struct>();
-    if (mt == nullptr) {
-        ::error("Expected metadata %1% to be a struct", mdType);
-        return;
-    }
+    // populate header attributes
 
     addLocals();
-    addTypesAndInstances(mt, true);
+    //addTypesAndInstances(mt, true);
     padScalars();
 
-    ErrorCodesVisitor errorCodesVisitor(this);
-    toplevelBlock->getProgram()->apply(errorCodesVisitor);
-    addErrors();
-
-    addEnums();
-
-    auto prsrs = mkArrayField(&toplevel, "parsers");
-    auto parserJson = toJson(parser);
-    prsrs->append(parserJson);
-
-    auto deparserBlock = package->getParameterValue(v1model.sw.deparser.name);
-    CHECK_NULL(deparserBlock);
-    auto deparser = deparserBlock->to<IR::ControlBlock>()->container;
-
-    auto dprs = mkArrayField(&toplevel, "deparsers");
-    auto deparserJson = convertDeparser(deparser);
-    if (::errorCount() > 0)
-        return;
-    dprs->append(deparserJson);
-
-    auto meters = mkArrayField(&toplevel, "meter_arrays");
-    auto counters = mkArrayField(&toplevel, "counter_arrays");
-    auto registers = mkArrayField(&toplevel, "register_arrays");
-    auto calculations = mkArrayField(&toplevel, "calculations");
-    auto learn_lists = mkArrayField(&toplevel, "learn_lists");
-
-    auto acts = createActions(fieldLists, calculations, learn_lists);
-    if (::errorCount() > 0)
-        return;
-    toplevel.emplace("actions", acts);
-
-    auto pipelines = mkArrayField(&toplevel, "pipelines");
-    auto ingressBlock = package->getParameterValue(v1model.sw.ingress.name);
-    auto ingressControl = ingressBlock->to<IR::ControlBlock>();
-    auto ingress = convertControl(ingressControl, v1model.ingress.name,
-                                  counters, meters, registers);
-    if (::errorCount() > 0)
-        return;
-    pipelines->append(ingress);
-    auto egressBlock = package->getParameterValue(v1model.sw.egress.name);
-    auto egress = convertControl(egressBlock->to<IR::ControlBlock>(),
-                                 v1model.egress.name, counters, meters, registers);
-    if (::errorCount() > 0)
-        return;
-    pipelines->append(egress);
+    // populate action attributes
+    createActions(actions, fieldLists, calculations, learn_lists);
 
     // standard metadata type and instance
-    stdMetadataParameter = ingressControl->container->type->applyParams->getParameter(
-        v1model.ingress.standardMetadataParam.index);
-    auto stdMetaType = typeMap->getType(stdMetadataParameter, true);
-    auto stdMetaName = createJsonType(stdMetaType->to<IR::Type_StructLike>());
+    //stdMetadataParameter = ingressControl->container->type->applyParams->getParameter(
+    //    v1model.ingress.standardMetadataParam.index);
+    //auto stdMetaType = typeMap->getType(stdMetadataParameter, true);
+    //auto stdMetaName = createJsonType(stdMetaType->to<IR::Type_StructLike>());
 
-    {
-        auto json = new Util::JsonObject();
-        json->emplace("name", v1model.ingress.standardMetadataParam.name);
-        json->emplace("id", nextId("headers"));
-        json->emplace("header_type", stdMetaName);
-        json->emplace("metadata", true);
-        headerInstances->append(json);
-    }
+    //{
+    //    auto json = new Util::JsonObject();
+    //    json->emplace("name", v1model.ingress.standardMetadataParam.name);
+    //    json->emplace("id", nextId("headers"));
+    //    json->emplace("header_type", stdMetaName);
+    //    json->emplace("metadata", true);
+    //    headerInstances->append(json);
+    //}
 
-    auto checksums = mkArrayField(&toplevel, "checksums");
-    auto updateBlock = package->getParameterValue(v1model.sw.update.name);
-    CHECK_NULL(updateBlock);
-    generateUpdate(updateBlock->to<IR::ControlBlock>()->container, checksums, calculations);
-    if (::errorCount() > 0)
-        return;
+    // populate checksum and update?
+
+    //auto checksums = mkArrayField(&toplevel, "checksums");
+    //auto updateBlock = package->getParameterValue(v1model.sw.update.name);
+    //CHECK_NULL(updateBlock);
+    //generateUpdate(updateBlock->to<IR::ControlBlock>()->container, checksums, calculations);
 
     // The whole P4 v1.0 spec about metadata is very confusing.
     // So this is rather heuristic...  Maybe these should be in v1model.p4.
-    auto fa = mkArrayField(&toplevel, "force_arith");
-    createForceArith(stdMetaType, v1model.standardMetadata.name, fa);
-    std::vector<cstring> toForce = { "intrinsic_metadata", "queueing_metadata" };
-    for (auto metaname : toForce) {
-        auto im = mt->getField(metaname);
-        if (im != nullptr) {
-            auto type = typeMap->getType(im->type, true);
-            createForceArith(type, metaname, fa);
-        }
-    }
+    //auto fa = mkArrayField(&toplevel, "force_arith");
+    //createForceArith(stdMetaType, v1model.standardMetadata.name, fa);
+    //std::vector<cstring> toForce = { "intrinsic_metadata", "queueing_metadata" };
+    //for (auto metaname : toForce) {
+    //    auto im = mt->getField(metaname);
+    //    if (im != nullptr) {
+    //        auto type = typeMap->getType(im->type, true);
+    //        createForceArith(type, metaname, fa);
+    //    }
+    //}
 }
 
 void JsonConverter::createForceArith(const IR::Type* meta, cstring name,
@@ -2869,6 +2872,9 @@ Util::IJson* JsonConverter::toJson(const IR::ParserState* state) {
 }
 
 void JsonConverter::addErrors() {
+    auto program = toplevelBlock->getProgram();
+    ErrorCodesVisitor errorCodesVisitor(this);
+    program->apply(errorCodesVisitor);
     auto errors = mkArrayField(&toplevel, "errors");
     for (const auto &p : errorCodesMap) {
         auto name = p.first->getName().name.c_str();

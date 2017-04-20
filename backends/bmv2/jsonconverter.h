@@ -105,8 +105,8 @@ class JsonConverter final {
                               Util::JsonArray* counters,
                               Util::JsonArray* action_profiles);
     Util::IJson* convertIf(const CFG::IfNode* node, cstring parent);
-    Util::JsonArray* createActions(Util::JsonArray* fieldLists, Util::JsonArray* calculations,
-                                   Util::JsonArray* learn_lists);
+    void createActions(Util::JsonArray* actions, Util::JsonArray* fieldLists,
+                       Util::JsonArray* calculations, Util::JsonArray* learn_lists);
     Util::IJson* toJson(const IR::P4Parser* cont);
     Util::IJson* toJson(const IR::ParserState* state);
     void convertDeparserBody(const IR::Vector<IR::StatOrDecl>* body, Util::JsonArray* result);
