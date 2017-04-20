@@ -43,13 +43,12 @@ const IR::Node* ExpressionConverter::postorder(IR::Mask* expression) {
     auto exp = expression->left;
     auto cst = expression->right->to<IR::Constant>();
     mpz_class value = cst->value;
-    while (value != 0) {
-        auto range = Util::findOnes(value);
-        value = value - range.value;
-        exp = new IR::Slice(Util::SourceInfo(), exp,
-                            new IR::Constant(range.highIndex), new IR::Constant(range.lowIndex));
-    }
-    return exp;
+    auto range = Util::findOnes(value);
+    if (range.lowIndex == 0 && range.highIndex >= exp->type->width_bits() - 1U)
+        return exp;
+    if (value != range.value)
+        return new IR::BAnd(expression->srcInfo, exp, cst);
+    return new IR::Slice(exp, new IR::Constant(range.highIndex), new IR::Constant(range.lowIndex));
 }
 
 const IR::Node* ExpressionConverter::postorder(IR::Constant* expression) {
@@ -95,13 +94,11 @@ const IR::Node* ExpressionConverter::postorder(IR::Primitive* primitive) {
         }
 
         const IR::Expression* method = new IR::Member(
-            Util::SourceInfo(),
             structure->paramReference(structure->parserPacketIn),
             P4::P4CoreLibrary::instance.packetIn.lookahead.Id());
         auto typeargs = new IR::Vector<IR::Type>();
         typeargs->push_back(IR::Type_Bits::get(aval + bval));
-        auto lookahead = new IR::MethodCallExpression(
-            Util::SourceInfo(), method, typeargs, new IR::Vector<IR::Expression>());
+        auto lookahead = new IR::MethodCallExpression(method, typeargs);
         auto result = new IR::Slice(primitive->srcInfo, lookahead,
                                     new IR::Constant(bval - 1),
                                     new IR::Constant(0));
@@ -111,9 +108,8 @@ const IR::Node* ExpressionConverter::postorder(IR::Primitive* primitive) {
         BUG_CHECK(primitive->operands.size() == 1, "Expected 1 operand for %1%", primitive);
         auto base = primitive->operands.at(0);
         auto method = new IR::Member(primitive->srcInfo, base, IR::ID(IR::Type_Header::isValid));
-        auto result = new IR::MethodCallExpression(
-            primitive->srcInfo, method, new IR::Vector<IR::Type>(),
-            new IR::Vector<IR::Expression>());
+        auto result = new IR::MethodCallExpression(primitive->srcInfo, IR::Type::Boolean::get(),
+                                                   method);
         return result;
     }
     BUG("Unexpected primitive %1%", primitive);
@@ -146,7 +142,7 @@ const IR::Node* ExpressionConverter::postorder(IR::ConcreteHeaderRef* nhr) {
         else
             ref = structure->conversionContext.userMetadata->clone();
         }
-    auto result = new IR::Member(Util::SourceInfo(), ref, nhr->ref->name);
+    auto result = new IR::Member(ref, nhr->ref->name);
     result->type = nhr->type;
     return result;
 }
@@ -179,11 +175,8 @@ const IR::Node* StatementConverter::preorder(IR::Apply* apply) {
     auto table = structure->tables.get(apply->name);
     auto newname = structure->tables.get(table);
     auto tbl = new IR::PathExpression(newname);
-    auto method = new IR::Member(Util::SourceInfo(), tbl,
-                                 IR::ID(IR::IApply::applyMethodName));
-    auto call = new IR::MethodCallExpression(apply->srcInfo, method,
-                                             structure->emptyTypeArguments,
-                                             new IR::Vector<IR::Expression>());
+    auto method = new IR::Member(tbl, IR::ID(IR::IApply::applyMethodName));
+    auto call = new IR::MethodCallExpression(apply->srcInfo, method);
     if (apply->actions.size() == 0) {
         auto stat = new IR::MethodCallStatement(apply->srcInfo, call);
         prune();
@@ -211,9 +204,9 @@ const IR::Node* StatementConverter::preorder(IR::Apply* apply) {
 
         if (!otherLabels) {
             StatementConverter conv(structure, renameMap);
-            auto hitcase = hit ? conv.convert(hit) : new IR::EmptyStatement(Util::SourceInfo());
+            auto hitcase = hit ? conv.convert(hit) : new IR::EmptyStatement();
             auto misscase = miss ? conv.convert(miss) : nullptr;
-            auto check = new IR::Member(Util::SourceInfo(), call, IR::Type_Table::hit);
+            auto check = new IR::Member(call, IR::Type_Table::hit);
             auto ifstat = new IR::IfStatement(apply->srcInfo, check, hitcase, misscase);
             prune();
             return ifstat;
@@ -230,13 +223,17 @@ const IR::Node* StatementConverter::preorder(IR::Apply* apply) {
                     converted[a.second] = cases.size();
                     stat = conv.convert(a.second); }
                 const IR::Expression* destination;
-                if (a.first == "default")
-                    destination = new IR::DefaultExpression(Util::SourceInfo());
-                else
-                    destination = new IR::PathExpression(IR::ID(a.first));
+                if (a.first == "default") {
+                    destination = new IR::DefaultExpression();
+                } else {
+                    cstring act_name = a.first;
+                    cstring full_name = table->name + '.' + act_name;
+                    if (renameMap->count(full_name))
+                        act_name = renameMap->at(full_name);
+                    destination = new IR::PathExpression(IR::ID(act_name)); }
                 auto swcase = new IR::SwitchCase(a.second->srcInfo, destination, stat);
                 cases.insert(insert_at, swcase); }
-            auto check = new IR::Member(Util::SourceInfo(), call, IR::Type_Table::action_run);
+            auto check = new IR::Member(call, IR::Type_Table::action_run);
             auto sw = new IR::SwitchStatement(apply->srcInfo, check, std::move(cases));
             prune();
             return sw;
@@ -249,13 +246,12 @@ const IR::Node* StatementConverter::preorder(IR::Primitive* primitive) {
     if (control != nullptr) {
         auto instanceName = get(renameMap, control->name);
         auto ctrl = new IR::PathExpression(IR::ID(instanceName));
-        auto method = new IR::Member(Util::SourceInfo(), ctrl, IR::ID(IR::IApply::applyMethodName));
+        auto method = new IR::Member(ctrl, IR::ID(IR::IApply::applyMethodName));
         auto args = new IR::Vector<IR::Expression>();
         args->push_back(structure->conversionContext.header->clone());
         args->push_back(structure->conversionContext.userMetadata->clone());
         args->push_back(structure->conversionContext.standardMetadata->clone());
-        auto call = new IR::MethodCallExpression(primitive->srcInfo, method,
-                                                 structure->emptyTypeArguments, args);
+        auto call = new IR::MethodCallExpression(primitive->srcInfo, method, args);
         auto stat = new IR::MethodCallStatement(primitive->srcInfo, call);
         return stat;
     }
@@ -270,7 +266,7 @@ const IR::Node* StatementConverter::preorder(IR::If* cond) {
     BUG_CHECK(pred != nullptr, "Expected to get an expression when converting %1%", cond->pred);
     const IR::Statement* t, *f;
     if (cond->ifTrue == nullptr)
-        t = new IR::EmptyStatement(Util::SourceInfo());
+        t = new IR::EmptyStatement();
     else
         t = conv.convert(cond->ifTrue);
 
@@ -290,7 +286,7 @@ const IR::Statement* StatementConverter::convert(const IR::Vector<IR::Expression
         auto s = convert(e);
         stats->push_back(s);
     }
-    auto result = new IR::BlockStatement(toConvert->srcInfo, IR::Annotations::empty, stats);
+    auto result = new IR::BlockStatement(toConvert->srcInfo, stats);
     return result;
 }
 
@@ -485,7 +481,6 @@ class ComputeCallGraph : public Inspector {
         }
     }
     void postorder(const IR::GlobalRef *gref) override {
-        const Context *ctxt = nullptr;
         cstring caller;
         if (auto af = findContext<IR::ActionFunction>()) {
             caller = af->name;

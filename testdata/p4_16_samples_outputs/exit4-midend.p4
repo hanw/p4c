@@ -1,5 +1,6 @@
 control ctrl() {
     bool hasExited;
+    bool tmp_0;
     @name("e") action e_0() {
         hasExited = true;
     }
@@ -9,22 +10,43 @@ control ctrl() {
         }
         default_action = e_0();
     }
-    action act() {
+    @hidden action act() {
+        tmp_0 = true;
+    }
+    @hidden action act_0() {
+        tmp_0 = false;
+    }
+    @hidden action act_1() {
         hasExited = false;
     }
-    table tbl_act {
+    @hidden table tbl_act {
+        actions = {
+            act_1();
+        }
+        const default_action = act_1();
+    }
+    @hidden table tbl_act_0 {
         actions = {
             act();
         }
         const default_action = act();
     }
+    @hidden table tbl_act_1 {
+        actions = {
+            act_0();
+        }
+        const default_action = act_0();
+    }
     apply {
         tbl_act.apply();
-        if (t.apply().hit)
-            if (!hasExited)
+        if (t.apply().hit) 
+            tbl_act_0.apply();
+        else 
+            tbl_act_1.apply();
+        if (!hasExited) 
+            if (tmp_0) 
                 t.apply();
-        else
-            if (!hasExited)
+            else 
                 t.apply();
     }
 }

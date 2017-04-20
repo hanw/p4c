@@ -19,43 +19,21 @@ limitations under the License.
 
 #include "ir/ir.h"
 #include "ir/visitor.h"
-#include "common/16model.h"
+
 #include "typeMap.h"
+#include "common/16model.h"
 
 namespace P4 {
 
-// Saves achitecture description in cpp datastructure
-
-class ArchitecturalBlocks : public Inspector {
+class InferArchitecture : public Inspector {
  private:
-    ::P4_16::V2Model *archModel;
     TypeMap *typeMap;
-    static ArchitecturalBlocks *instance;
-
+    V2Model& v2model;
  public:
-    ArchitecturalBlocks(TypeMap *typeMap)
-        : typeMap(typeMap), archModel(new ::P4_16::V2Model()) {
-        instance = this;
+    InferArchitecture(TypeMap *typeMap)
+        : typeMap(typeMap), v2model(P4::V2Model::instance) {
     }
-
-    ::P4_16::V2Model *getModel() const { return archModel; }
-
-    static const ArchitecturalBlocks *getInstance() { return instance; }
-
- public:
-    bool preorder(const IR::Type_Control *node) override;
-    bool preorder(const IR::Type_Parser *node) override;
-    bool preorder(const IR::Type_Extern *node) override;
-    bool preorder(const IR::Type_Package *node) override;
-
     bool preorder(const IR::P4Program* program) override;
-};
-
-class InferArchitecture : public PassManager {
- public:
-    InferArchitecture(TypeMap *typeMap, ReferenceMap *refMap) {
-        passes.push_back(new ArchitecturalBlocks(typeMap));
-    }
 };
 
 } // namespace P4

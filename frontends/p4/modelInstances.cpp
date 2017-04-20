@@ -1,5 +1,5 @@
 /*
-Copyright 2013-present Barefoot Networks, Inc. 
+Copyright 2013-present Barefoot Networks, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,10 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "v1model.h"
+#include "coreLibrary.h"
+#include "fromv1.0/v1model.h"
+#include "common/16model.h"
 
+namespace P4 {
+
+P4CoreLibrary P4CoreLibrary::instance;
+V2Model V2Model::instance;
+
+}  // namespace P4
+
+/* These must be in the same compiliation unit to ensure that P4CoreLibrary::instance
+ * is initialized before V1Model::instance */
 namespace P4V1 {
 
 V1Model V1Model::instance;
 
 }  // namespace P4V1
+

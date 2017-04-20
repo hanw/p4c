@@ -17,11 +17,18 @@ limitations under the License.
 #ifndef _MIDEND_SIMPLIFYSELECTLIST_H_
 #define _MIDEND_SIMPLIFYSELECTLIST_H_
 
+#include "frontends/common/resolveReferences/referenceMap.h"
+#include "frontends/p4/typeChecking/typeChecker.h"
+#include "frontends/p4/typeMap.h"
+#include "ir/ir.h"
+
 namespace P4 {
 
-// Replace a reference to a structure with a list of all its fields
-// if the reference occurs in a select expression.  This should be run
-// after tuple elimination, so we only need to deal with structs.
+/**
+Replace a reference to a structure with a list of all its fields
+if the reference occurs in a select expression.  This should be run
+after tuple elimination, so we only need to deal with structs.
+*/
 class SubstituteStructures : public Transform {
     TypeMap* typeMap;
 
@@ -34,23 +41,24 @@ class SubstituteStructures : public Transform {
     const IR::Node* postorder(IR::PathExpression* expression) override;
 };
 
-// Remove nested ListExpressions; this must be run after tuples have been eliminated
-// This is complicated because select labels have to be flattened too,
-// and a default expression in a select label can match a whole list.
-// For example, consider this example:
-// transition select(a, b, {c, d}) {
-//     default: accept;
-//     (0, 0, default): accept;
-//     (0, 0, {default, default}): accept;
-// }
-// This is converted to:
-// transition select(a, b, c, d) {
-//     default: accept;
-//     (0, 0, default, default): accept;
-//     (0, 0, default, default): accept;
-// }
+/**
+Remove nested ListExpressions; this must be run after tuples have been eliminated
+This is complicated because select labels have to be flattened too,
+and a default expression in a select label can match a whole list.
+For example, consider this example:
+transition select(a, b, {c, d}) {
+    default: accept;
+    (0, 0, default): accept;
+    (0, 0, {default, default}): accept;
+}
+This is converted to:
+transition select(a, b, c, d) {
+    default: accept;
+    (0, 0, default, default): accept;
+    (0, 0, default, default): accept;
+}
+*/
 class UnnestSelectList : public Transform {
-    TypeMap* typeMap;
     // Represent the nesting of lists inside of a selectExpression.
     // E.g.: [__[__]_] for two nested lists.
     cstring nesting;
@@ -59,8 +67,7 @@ class UnnestSelectList : public Transform {
     void flatten(const IR::Expression* expression, unsigned* nestingIndex,
                  IR::Vector<IR::Expression> *output);
  public:
-    explicit UnnestSelectList(TypeMap* typeMap) : typeMap(typeMap)
-    { CHECK_NULL(typeMap); setName("UnnestSelectList"); }
+    UnnestSelectList() { setName("UnnestSelectList"); }
 
     const IR::Node* preorder(IR::SelectExpression* expression) override;
     const IR::Node* preorder(IR::P4Control* control) override
@@ -73,7 +80,7 @@ class SimplifySelectList : public PassManager {
         passes.push_back(new TypeChecking(refMap, typeMap));
         passes.push_back(new SubstituteStructures(typeMap));
         passes.push_back(new TypeChecking(refMap, typeMap));
-        passes.push_back(new UnnestSelectList(typeMap));
+        passes.push_back(new UnnestSelectList);
         setName("SimplifySelectList");
     }
 };

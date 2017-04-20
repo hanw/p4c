@@ -46,35 +46,22 @@ limitations under the License.
 #include "midend/simplifyKey.h"
 #include "midend/simplifySelectCases.h"
 #include "midend/simplifySelectList.h"
+#include "midend/removeSelectBooleans.h"
 #include "midend/validateProperties.h"
 #include "midend/compileTimeOps.h"
 #include "midend/isolateMethodCalls.h"
 #include "midend/predication.h"
 #include "midend/expandLookahead.h"
 #include "midend/tableHit.h"
+#include "midend/midEndLast.h"
 
 namespace BMV2 {
 
-#if 0
-// This code is now obsolete, it probably should be removed
-void MidEnd::setup_for_P4_14(CompilerOptions&) {
-    auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
-    // Inlining is simpler for P4 v1.0/1.1 programs, so we have a
-    // specialized code path, which also generates slighly nicer
-    // human-readable results.
-    addPasses({
-        evaluator,
-        new P4::DiscoverInlining(&controlsToInline, &refMap, &typeMap, evaluator),
-        new P4::InlineDriver(&controlsToInline, new SimpleControlsInliner(&refMap)),
-        new P4::RemoveAllUnusedDeclarations(&refMap),
-        new P4::TypeChecking(&refMap, &typeMap),
-        new P4::DiscoverActionsInlining(&actionsToInline, &refMap, &typeMap),
-        new P4::InlineActionsDriver(&actionsToInline, new SimpleActionsInliner(&refMap)),
-        new P4::RemoveAllUnusedDeclarations(&refMap),
-    });
-}
-#endif
-
+/**
+This class implements a policy suitable for the ConvertEnums pass.
+The policy is: convert all enums that are not part of the v1model.
+Use 32-bit values for all enums.
+*/
 class EnumOn32Bits : public P4::ChooseEnumRepresentation {
     bool convert(const IR::Type_Enum* type) const override {
         if (type->srcInfo.isValid()) {
@@ -91,7 +78,15 @@ class EnumOn32Bits : public P4::ChooseEnumRepresentation {
     { return 32; }
 };
 
+/**
+This class implements a policy suitable for the SynthesizeActions pass.
+The policy is: do not synthesize actions for the controls whose names
+are in the specified set.
+For example, we expect that the code in the deparser will not use any
+tables or actions.
+*/
 class SkipControls : public P4::ActionSynthesisPolicy {
+    // set of controls where actions are not synthesized
     const std::set<cstring> *skip;
 
  public:
@@ -109,7 +104,7 @@ MidEnd::MidEnd(CompilerOptions& options) {
     refMap.setIsV1(isv1);  // must be done BEFORE creating passes
     auto evaluator = new P4::EvaluatorPass(&refMap, &typeMap);
     auto convertEnums = new P4::ConvertEnums(&refMap, &typeMap, new EnumOn32Bits());
-    auto v1controls = new std::set<cstring>();
+    auto skipv1controls = new std::set<cstring>();  // in these controls we don't synthesize actions
 
     addPasses({
         convertEnums,
@@ -129,7 +124,7 @@ MidEnd::MidEnd(CompilerOptions& options) {
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::RemoveActionParameters(&refMap, &typeMap),
         new P4::SimplifyKey(&refMap, &typeMap,
-                            new P4::NonLeftValue(&refMap, &typeMap)),
+                            new P4::NonMaskLeftValue(&refMap, &typeMap)),
         new P4::ConstantFolding(&refMap, &typeMap),
         new P4::StrengthReduction(),
         new P4::SimplifySelectCases(&refMap, &typeMap, true),  // require constant keysets
@@ -140,6 +135,7 @@ MidEnd::MidEnd(CompilerOptions& options) {
         new P4::CopyStructures(&refMap, &typeMap),
         new P4::NestedStructs(&refMap, &typeMap),
         new P4::SimplifySelectList(&refMap, &typeMap),
+        new P4::RemoveSelectBooleans(&refMap, &typeMap),
         new P4::Predication(&refMap),
         new P4::ConstantFolding(&refMap, &typeMap),
         new P4::LocalCopyPropagation(&refMap, &typeMap),
@@ -150,22 +146,24 @@ MidEnd::MidEnd(CompilerOptions& options) {
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::CompileTimeOperations(),
         new P4::TableHit(&refMap, &typeMap),
-        new P4::SynthesizeActions(&refMap, &typeMap, new SkipControls(v1controls)),
+        new P4::SynthesizeActions(&refMap, &typeMap, new SkipControls(skipv1controls)),
         new P4::MoveActionsToTables(&refMap, &typeMap),
         // Proper back-end
         new P4::TypeChecking(&refMap, &typeMap),
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::RemoveLeftSlices(&refMap, &typeMap),
         new P4::TypeChecking(&refMap, &typeMap),
-        new LowerExpressions(&refMap, &typeMap),
+        new LowerExpressions(&typeMap),
         new P4::ConstantFolding(&refMap, &typeMap, false),
         new P4::TypeChecking(&refMap, &typeMap),
+
         new RemoveExpressionsFromSelects(&refMap, &typeMap),
 //        new FixupChecksum(&updateControlBlockName),
         new P4::SimplifyControlFlow(&refMap, &typeMap),
         new P4::RemoveAllUnusedDeclarations(&refMap),
         evaluator,
-        new VisitFunctor([this, evaluator]() { toplevel = evaluator->getToplevelBlock(); })
+        new VisitFunctor([this, evaluator]() { toplevel = evaluator->getToplevelBlock(); }),
+        new P4::MidEndLast()
     });
 }
 

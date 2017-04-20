@@ -1,5 +1,5 @@
 /*
-Copyright 2016 VMware, Inc.
+Copyright 2017 VMware, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,9 +13,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-// This test is disabled, since it produces
-// different outputs depending on the preprocessor used
+extern C { bool get(); }
 
-#include "no-such-file.p4"
+control X(out bool b) {
+    C c;
+    apply { b = c.get(); }
+}
 
-control c() { apply {} }
+control Z(out bool a);
+package top(Z z);
+
+top(X()) main;

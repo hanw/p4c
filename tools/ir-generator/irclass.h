@@ -185,6 +185,20 @@ class EmitBlock : public IrElement {
     void generate_impl(std::ostream &out) const override;
 };
 
+class CommentBlock : public IrElement {
+    cstring body;
+ public:
+    CommentBlock(Util::SourceInfo si, cstring body) : IrElement(si), body(body) {}
+    cstring toString() const override {
+        // print only Doxygen comments
+        if (body.startsWith("/**") || body.startsWith("///"))
+            return body;
+        return "";
+    }
+    void generate_hdr(std::ostream &out) const override { out << toString() << std::endl; };
+    void generate_impl(std::ostream &out) const override { out << toString() << std::endl; };
+};
+
 // Represents a C++ class for an IR node.
 class IrClass : public IrElement {
     std::vector<const IrClass *> parentClasses;
@@ -204,6 +218,7 @@ class IrClass : public IrElement {
             return IrClass::nodeClass;
         return concreteParent; }
 
+    std::vector<const CommentBlock *> comments;
     std::vector<IrElement *> elements;
     IrNamespace *containedIn, local;
     const NodeKind kind;

@@ -22,6 +22,7 @@ limitations under the License.
 #include <boost/optional.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 #include <boost/variant.hpp>
+#include <google/protobuf/text_format.h>
 #include <google/protobuf/util/json_util.h>
 #include <iostream>
 #include <typeinfo>
@@ -41,6 +42,12 @@ limitations under the License.
 #include "p4RuntimeSerializer.h"
 
 namespace P4 {
+
+/** \defgroup control_plane Control Plane API Generation */
+/** \addtogroup control_plane
+ *  @{
+ */
+/// XXX(seth) High level goals of the generator go here!!
 namespace ControlPlaneAPI {
 
 // XXX(seth): Here are the known issues:
@@ -62,6 +69,31 @@ static bool isMetadataType(const IR::Type* type) {
     auto annotations = type->to<IR::IAnnotated>()->getAnnotations();
     auto metadataAnnotation = annotations->getSingle("metadata");
     return metadataAnnotation != nullptr;
+}
+
+/// @return true if @node has an @hidden annotation.
+static bool isHidden(const IR::Node* node) {
+    if (!node->is<IR::IAnnotated>()) return false;
+    auto annotations = node->to<IR::IAnnotated>()->getAnnotations();
+    auto hiddenAnnotation = annotations->getSingle("hidden");
+    return hiddenAnnotation != nullptr;
+}
+
+/// @return a version of @name which has been sanitized for exposure to the
+/// control plane.
+static cstring controlPlaneName(const cstring& name) {
+    // A leading '.' in a symbol name indicates that the name is absolute -
+    // in other words, that it's a top-level name. That information isn't
+    // relevant to the control plane, which only cares about the final name,
+    // so we strip the dot off here.
+    return name.startsWith(".") ? name.substr(1) : name;
+}
+
+/// @return a version of @node's external name which has been sanitized for
+/// exposure to the control plane.
+template <typename Node>
+static cstring controlPlaneName(const Node* node) {
+    return controlPlaneName(node->externalName());
 }
 
 /**
@@ -86,14 +118,14 @@ struct HeaderFieldPath {
      *         invalid or too complex.
      */
     static HeaderFieldPath* from(const IR::Expression* expression,
-                                 const ReferenceMap* refMap, 
+                                 const ReferenceMap* refMap,
                                  const TypeMap* typeMap) {
         auto type = typeMap->getType(expression->getNode(), true);
         if (expression->is<IR::PathExpression>()) {
             // Unlike other top-level structs, top-level metadata structs are
             // fully exposed to P4Runtime and show up in P4Runtime field names.
             if (isMetadataType(type) && type->is<IR::Type_Declaration>()) {
-                auto name = type->to<IR::Type_Declaration>()->externalName();
+                auto name = controlPlaneName(type->to<IR::Type_Declaration>());
                 return HeaderFieldPath::root(name, type);
             }
 
@@ -106,7 +138,7 @@ struct HeaderFieldPath {
             // This is a top-level header or a non-structlike value.
             auto declaration =
                 refMap->getDeclaration(expression->to<IR::PathExpression>()->path);
-            return HeaderFieldPath::root(declaration->externalName(), type);
+            return HeaderFieldPath::root(controlPlaneName(declaration), type);
         } else if (expression->is<IR::Member>()) {
             auto memberExpression = expression->to<IR::Member>();
             auto parent = memberExpression->expr;
@@ -122,7 +154,7 @@ struct HeaderFieldPath {
             boost::optional<cstring> name;
             for (auto field : *parentType->to<IR::Type_StructLike>()->fields) {
                 if (field->name == memberExpression->member) {
-                    name = field->externalName();
+                    name = controlPlaneName(field);
                     break;
                 }
             }
@@ -228,7 +260,7 @@ static int64_t getTableSize(const IR::P4Table* table) {
 
     auto sizeProperty = table->properties->getProperty("size");
     if (sizeProperty == nullptr) {
-        return defaultTableSize;  
+        return defaultTableSize;
     }
 
     if (!sizeProperty->value->is<IR::ExpressionValue>()) {
@@ -287,7 +319,7 @@ struct Counterlike {
     /// The name of the instance.
     const cstring name;
     /// If non-null, the instance's annotations.
-    const IR::IAnnotated* annotations;  
+    const IR::IAnnotated* annotations;
     /// The units parameter to the instance; valid values vary depending on @Kind.
     const cstring unit;
     /// The size parameter to the instance.
@@ -319,7 +351,7 @@ struct Counterlike {
             return boost::none;
         }
 
-        return Counterlike<Kind>{declaration->externalName(),
+        return Counterlike<Kind>{controlPlaneName(declaration),
                                  declaration->to<IR::IAnnotated>(),
                                  unit->to<IR::Declaration_ID>()->name,
                                  size->to<IR::Constant>()->value.get_si(),
@@ -356,7 +388,7 @@ struct Counterlike {
         auto unit = unitArgument->to<IR::Member>()->member.name;
         return Counterlike<Kind>{*instance.name, instance.annotations,
                                  unit, getTableSize(table),
-                                 table->externalName()};
+                                 controlPlaneName(table)};
     }
 };
 
@@ -503,7 +535,7 @@ private:
         // How many suffixes pass through this node? This includes suffixes that
         // terminate at this node.
         unsigned instances = 0;
-        
+
         // Outgoing edges from this node. The SuffixNode should never be null.
         std::map<cstring, SuffixNode*> edges;
     };
@@ -550,7 +582,7 @@ public:
     /// Add a @type symbol, extracting the name and id from @declaration.
     void add(P4RuntimeSymbolType type, const IR::IDeclaration* declaration) {
         CHECK_NULL(declaration);
-        add(type, declaration->externalName(), externalId(declaration));
+        add(type, controlPlaneName(declaration), externalId(declaration));
     }
 
     /// Add a @type symbol with @name and possibly an explicit P4 '@id'.
@@ -568,7 +600,7 @@ public:
     /// @return the P4Runtime id for the symbol of @type corresponding to @declaration.
     pi_p4_id_t getId(P4RuntimeSymbolType type, const IR::IDeclaration* declaration) const {
         CHECK_NULL(declaration);
-        return getId(type, declaration->externalName());
+        return getId(type, controlPlaneName(declaration));
     }
 
     /// @return the P4Runtime id for the symbol of @type with name @name.
@@ -748,14 +780,11 @@ class P4RuntimeSerializer {
 
 public:
     P4RuntimeSerializer(const P4RuntimeSymbolTable& symbols,
-                        ReferenceMap* refMap,
                         TypeMap* typeMap)
         : p4Info(new P4Info)
         , symbols(symbols)
-        , refMap(refMap)
         , typeMap(typeMap)
     {
-        CHECK_NULL(refMap);
         CHECK_NULL(typeMap);
     }
 
@@ -789,6 +818,29 @@ public:
         *destination << output;
         if (!destination->good()) {
             ::error("Failed to write the P4Runtime JSON to the output");
+            return;
+        }
+
+        destination->flush();
+    }
+
+    /// Serialize the control plane API to @destination as a message in the text
+    /// protocol buffers format. This is intended for debugging and testing.
+    void writeTextTo(std::ostream* destination) {
+        CHECK_NULL(destination);
+
+        // According to the protobuf documentation, it would be better to use
+        // Print with a FileOutputStream object for performance reasons. However
+        // all we have here is a std::ostream and performance is not a concern.
+        std::string output;
+        if (!google::protobuf::TextFormat::PrintToString(*p4Info, &output)) {
+            ::error("Failed to serialize the P4Runtime API to text");
+            return;
+        }
+
+        *destination << output;
+        if (!destination->good()) {
+            ::error("Failed to write the P4Runtime text to the output");
             return;
         }
 
@@ -847,7 +899,9 @@ public:
     }
 
     void addAction(const IR::P4Action* actionDeclaration) {
-        auto name = actionDeclaration->externalName();
+        if (isHidden(actionDeclaration)) return;
+
+        auto name = controlPlaneName(actionDeclaration);
         auto id = symbols.getId(P4RuntimeSymbolType::ACTION, name);
         auto annotations = actionDeclaration->to<IR::IAnnotated>();
 
@@ -878,10 +932,10 @@ public:
         // the BMV2 JSON converter does; it strips out parameters which aren't used.
         // Unless there's a good reason to do otherwise, we should probably either
         // retain the parameters or strip them out a separate compiler pass.
-        size_t index = 0;
+        size_t index = 1;
         for (auto actionParam : *actionDeclaration->parameters->getEnumerator()) {
             auto param = action->add_params();
-            auto paramName = actionParam->externalName();
+            auto paramName = controlPlaneName(actionParam);
             param->set_id(index++);
             param->set_name(paramName);
 
@@ -910,7 +964,9 @@ public:
                   const std::vector<cstring>& actions,
                   const std::vector<MatchField>& matchFields,
                   bool supportsTimeout) {
-        auto name = tableDeclaration->externalName();
+        if (isHidden(tableDeclaration)) return;
+
+        auto name = controlPlaneName(tableDeclaration);
         auto annotations = tableDeclaration->to<IR::IAnnotated>();
 
         auto table = p4Info->add_tables();
@@ -955,7 +1011,7 @@ public:
             table->add_action_ids(id);
         }
 
-        size_t index = 0;
+        size_t index = 1;
         for (const auto& field : matchFields) {
             auto match_field = table->add_match_fields();
             match_field->set_id(index++);
@@ -1019,7 +1075,6 @@ private:
     P4Info* p4Info;  // P4Runtime's representation of a program's control plane API.
     const P4RuntimeSymbolTable& symbols;  // The symbols used in the API and their ids.
     std::set<pi_p4_id_t> serializedActions;  // The actions we've serialized so far.
-    ReferenceMap* refMap;
     TypeMap* typeMap;
 };
 
@@ -1038,7 +1093,6 @@ static void forAllMatching(const IR::Node* root, Func&& function) {
 
 static void collectControlSymbols(P4RuntimeSymbolTable& symbols,
                                   const IR::ControlBlock* controlBlock,
-                                  ReferenceMap* refMap,
                                   TypeMap* typeMap) {
     CHECK_NULL(controlBlock);
 
@@ -1107,16 +1161,16 @@ getExternInstanceFromProperty(const IR::P4Table* table,
     if (property == nullptr) return boost::none;
     if (!property->value->is<IR::ExpressionValue>()) {
         ::error("Expected %1% property value for table %2% to be an expression: %3%",
-                propertyName, table->externalName(), property);
+                propertyName, controlPlaneName(table), property);
         return boost::none;
     }
 
     auto expr = property->value->to<IR::ExpressionValue>()->expression;
-    auto name = property->externalName();
+    auto name = controlPlaneName(property);
     auto externInstance = ExternInstance::resolve(expr, refMap, typeMap, name);
     if (!externInstance) {
         ::error("Expected %1% property value for table %2% to resolve to an "
-                "extern instance: %3%", propertyName, table->externalName(),
+                "extern instance: %3%", propertyName, controlPlaneName(table),
                 property);
         return boost::none;
     }
@@ -1152,7 +1206,7 @@ static void collectTableSymbols(P4RuntimeSymbolTable& symbols,
                                                 .tableAttributes
                                                 .tableImplementation.name);
     if (impl) {
-        symbols.add(P4RuntimeSymbolType::ACTION_PROFILE, impl->externalName());
+        symbols.add(P4RuntimeSymbolType::ACTION_PROFILE, controlPlaneName(impl));
     }
 
     auto directCounter = getDirectCounterlike<IR::Counter>(table, refMap, typeMap);
@@ -1243,18 +1297,18 @@ getMatchFields(const IR::P4Table* table, ReferenceMap* refMap, TypeMap* typeMap)
                                                         .tableImplementation.name);
             BUG_CHECK(impl != nullptr, "Table '%1%' has match type 'selector' "
                                        "but no implementation property",
-                      table->externalName());
+                      controlPlaneName(table));
             continue;
         } else {
             ::error("Table '%1%': cannot represent match type '%2%' in P4Runtime",
-                    table->externalName(), matchTypeName);
+                    controlPlaneName(table), matchTypeName);
             break;
         }
 
         HeaderFieldPath* path = HeaderFieldPath::from(expr, refMap, typeMap);
         if (!path) {
             ::error("Table '%1%': Match field '%2%' is too complicated "
-                    "to represent in P4Runtime", table->externalName(), expr);
+                    "to represent in P4Runtime", controlPlaneName(table), expr);
             break;
         }
 
@@ -1272,7 +1326,7 @@ getMatchFields(const IR::P4Table* table, ReferenceMap* refMap, TypeMap* typeMap)
         // to decide how it makes sense to present something like that in P4Runtime.
         if (!path->parent) {
             ::error("Table '%1%': Match field '%2%' references a local",
-                    table->externalName(), expr);
+                    controlPlaneName(table), expr);
             break;
         }
 
@@ -1300,15 +1354,15 @@ getDefaultAction(const IR::P4Table* table, ReferenceMap* refMap, TypeMap* typeMa
     if (expr->is<IR::PathExpression>()) {
         auto decl = refMap->getDeclaration(expr->to<IR::PathExpression>()->path, true);
         BUG_CHECK(decl->is<IR::P4Action>(), "Expected an action: %1%", expr);
-        actionName = decl->to<IR::P4Action>()->externalName();
+        actionName = controlPlaneName(decl->to<IR::P4Action>());
     } else if (expr->is<IR::MethodCallExpression>()) {
         auto callExpr = expr->to<IR::MethodCallExpression>();
         auto instance = P4::MethodInstance::resolve(callExpr, refMap, typeMap);
         BUG_CHECK(instance->is<P4::ActionCall>(), "Expected an action: %1%", expr);
-        actionName = instance->to<P4::ActionCall>()->action->externalName();
+        actionName = controlPlaneName(instance->to<P4::ActionCall>()->action);
     } else {
         ::error("Unexpected expression in default action for table %1%: %2%",
-                table->externalName(), expr);
+                controlPlaneName(table), expr);
         return boost::none;
     }
 
@@ -1353,14 +1407,14 @@ static void serializeTable(P4RuntimeSerializer& serializer,
     for (auto action : *table->getActionList()->actionList) {
         auto decl = refMap->getDeclaration(action->getPath(), true);
         BUG_CHECK(decl->is<IR::P4Action>(), "Not an action: '%1%'", decl);
-        actions.push_back(decl->to<IR::P4Action>()->externalName());
+        actions.push_back(controlPlaneName(decl->to<IR::P4Action>()));
     }
 
     auto impl = table->properties->getProperty(P4V1::V1Model::instance
                                                 .tableAttributes
                                                 .tableImplementation.name);
     boost::optional<cstring> implementation;
-    if (impl) implementation = impl->externalName();
+    if (impl) implementation = controlPlaneName(impl);
 
     auto directCounter = getDirectCounterlike<IR::Counter>(table, refMap, typeMap);
     auto directMeter = getDirectCounterlike<IR::Meter>(table, refMap, typeMap);
@@ -1418,7 +1472,7 @@ getActionProfile(const IR::P4Table* table, ReferenceMap* refMap, TypeMap* typeMa
         sizeExpression = instance->arguments->at(0);
     } else {
         ::error("Table '%1%' has an implementation which doesn't resolve to an "
-                "action profile: %2%", table->externalName(), instance->expression);
+                "action profile: %2%", controlPlaneName(table), instance->expression);
         return boost::none;
     }
 
@@ -1445,7 +1499,7 @@ static void serializeActionProfiles(P4RuntimeSerializer& serializer,
         auto table = block->to<IR::TableBlock>()->container;
         auto actionProfile = getActionProfile(table, refMap, typeMap);
         if (actionProfile) {
-          actionProfiles[*actionProfile].insert(table->externalName());
+          actionProfiles[*actionProfile].insert(controlPlaneName(table));
         }
     });
 
@@ -1471,7 +1525,7 @@ void serializeP4Runtime(std::ostream* destination,
     auto symbols = P4RuntimeSymbolTable::create([=](P4RuntimeSymbolTable& symbols) {
         forAllEvaluatedBlocks(evaluatedProgram, [&](const IR::Block* block) {
             if (block->is<IR::ControlBlock>()) {
-                collectControlSymbols(symbols, block->to<IR::ControlBlock>(), refMap, typeMap);
+                collectControlSymbols(symbols, block->to<IR::ControlBlock>(), typeMap);
             } else if (block->is<IR::ExternBlock>()) {
                 collectExternSymbols(symbols, block->to<IR::ExternBlock>());
             } else if (block->is<IR::TableBlock>()) {
@@ -1481,7 +1535,7 @@ void serializeP4Runtime(std::ostream* destination,
     });
 
     // Construct and serialize a P4Runtime control plane API from the program.
-    P4RuntimeSerializer serializer(symbols, refMap, typeMap);
+    P4RuntimeSerializer serializer(symbols, typeMap);
     forAllEvaluatedBlocks(evaluatedProgram, [&](const IR::Block* block) {
         if (block->is<IR::ControlBlock>()) {
             serializeControl(serializer, block->to<IR::ControlBlock>(), refMap, typeMap);
@@ -1497,7 +1551,9 @@ void serializeP4Runtime(std::ostream* destination,
     switch (format) {
         case P4RuntimeFormat::BINARY: serializer.writeTo(destination); break;
         case P4RuntimeFormat::JSON: serializer.writeJsonTo(destination); break;
+        case P4RuntimeFormat::TEXT: serializer.writeTextTo(destination); break;
     }
 }
 
+/** @} *//* end group control_plane */
 }  // namespace P4

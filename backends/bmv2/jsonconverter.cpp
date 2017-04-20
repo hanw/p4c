@@ -160,7 +160,6 @@ class SharedActionSelectorCheck : public Inspector {
             ::error("%1%: expected a reference to an instance", pathe);
             return false;
         }
-        const auto &apname = decl->externalName();
         auto dcltype = typeMap->getType(pathe, true);
         if (!dcltype->is<IR::Type_Extern>()) {
             ::error("%1%: unexpected type for implementation", dcltype);
@@ -319,45 +318,6 @@ class ExpressionConverter : public Inspector {
         }
         BUG("%1%: unhandled case", expression);
     }
-
-//<<<<<<< HEAD
-//    void postorder(const IR::Shr* expression) override {
-//        // special handling for shift of a lookahead -> current
-//        auto l = get(expression->left);
-//        if (l->is<Util::JsonObject>()) {
-//            auto jo = l->to<Util::JsonObject>();
-//            auto type = jo->get("type");
-//            if (type != nullptr && type->is<Util::JsonValue>()) {
-//                auto val = type->to<Util::JsonValue>();
-//                if (val->isString() && val->getString() == "lookahead") {
-//                    auto r = jo->get("value");
-//                    CHECK_NULL(r);
-//                    auto arr = r->to<Util::JsonArray>();
-//                    CHECK_NULL(arr);
-//                    auto second = arr->at(1);
-//                    BUG_CHECK(second->is<Util::JsonValue>(),
-//                              "%1%: expected a value", second);
-//                    auto max = second->to<Util::JsonValue>()->getInt();
-//
-//                    BUG_CHECK(expression->right->is<IR::Constant>(),
-//                                     "Not implemented: %1%", expression);
-//                    auto amount = expression->right->to<IR::Constant>()->asInt();
-//
-//                    auto j = new Util::JsonObject();
-//                    j->emplace("type", "lookahead");
-//                    auto v = mkArrayField(j, "value");
-//                    v->append(amount);
-//                    v->append(max - amount);
-//                    map.emplace(expression, j);
-//                    return;
-//                }
-//            }
-//        }
-//        binary(expression);
-//    }
-//
-//=======
-//>>>>>>> fc65efe282f4fdb73f86157ace8eb4c2e3145004
     void postorder(const IR::Cast* expression) override {
         // nothing to do for casts - the ArithmeticFixup pass
         // should have handled them already
@@ -365,33 +325,6 @@ class ExpressionConverter : public Inspector {
         map.emplace(expression, j);
     }
 
-//<<<<<<< HEAD
-//    void postorder(const IR::Slice* expression) override {
-//        // Special case for parser select: look for
-//        // packet.lookahead<T>()[h:l]. Convert to current(l, h - l).
-//        // Only correct within a select() expression, but we cannot check that
-//        // since the caller invokes the converter directly with the select argument.
-//        auto m = get(expression->e0);
-//        if (m->is<Util::JsonObject>()) {
-//            auto val = m->to<Util::JsonObject>()->get("type");
-//            if (val != nullptr && val->is<Util::JsonValue>() &&
-//                *val->to<Util::JsonValue>() == "lookahead") {
-//                int h = expression->getH();
-//                int l = expression->getL();
-//                auto j = new Util::JsonObject();
-//                j->emplace("type", "lookahead");
-//                auto bounds = mkArrayField(j, "value");
-//                bounds->append(l);
-//                bounds->append(h + 1);
-//                map.emplace(expression, j);
-//                return;
-//            }
-//        }
-//        BUG("%1%: unhandled case", expression);
-//    }
-//
-//=======
-//>>>>>>> fc65efe282f4fdb73f86157ace8eb4c2e3145004
     void postorder(const IR::Constant* expression) override {
         auto result = new Util::JsonObject();
         result->emplace("type", "hexstr");
@@ -468,7 +401,7 @@ class ExpressionConverter : public Inspector {
             auto field = st->getField(expression->member);
             if (field != nullptr)
                 // field could be a method call, i.e., isValid.
-                fieldName = field->externalName();
+                fieldName = extVisibleName(field);
         }
 
         // handle the 'error' type
@@ -1029,6 +962,12 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                         ::error("%1%: emit only supports header and stack "
                                 "arguments, not %2%", arg, type);
                     }
+                } else if (em->originalExternType->name == v1model.directCounter.name) {
+                    if (em->method->name == v1model.directCounter.count.name) {
+                        BUG_CHECK(mc->arguments->size() == 0, "Expected 0 argument for %1%", mc);
+                        // Do not generate any code for this operation
+                        continue;
+                    }
                 }
 
                 auto prim = mkPrimitive(ss.str().c_str(), result);
@@ -1055,6 +994,7 @@ JsonConverter::convertActionBody(const IR::Vector<IR::StatOrDecl>* body,
                 continue;
             } else if (mi->is<P4::ExternFunction>()) {
                 auto ef = mi->to<P4::ExternFunction>();
+
                 auto prim = mkPrimitive(ef->method->name.toString(), result);
                 auto params = mkParameters(prim);
                 for (auto a : *mc->arguments) {
@@ -1081,7 +1021,7 @@ void JsonConverter::addToFieldList(const IR::Expression* expr, Util::JsonArray* 
         // recursively add all fields
         auto st = type->to<IR::Type_StructLike>();
         for (auto f : *st->fields) {
-            auto member = new IR::Member(Util::SourceInfo(), expr, f->name);
+            auto member = new IR::Member(expr, f->name);
             typeMap->setType(member, typeMap->getType(f, true));
             addToFieldList(member, fl);
         }
@@ -1159,6 +1099,135 @@ Util::IJson* JsonConverter::convertIf(const CFG::IfNode* node, cstring) {
         result->emplace(label, dest);
     }
     return result;
+}
+
+/**
+    Converts a list of P4 defined table entries to JSON.
+
+    Assumes that all the checking on the entries being valid has been
+    done in the validateParsedProgram pass, so this is simply the serialization.
+
+    This function still checks and reports errors in key entry expressions.
+    The JSON generated after a reported error will not be accepted in BMv2.
+
+    @param table A P4 table IR node
+    @param jsonTable the JSON table object to add predefined entries
+
+*/
+void JsonConverter::convertTableEntries(const IR::P4Table *table,
+                                        Util::JsonObject *jsonTable) {
+    auto entriesList = table->getEntries();
+    if (entriesList == nullptr) return;
+
+    auto entries = mkArrayField(jsonTable, "entries");
+    int entryPriority = 1;  // default priority is defined by index position
+    for (auto e : *entriesList->entries) {
+        auto entry = new Util::JsonObject();
+
+        auto keyset = e->getKeys();
+        auto matchKeys = mkArrayField(entry, "match_key");
+        int keyIndex = 0;
+        for (auto k : *keyset->components) {
+            auto key = new Util::JsonObject();
+            auto tableKey = table->getKey()->keyElements->at(keyIndex);
+            auto keyWidth = tableKey->expression->type->width_bits();
+            auto k8 = ROUNDUP(keyWidth, 8);
+            auto matchType = getKeyMatchType(tableKey);
+            key->emplace("match_type", matchType);
+            if (matchType == "valid") {
+                if (k->is<IR::BoolLiteral>())
+                    key->emplace("key", k->to<IR::BoolLiteral>()->toString());
+                else
+                    ::error("%1% invalid 'valid' key expression", k);
+            } else if (matchType == corelib.exactMatch.name) {
+                if (k->is<IR::Constant>())
+                    key->emplace("key", stringRepr(k->to<IR::Constant>()->value, k8));
+                else
+                    ::error("%1% invalid exact key expression", k);
+            } else if (matchType == corelib.ternaryMatch.name) {
+                if (k->is<IR::Mask>()) {
+                    auto km = k->to<IR::Mask>();
+                    key->emplace("key", stringRepr(km->left->to<IR::Constant>()->value, k8));
+                    key->emplace("mask", stringRepr(km->right->to<IR::Constant>()->value, k8));
+                } else if (k->is<IR::Constant>()) {
+                    key->emplace("key", stringRepr(k->to<IR::Constant>()->value, k8));
+                    key->emplace("mask", stringRepr(Util::mask(keyWidth), k8));
+                } else if (k->is<IR::DefaultExpression>()) {
+                    key->emplace("key", stringRepr(0, k8));
+                    key->emplace("mask", stringRepr(0, k8));
+                } else {
+                    ::error("%1% invalid ternary key expression", k);
+                }
+            } else if (matchType == corelib.lpmMatch.name) {
+                if (k->is<IR::Mask>()) {
+                    auto km = k->to<IR::Mask>();
+                    key->emplace("key", stringRepr(km->left->to<IR::Constant>()->value, k8));
+                    auto trailing_zeros = [](unsigned long n) { return n ? __builtin_ctzl(n) : 0; };
+                    auto count_ones = [](unsigned long n) { return n ? __builtin_popcountl(n) : 0;};
+                    unsigned long mask = km->right->to<IR::Constant>()->value.get_ui();
+                    auto len = trailing_zeros(mask);
+                    if (len + count_ones(mask) != keyWidth)  // any remaining 0s in the prefix?
+                        ::error("%1% invalid mask for LPM key", k);
+                    else
+                        key->emplace("prefix_length", keyWidth - len);
+                } else if (k->is<IR::Constant>()) {
+                    key->emplace("key", stringRepr(k->to<IR::Constant>()->value, k8));
+                    key->emplace("prefix_length", keyWidth);
+                } else if (k->is<IR::DefaultExpression>()) {
+                    key->emplace("key", stringRepr(0, k8));
+                    key->emplace("prefix_length", 0);
+                } else {
+                    ::error("%1% invalid LPM key expression", k);
+                }
+            } else if (matchType == "range") {
+                if (k->is<IR::Range>()) {
+                    auto kr = k->to<IR::Range>();
+                    key->emplace("start", stringRepr(kr->left->to<IR::Constant>()->value, k8));
+                    key->emplace("end", stringRepr(kr->right->to<IR::Constant>()->value, k8));
+                } else if (k->is<IR::DefaultExpression>()) {
+                    key->emplace("start", stringRepr(0, k8));
+                    key->emplace("end", stringRepr((1 << keyWidth)-1, k8));  // 2^N -1
+                } else {
+                    ::error("%1% invalid range key expression", k);
+                }
+            } else {
+                ::error("unkown key type %1% for key %2%", matchType, k);
+            }
+            matchKeys->append(key);
+            keyIndex++;
+        }
+
+        auto action = new Util::JsonObject();
+        auto actionRef = e->getAction();
+        if (!actionRef->is<IR::MethodCallExpression>())
+            ::error("%1%: invalid action in entries list", actionRef);
+        auto actionCall = actionRef->to<IR::MethodCallExpression>();
+        auto method = actionCall->method->to<IR::PathExpression>()->path;
+        auto decl = refMap->getDeclaration(method, true);
+        auto actionDecl = decl->to<IR::P4Action>();
+        unsigned id = get(structure.ids, actionDecl);
+        action->emplace("action_id", id);
+        auto actionData = mkArrayField(action, "action_data");
+        for (auto arg : *actionCall->arguments) {
+            actionData->append(stringRepr(arg->to<IR::Constant>()->value, 0));
+        }
+        entry->emplace("action_entry", action);
+
+        auto priorityAnnotation = e->getAnnotations()->getSingle("priority");
+        if (priorityAnnotation != nullptr) {
+            if (priorityAnnotation->expr.size() > 1)
+                ::error("invalid priority value %1%", priorityAnnotation->expr);
+            auto priValue = priorityAnnotation->expr.front();
+            if ( !priValue->is<IR::Constant>())
+                ::error("invalid priority value %1%. must be constant", priorityAnnotation->expr);
+            entry->emplace("priority", priValue->to<IR::Constant>()->value);
+        } else {
+            entry->emplace("priority", entryPriority);
+        }
+        entryPriority += 1;
+
+        entries->append(entry);
+    }
 }
 
 bool JsonConverter::handleTableImplementation(const IR::Property* implementation,
@@ -1251,7 +1320,7 @@ bool JsonConverter::handleTableImplementation(const IR::Property* implementation
             ::error("%1%: expected a reference to an instance", pathe);
             return false;
         }
-        apname = decl->externalName();
+        apname = extVisibleName(decl);
         auto dcltype = typeMap->getType(pathe, true);
         if (!dcltype->is<IR::Type_Extern>()) {
             ::error("%1%: unexpected type for implementation", dcltype);
@@ -1280,6 +1349,35 @@ cstring JsonConverter::convertHashAlgorithm(cstring algorithm) const {
     return algorithm;
 }
 
+/**
+ Computes the type of the key based on the declaration in the path.
+
+If the key expression invokes .isValid(), we return "valid".
+@param ke A table match key element
+@return the key type
+*/
+cstring JsonConverter::getKeyMatchType(const IR::KeyElement *ke) {
+    auto mt = refMap->getDeclaration(ke->matchType->path, true)->to<IR::Declaration_ID>();
+    BUG_CHECK(mt != nullptr, "%1%: could not find declaration", ke->matchType);
+    auto expr = ke->expression;
+
+    cstring match_type = mt->name.name;
+    if (mt->name.name == corelib.exactMatch.name || mt->name.name == corelib.ternaryMatch.name) {
+        if (expr->is<IR::MethodCallExpression>()) {
+            auto mi = P4::MethodInstance::resolve(expr->to<IR::MethodCallExpression>(),
+                                                  refMap, typeMap);
+            if (mi->is<P4::BuiltInMethod>())
+                if (mi->to<P4::BuiltInMethod>()->name == IR::Type_Header::isValid)
+                    match_type = "valid";
+        }
+    } else if (mt->name.name != corelib.lpmMatch.name &&
+               mt->name.name != v1model.rangeMatchType.name &&
+               mt->name.name != v1model.selectorMatchType.name) {
+        ::error("%1%: match type not supported on this target", mt);
+    }
+    return match_type;
+}
+
 Util::IJson*
 JsonConverter::convertTable(const CFG::TableNode* node,
                             Util::JsonArray* action_profiles,
@@ -1287,30 +1385,39 @@ JsonConverter::convertTable(const CFG::TableNode* node,
     auto table = node->table;
     LOG3("Processing " << dbp(table));
     auto result = new Util::JsonObject();
-    cstring name = table->externalName();
+    cstring name = extVisibleName(table);
     result->emplace("name", name);
     result->emplace("id", nextId("tables"));
-    cstring table_match_type = "exact";
+    cstring table_match_type = corelib.exactMatch.name;
     auto key = table->getKey();
     auto tkey = mkArrayField(result, "key");
     conv->simpleExpressionsOnly = true;
 
     if (key != nullptr) {
         for (auto ke : *key->keyElements) {
+
             auto decl = refMap->getDeclaration(ke->matchType->path, true);
             auto mt = decl->to<IR::Declaration_ID>();
             BUG_CHECK(mt != nullptr, "%1%: could not find declaration",
                       ke->matchType);
+          
             auto expr = ke->expression;
             mpz_class mask;
-            if (expr->is<IR::Slice>()) {
-                auto slice = expr->to<IR::Slice>();
+            if (auto mexp = expr->to<IR::BAnd>()) {
+                if (mexp->right->is<IR::Constant>()) {
+                    mask = mexp->right->to<IR::Constant>()->value;
+                    expr = mexp->left;
+                } else if (mexp->left->is<IR::Constant>()) {
+                    mask = mexp->left->to<IR::Constant>()->value;
+                    expr = mexp->right;
+                } else {
+                    ::error("%1%: key mask must be a constant", expr); }
+            } else if (auto slice = expr->to<IR::Slice>()) {
                 expr = slice->e0;
                 int h = slice->getH();
                 int l = slice->getL();
                 mask = Util::maskFromSlice(h, l);
             }
-
             cstring match_type = mt->name.name;
             if (mt->name.name == corelib.exactMatch.name) {
                 if (expr->is<IR::MethodCallExpression>()) {
@@ -1356,7 +1463,7 @@ JsonConverter::convertTable(const CFG::TableNode* node,
             auto jk = conv->convert(expr);
             keyelement->emplace("target", jk->to<Util::JsonObject>()->get("value"));
             if (mask != 0)
-                keyelement->emplace("mask", stringRepr(mask));
+                keyelement->emplace("mask", stringRepr(mask, (expr->type->width_bits() + 7) / 8));
             else
                 keyelement->emplace("mask", Util::JsonValue::null);
             tkey->append(keyelement);
@@ -1406,6 +1513,7 @@ JsonConverter::convertTable(const CFG::TableNode* node,
         }
     }
     result->emplace("support_timeout", sup_to);
+
     // no implemented via externs
     result->emplace("direct_meters", Util::JsonValue::null); 
 
@@ -1539,6 +1647,7 @@ JsonConverter::convertTable(const CFG::TableNode* node,
         entry->emplace("action_entry_const", defact->isConstant);
         result->emplace("default_entry", entry);
     }
+    convertTableEntries(table, result);
     return result;
 }
 
@@ -1929,7 +2038,7 @@ void JsonConverter::addMetaInformation() {
   auto meta = new Util::JsonObject();
 
   static constexpr int version_major = 2;
-  static constexpr int version_minor = 6;
+  static constexpr int version_minor = 7;
   auto version = mkArrayField(meta, "version");
   version->append(version_major);
   version->append(version_minor);
@@ -2035,8 +2144,8 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     }
 
     toplevel.emplace("program", options.file);
-    addMetaInformation();
 
+    addMetaInformation();
     headerTypes = mkArrayField(&toplevel, "header_types");
     headerInstances = mkArrayField(&toplevel, "headers");
     headerStacks = mkArrayField(&toplevel, "header_stacks");
@@ -2044,12 +2153,75 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
     (void)nextId("field_lists");    // field list IDs must start at 1; 0 is reserved
     (void)nextId("learn_lists");    // idem
 
+    // populate parser block attributes
+    for (auto p : *package->getConstructorParameters()) {
+        auto pv = package->getParameterValue(p->name);
+        if (pv->is<IR::ParserBlock>()) {
+            auto parserBlock = pv->to<IR::ParserBlock>();
+            auto parser = parserBlock->container;
+            auto parserJson = toJson(parser);
+            parsers->append(parserJson);
+
+            // handle metadata and header
+            auto param_list = parserBlock->container->type->applyParams->to<IR::ParameterList>();
+            if (param_list != NULL) {
+                for (auto param : *param_list) {
+                    dump(param);
+                    auto ptype = typeMap->getType(param->getNode(), true);
+                    LOG1("param " << param << " type " << ptype);
+                    dump(ptype);
+                    auto type = ptype->to<IR::Type_Struct>();
+                    if (type) {
+                        LOG1("find struct");
+                        //headerTypesCreated.clear();
+                        //addTypesAndInstances(ht, false);
+                        //addHeaderStacks(ht);
+                        //CHECK_ERROR();
+                    }
+                }
+            }
+        }
+        LOG1("package constructor param " << p << " name = " << p->name);
+        LOG1("package parameter value " << package->getParameterValue(p->name));
+    }
+
+    // populate control block attributes
+    for (auto p : *package->getConstructorParameters()) {
+        auto pv = package->getParameterValue(p->name);
+        if (pv->is<IR::ControlBlock>()){
+            auto controlBlock = pv->to<IR::ControlBlock>();
+            auto control == controlBlock->container;
+
+            auto atns = control->type->annotations->to<IR::Annotations>();
+            for (auto m : atns->annotations) {
+                auto atn = m->to<IR::Annotation>();
+                if (atn != NULL) {
+                    auto name = atn->name;
+                    if (name == "deparser") {
+                        auto deparserJson = convertDeparser(control);
+                        deparsers->append(deparserJson);
+                    } else if (name == "checksum") {
+                        dump(cb);
+                    } else if (name == "update") {
+                        dump(cb);
+                    } else if (name == "control"){
+                        auto controlJson = convertControl(control, p->name, counters, meters, registers);
+                        pipelines->append(controlJson);
+                    } else {
+                        BUG("Unsupported control block type ", name);
+                    }
+                }
+            }
+        }
+    }
+
+    // populate scalars, what are they?
     scalarsStruct = new Util::JsonObject();
     scalarsName = refMap->newName("scalars");
     scalarsStruct->emplace("name", scalarsName);
     scalarsStruct->emplace("id", nextId("header_types"));
     scalars_width = 0;
-    auto scalarFields = mkArrayField(scalarsStruct, "fields");
+    mkArrayField(scalarsStruct, "fields");
 
     headerTypesCreated.clear();
     headerInstancesCreated.clear();
@@ -2076,6 +2248,7 @@ void JsonConverter::convert(P4::ReferenceMap* refMap, P4::TypeMap* typeMap,
                 ::error("Only method call statements are allowed in "
                         "package apply body: %1%", c);
             }
+
             auto mce = c->to<IR::MethodCallStatement>()->methodCall;
             auto mi = P4::MethodInstance::resolve(mce, refMap, typeMap);
             if (!mi->isApply()) {
@@ -2205,7 +2378,7 @@ Util::IJson* JsonConverter::convertParserStatement(const IR::StatOrDecl* stat) {
         } else if (minst->is<P4::BuiltInMethod>()) {
             auto bi = minst->to<P4::BuiltInMethod>();
             if (bi->name == IR::Type_Header::setValid || bi->name == IR::Type_Header::setInvalid) {
-                auto mem = new IR::Member(Util::SourceInfo(), bi->appliedTo, "$valid$");
+                auto mem = new IR::Member(bi->appliedTo, "$valid$");
                 typeMap->setType(mem, IR::Type_Void::get());
                 auto jexpr = conv->convert(mem, true, false);
                 result->emplace("op", "set");
@@ -2327,7 +2500,7 @@ Util::IJson* JsonConverter::toJson(const IR::ParserState* state) {
     }
 
     auto result = new Util::JsonObject();
-    result->emplace("name", state->externalName());
+    result->emplace("name", extVisibleName(state));
     result->emplace("id", nextId("parse_states"));
     auto operations = mkArrayField(result, "parser_ops");
     for (auto s : *state->components) {
@@ -2384,6 +2557,9 @@ Util::IJson* JsonConverter::toJson(const IR::ParserState* state) {
 }
 
 void JsonConverter::addErrors() {
+    auto program = toplevelBlock->getProgram();
+    ErrorCodesVisitor errorCodesVisitor(this);
+    program->apply(errorCodesVisitor);
     auto errors = mkArrayField(&toplevel, "errors");
     for (const auto &p : errorCodesMap) {
         auto name = p.first->getName().name.c_str();

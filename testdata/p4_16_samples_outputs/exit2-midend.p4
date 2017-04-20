@@ -1,38 +1,37 @@
 control ctrl(out bit<32> c) {
     bool hasExited;
-    bit<32> a;
     @name("e") action e_0() {
         hasExited = true;
     }
     @name("e") action e_2() {
         hasExited = true;
     }
-    action act() {
+    @hidden action act() {
         hasExited = false;
         c = 32w2;
     }
-    action act_0() {
+    @hidden action act_0() {
         c = 32w5;
     }
-    table tbl_act {
+    @hidden table tbl_act {
         actions = {
             act();
         }
         const default_action = act();
     }
-    table tbl_e {
+    @hidden table tbl_e {
         actions = {
             e_0();
         }
         const default_action = e_0();
     }
-    table tbl_e_0 {
+    @hidden table tbl_e_0 {
         actions = {
             e_2();
         }
         const default_action = e_2();
     }
-    table tbl_act_0 {
+    @hidden table tbl_act_0 {
         actions = {
             act_0();
         }
@@ -40,11 +39,11 @@ control ctrl(out bit<32> c) {
     }
     apply {
         tbl_act.apply();
-        if (true)
+        if (true) 
             tbl_e.apply();
-        else
+        else 
             tbl_e_0.apply();
-        if (!hasExited)
+        if (!hasExited) 
             tbl_act_0.apply();
     }
 }

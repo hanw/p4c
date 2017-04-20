@@ -28,9 +28,9 @@ parser p1(packet_in p, out Header h) {
         g(tmp_4, tmp_8);
         h.data2 = h.data3 + 32w1;
         stack[1].isValid();
-        transition select(h.isValid()) {
-            true: next1;
-            false: next2;
+        transition select((bit<1>)h.isValid()) {
+            1w1: next1;
+            1w0: next2;
             default: noMatch;
         }
     }
@@ -53,18 +53,12 @@ parser p1(packet_in p, out Header h) {
 }
 
 control c(out bit<32> v) {
-    bit<32> d_2;
-    bit<32> setByAction;
     bit<32> e;
-    bool touched;
     @name("a1") action a1_0() {
-        setByAction = 32w1;
     }
     @name("a1") action a1_2() {
-        setByAction = 32w1;
     }
     @name("a2") action a2_0() {
-        setByAction = 32w1;
     }
     @name("t") table t {
         actions = {
@@ -73,53 +67,34 @@ control c(out bit<32> v) {
         }
         default_action = a1_0();
     }
-    action act() {
+    @hidden action act() {
         e = 32w1;
     }
-    action act_0() {
-        d_2 = 32w1;
-    }
-    action act_1() {
-        touched = true;
-    }
-    action act_2() {
+    @hidden action act_0() {
         e = e + 32w1;
     }
-    table tbl_act {
-        actions = {
-            act_0();
-        }
-        const default_action = act_0();
-    }
-    table tbl_act_0 {
+    @hidden table tbl_act {
         actions = {
             act();
         }
         const default_action = act();
     }
-    table tbl_act_1 {
+    @hidden table tbl_act_0 {
         actions = {
-            act_2();
+            act_0();
         }
-        const default_action = act_2();
+        const default_action = act_0();
     }
-    table tbl_act_2 {
-        actions = {
-            act_1();
-        }
-        const default_action = act_1();
-    }
-    table tbl_a1 {
+    @hidden table tbl_a1 {
         actions = {
             a1_2();
         }
         const default_action = a1_2();
     }
     apply {
-        tbl_act.apply();
-        if (e > 32w0)
-            tbl_act_0.apply();
-        else
+        if (e > 32w0) 
+            tbl_act.apply();
+        else 
             ;
         tbl_act_0.apply();
         switch (t.apply().action_run) {
@@ -127,9 +102,9 @@ control c(out bit<32> v) {
             }
         }
 
-        if (e > 32w0)
+        if (e > 32w0) 
             t.apply();
-        else
+        else 
             tbl_a1.apply();
     }
 }

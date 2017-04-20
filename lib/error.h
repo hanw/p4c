@@ -422,6 +422,12 @@ class ErrorReporter final {
         return warningCount;
     }
 
+    // Resets this ErrorReporter to its initial state.
+    void clear() {
+      errorCount = 0;
+      warningCount = 0;
+    }
+
     // Special error functions to be called from the parser only.
     // In the parser the IR objects don't yet have position information.
     // Use printf-format style arguments.
@@ -468,5 +474,21 @@ template <typename... T>
 inline void warning(const char* format, T... args) {
     ErrorReporter::instance.warning(format, args...);
 }
+
+inline void clearErrorReporter() {
+  ErrorReporter::instance.clear();
+}
+
+#define ERROR_IF_NULL(a, format, ...) do { \
+    if ((a) == nullptr) { \
+        ::error(format, ##__VA_ARGS__); \
+        return; \
+    } \
+} while (0)
+
+#define CHECK_ERROR() do { \
+    if (::errorCount() > 0) \
+        return; \
+} while (0)
 
 #endif /* P4C_LIB_ERROR_H_ */

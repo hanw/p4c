@@ -16,6 +16,7 @@ static cstring lineDirectiveFile;
 void parseLineNumber(const char* text)
 {
     char* last;
+    errno = 0;
     ::lineDirectiveLine = strtol(text, &last, 10);
     if (errno != 0 ||
         // we have not parsed the complete string
@@ -78,6 +79,7 @@ std::string stringLiteral;
 "control"       { BEGIN(NORMAL); return CONTROL; }
 "default"       { BEGIN(NORMAL); return DEFAULT; }
 "else"          { BEGIN(NORMAL); return ELSE; }
+"entries"       { BEGIN(NORMAL); return ENTRIES; }
 "enum"          { BEGIN(NORMAL); return ENUM; }
 "error"         { BEGIN(NORMAL); return T_ERROR; }
 "exit"          { BEGIN(NORMAL); return EXIT; }

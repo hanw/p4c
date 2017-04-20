@@ -46,12 +46,18 @@ limitations under the License.
 #include "inferArchitecture.h"
 #include "tableKeyNames.h"
 #include "parserControlFlow.h"
+#include "uselessCasts.h"
 
 namespace P4 {
 
 namespace {
+/**
+This pass outputs the program as a P4 source file.
+*/
 class PrettyPrint : public Inspector {
+    /// output file
     cstring ppfile;
+    /// The file that is being compiled.  This used
     cstring inputfile;
  public:
     explicit PrettyPrint(const CompilerOptions& options) {
@@ -71,7 +77,9 @@ class PrettyPrint : public Inspector {
 };
 }  // namespace
 
-// This pass does nothing, it's just here to mark the end of the front-end
+/**
+This pass does nothing, it's just here to mark the end of the front-end
+*/
 class FrontEndLast : public PassManager {
  public:
     FrontEndLast() { setName("FrontEndLast"); }
@@ -108,6 +116,7 @@ const IR::P4Program *FrontEnd::run(const CompilerOptions &options, const IR::P4P
         new TableKeyNames(&refMap, &typeMap),
         new ConstantFolding(&refMap, &typeMap),
         new StrengthReduction(),
+        new UselessCasts(&refMap, &typeMap),
         new SimplifyControlFlow(&refMap, &typeMap),
         new RemoveAllUnusedDeclarations(&refMap, true),
         new SimplifyParsers(&refMap),

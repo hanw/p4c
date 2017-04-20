@@ -1,14 +1,18 @@
 ../testdata/p4_16_errors/extern.p4(19): error: x: a parameter with an extern type cannot have a direction
-control c(in X x) {
+control c(in X x) { // Cannot have externs with direction
                ^
-error: Could not find type of <Type_Control>(19) c
+../testdata/p4_16_errors/extern.p4(19): error: Could not find type of control c
+control c(in X x) { // Cannot have externs with direction
+        ^
 ../testdata/p4_16_errors/extern.p4(24): error: x: a parameter with an extern type cannot have a direction
 control proto(in X x);
                    ^
 ../testdata/p4_16_errors/extern.p4(24): error: Could not find type of control proto
 control proto(in X x);
         ^^^^^
-error: Could not find type of <Type_Name>(37) proto
+../testdata/p4_16_errors/extern.p4(25): error: Could not find type of proto
+package top(proto _c);
+            ^^^^^
 ../testdata/p4_16_errors/extern.p4(25): error: Could not find type of _c
 package top(proto _c);
                   ^^
@@ -16,7 +20,7 @@ package top(proto _c);
 package top(proto _c);
         ^^^
 ../testdata/p4_16_errors/extern.p4(19): error: Could not find type of control c
-control c(in X x) {
+control c(in X x) { // Cannot have externs with direction
         ^
 error: Could not find type of <Type_Name>(52) c
 error: Could not find type of <Type_Name>(50) top

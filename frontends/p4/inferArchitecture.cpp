@@ -51,6 +51,7 @@ bool ArchitecturalBlocks::preorder(const IR::Type_Control *node) {
 
 bool ArchitecturalBlocks::preorder(const IR::Type_Parser *node) {
     Parser_Model *parser_m = archModel->getParsers()->back();
+
     uint32_t paramCounter = 0;
     for (auto param : *node->applyParams->getEnumerator()) {
         Type_Model paramTypeModel(param->type->toString());
@@ -90,6 +91,7 @@ bool ArchitecturalBlocks::preorder(const IR::Type_Package *node) {
 }
 
 bool ArchitecturalBlocks::preorder(const IR::Type_Extern *node) {
+
     Extern_Model *extern_m = new Extern_Model(node->toString());
     for (auto method : *node->methods) {
         uint32_t paramCounter = 0;

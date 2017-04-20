@@ -100,6 +100,9 @@ class Namespace : public NamedSymbol {
         into << s;
         into << "}" << std::endl;
     }
+    void clear() {
+        contents.clear();
+    }
 };
 
 class Object : public NamedSymbol {
@@ -237,5 +240,11 @@ cstring ProgramStructure::toString() const {
     std::stringstream res;
     rootNamespace->dump(res, 0);
     return cstring(res.str());
+}
+
+void ProgramStructure::clear() {
+    rootNamespace->clear();
+    currentNamespace = rootNamespace;
+    debugStream = stderr;
 }
 }  // namespace Util

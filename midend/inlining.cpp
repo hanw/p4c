@@ -184,6 +184,7 @@ class ComputeNewNames : public Inspector {
     cstring           prefix;
     P4::ReferenceMap* refMap;
     SymRenameMap*     renameMap;
+
  public:
     ComputeNewNames(cstring prefix, P4::ReferenceMap* refMap, SymRenameMap* renameMap) :
             prefix(prefix), refMap(refMap), renameMap(renameMap) {
@@ -194,7 +195,12 @@ class ComputeNewNames : public Inspector {
     void rename(const IR::Declaration* decl) {
         BUG_CHECK(decl->is<IR::IAnnotated>(), "%1%: no annotations", decl);
         cstring name = decl->externalName();
-        cstring extName = prefix + "." + name;
+        cstring extName;
+        if (name.startsWith("."))
+            // Do not change the external name of objects starting with a leading dot
+            extName = name;
+        else
+            extName = prefix + "." + name;
         cstring baseName = extName.replace('.', '_');
         cstring newName = refMap->newName(baseName);
         renameMap->setNewName(decl, newName, extName);
@@ -211,7 +217,7 @@ setNameAnnotation(cstring name, const IR::Annotations* annos) {
     if (annos == nullptr)
         annos = IR::Annotations::empty;
     return annos->addOrReplace(IR::Annotation::nameAnnotation,
-                               new IR::StringLiteral(Util::SourceInfo(), name));
+                               new IR::StringLiteral(name));
 }
 
 
@@ -534,9 +540,8 @@ const IR::Node* GeneralInliner::preorder(IR::P4Control* caller) {
                     auto path = new IR::PathExpression(newName);
                     substs->paramSubst.add(param, path);
                     LOG1("Replacing " << param->name << " with " << newName);
-                    auto vardecl = new IR::Declaration_Variable(Util::SourceInfo(), newName,
-                                                                param->annotations, param->type,
-                                                                nullptr);
+                    auto vardecl = new IR::Declaration_Variable(newName,
+                                                                param->annotations, param->type);
                     locals->push_back(vardecl);
                 }
             }
@@ -586,7 +591,7 @@ const IR::Node* GeneralInliner::preorder(IR::MethodCallStatement* statement) {
         auto arg = mcd.substitution.lookup(param);
         if ((param->direction == IR::Direction::In || param->direction == IR::Direction::InOut) &&
             initializer != arg) {
-            auto stat = new IR::AssignmentStatement(Util::SourceInfo(), initializer, arg);
+            auto stat = new IR::AssignmentStatement(initializer, arg);
             body->push_back(stat);
         } else if (param->direction == IR::Direction::Out) {
             auto paramType = typeMap->getType(param, true);
@@ -605,8 +610,7 @@ const IR::Node* GeneralInliner::preorder(IR::MethodCallStatement* statement) {
             auto left = mcd.substitution.lookup(param);
             auto initializer = substs->paramSubst.lookupByName(param->name);
             if (initializer != left) {
-                auto copyout = new IR::AssignmentStatement(
-                    Util::SourceInfo(), left, initializer->clone());
+                auto copyout = new IR::AssignmentStatement(left, initializer->clone());
                 body->push_back(copyout);
             }
         }
@@ -728,7 +732,7 @@ const IR::Node* GeneralInliner::preorder(IR::ParserState* state) {
             LOG1("Looking for " << param->name);
             if (param->direction == IR::Direction::In || param->direction == IR::Direction::InOut) {
                 auto expr = substs->paramSubst.lookupByName(param->name);
-                auto stat = new IR::AssignmentStatement(Util::SourceInfo(), expr, initializer);
+                auto stat = new IR::AssignmentStatement(expr, initializer);
                 current->push_back(stat);
             } else if (param->direction == IR::Direction::Out) {
                 auto expr = substs->paramSubst.lookupByName(param->name);
@@ -762,7 +766,6 @@ const IR::Node* GeneralInliner::preorder(IR::ParserState* state) {
 
         // Prepare next state
         annotations = IR::Annotations::empty;
-        srcInfo = Util::SourceInfo();
         name = IR::ID(nextState, nullptr);
         current = new IR::IndexedVector<IR::StatOrDecl>();
 
@@ -773,7 +776,7 @@ const IR::Node* GeneralInliner::preorder(IR::ParserState* state) {
             if (param->direction == IR::Direction::InOut ||
                 param->direction == IR::Direction::Out) {
                 auto expr = substs->paramSubst.lookupByName(param->name);
-                auto copyout = new IR::AssignmentStatement(Util::SourceInfo(), left, expr->clone());
+                auto copyout = new IR::AssignmentStatement(left, expr->clone());
                 current->push_back(copyout);
             }
             ++it;
@@ -782,7 +785,7 @@ const IR::Node* GeneralInliner::preorder(IR::ParserState* state) {
 
     if (!states->empty()) {
         // Create final state
-        auto newState = new IR::ParserState(srcInfo, name, annotations,
+        auto newState = new IR::ParserState(name, annotations,
                                             current, state->selectExpression);
         states->push_back(newState);
         LOG1("Replacing with " << states->size() << " states");
@@ -838,9 +841,8 @@ const IR::Node* GeneralInliner::preorder(IR::P4Parser* caller) {
                 auto path = new IR::PathExpression(newName);
                 substs->paramSubst.add(param, path);
                 LOG1("Replacing " << param->name << " with " << newName);
-                auto vardecl = new IR::Declaration_Variable(Util::SourceInfo(), newName,
-                                                            param->annotations, param->type,
-                                                            nullptr);
+                auto vardecl = new IR::Declaration_Variable(newName,
+                                                            param->annotations, param->type);
                 locals->push_back(vardecl);
             }
 

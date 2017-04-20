@@ -1,6 +1,5 @@
 control ctrl(out bit<32> c) {
     bool hasExited;
-    bit<32> a;
     @name("e") action e_0() {
         hasExited = true;
     }
@@ -10,20 +9,20 @@ control ctrl(out bit<32> c) {
         }
         default_action = e_0();
     }
-    action act() {
+    @hidden action act() {
         hasExited = false;
         c = 32w2;
     }
-    action act_0() {
+    @hidden action act_0() {
         c = 32w5;
     }
-    table tbl_act {
+    @hidden table tbl_act {
         actions = {
             act();
         }
         const default_action = act();
     }
-    table tbl_act_0 {
+    @hidden table tbl_act_0 {
         actions = {
             act_0();
         }
@@ -31,11 +30,11 @@ control ctrl(out bit<32> c) {
     }
     apply {
         tbl_act.apply();
-        if (true)
+        if (true) 
             t.apply();
-        else
+        else 
             t.apply();
-        if (!hasExited)
+        if (!hasExited) 
             tbl_act_0.apply();
     }
 }

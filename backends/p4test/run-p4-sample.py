@@ -26,6 +26,7 @@ import tempfile
 import shutil
 import difflib
 import subprocess
+import glob
 
 SUCCESS = 0
 FAILURE = 1
@@ -108,7 +109,12 @@ def compare_files(options, produced, expected):
     if options.verbose:
         print("Comparing", expected, "and", produced)
 
-    cmd = "diff -B -u -w -I \"#include\" " + expected + " " + produced + " >&2"
+    # include paths are different
+    # also, error messages that contain core.p4 or v1model.p4 will have
+    # different paths
+    cmd = "diff -B -u -w -I \"#include\" -I \"core\.p4([0-9]\+)\" -I \"v1model.p4([0-9]\+)\" " + expected + " " + produced + " >&2"
+    if options.verbose:
+        print(cmd)
     exitcode = subprocess.call(cmd, shell=True);
     if exitcode == 0:
         return SUCCESS
@@ -169,8 +175,8 @@ def process_file(options, argv):
 
     # We rely on the fact that these keys are in alphabetical order.
     rename = { "FrontEnd_12_SimplifyControlFlow": "first",
-               "FrontEnd_27_FrontEndLast": "frontend",
-               "MidEnd_35_Evaluator": "midend" }
+               "FrontEndLast": "frontend",
+               "MidEndLast": "midend" }
 
     if options.verbose:
         print("Writing temporary files into ", tmpdir)
@@ -211,11 +217,15 @@ def process_file(options, argv):
     lastFile = None
 
     for k in sorted(rename.keys()):
-        file = file_name(tmpdir, base, k, ext)
-        if os.path.isfile(file):
-            newName = file_name(tmpdir, base, rename[k], ext)
-            os.rename(file, newName)
-            lastFile = newName
+        files = glob.glob(tmpdir + "/" + base + "*" + k + "*.p4");
+        if len(files) > 1:
+            print("Multiple files matching", k);
+        elif len(files) == 1:
+            file = files[0]
+            if os.path.isfile(file):
+                newName = file_name(tmpdir, base, rename[k], ext)
+                os.rename(file, newName)
+                lastFile = newName
 
     if (result == SUCCESS):
         result = check_generated_files(options, tmpdir, expected_dirname);

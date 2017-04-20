@@ -15,13 +15,12 @@ const IR::Type* ReplacementMap::convertType(const IR::Type* type) {
             auto cftype = convertType(ftype);
             if (cftype != ftype)
                 changes = true;
-            auto field = new IR::StructField(Util::SourceInfo(), f->name,
-                                             f->annotations, cftype->getP4Type());
+            auto field = new IR::StructField(f->name, f->annotations, cftype->getP4Type());
             fields->push_back(field);
         }
         if (changes) {
             auto result = new IR::Type_Struct(st->srcInfo, st->name, st->annotations, fields);
-            LOG1("Converted " << dbp(type) << " to " << dbp(result));
+            LOG3("Converted " << dbp(type) << " to " << dbp(result));
             replacement.emplace(type, result);
             return result;
         } else {
@@ -33,12 +32,11 @@ const IR::Type* ReplacementMap::convertType(const IR::Type* type) {
         for (auto t : *type->to<IR::Type_Tuple>()->components) {
             auto ftype = convertType(t);
             auto fname = ng->newName("field");
-            auto field = new IR::StructField(Util::SourceInfo(), IR::ID(fname),
-                                             IR::Annotations::empty, ftype->getP4Type());
+            auto field = new IR::StructField(IR::ID(fname), ftype->getP4Type());
             fields->push_back(field);
         }
-        auto result = new IR::Type_Struct(Util::SourceInfo(), name, IR::Annotations::empty, fields);
-        LOG1("Converted " << dbp(type) << " to " << dbp(result));
+        auto result = new IR::Type_Struct(name, fields);
+        LOG3("Converted " << dbp(type) << " to " << dbp(result));
         replacement.emplace(type, result);
         return result;
     }
@@ -81,7 +79,7 @@ const IR::Node* DoReplaceTuples::insertReplacements(const IR::Node* before) {
     auto result = repl->getNewReplacements();
     if (result == nullptr)
         return before;
-    LOG1("Inserting replacements before " << dbp(before));
+    LOG3("Inserting replacements before " << dbp(before));
     result->push_back(before);
     return result;
 }

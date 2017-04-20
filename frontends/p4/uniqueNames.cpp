@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 #include "uniqueNames.h"
+#include "frontends/p4/methodInstance.h"
 #include "frontends/p4/typeChecking/typeChecker.h"
 
 namespace P4 {
@@ -51,7 +52,7 @@ addNameAnnotation(cstring name, const IR::Annotations* annos) {
     if (annos == nullptr)
         annos = IR::Annotations::empty;
     return annos->addAnnotationIfNew(IR::Annotation::nameAnnotation,
-                                     new IR::StringLiteral(Util::SourceInfo(), name));
+                                     new IR::StringLiteral(name));
 }
 
 UniqueNames::UniqueNames(ReferenceMap* refMap) : renameMap(new RenameMap) {

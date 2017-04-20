@@ -1,6 +1,11 @@
 /* -*-C++-*- */
 
-/*
+
+/** \addtogroup irdefs
+  * @{
+  */
+
+/**
   P4 compiler IR definition file.
   To understand this you really have to understand the shape of the generated IR code.
 
@@ -31,8 +36,8 @@
  */
 
 class ParserState : ISimpleNamespace, Declaration, IAnnotated {
-    Annotations               annotations;
-    IndexedVector<StatOrDecl> components;
+    optional Annotations        annotations = Annotations::empty;
+    IndexedVector<StatOrDecl>   components;
     // selectExpression can be a SelectExpression, or a PathExpression representing a state
     NullOK Expression         selectExpression;
 
@@ -57,8 +62,8 @@ class ParserState : ISimpleNamespace, Declaration, IAnnotated {
 
 // A parser that contains all states (unlike the P4 v1.0 parser, which is really just a state)
 class P4Parser : Type_Declaration, ISimpleNamespace, IApply, IContainer {
-    Type_Parser          type;
-    ParameterList        constructorParams;
+    Type_Parser                 type;
+    optional ParameterList      constructorParams = new ParameterList;
     IndexedVector<Declaration>  parserLocals;
     IndexedVector<ParserState>  states;
 
@@ -86,8 +91,8 @@ class P4Parser : Type_Declaration, ISimpleNamespace, IApply, IContainer {
 }
 
 class P4Control : Type_Declaration, ISimpleNamespace, IApply, IContainer {
-    Type_Control         type;
-    ParameterList        constructorParams;
+    Type_Control                type;
+    optional ParameterList      constructorParams = new ParameterList;
     IndexedVector<Declaration>  controlLocals;
     BlockStatement       body;
 
@@ -109,9 +114,9 @@ class P4Control : Type_Declaration, ISimpleNamespace, IApply, IContainer {
 }
 
 class P4Action : Declaration, ISimpleNamespace, IAnnotated {
-    Annotations    annotations;
-    ParameterList  parameters;
-    BlockStatement body;
+    optional Annotations        annotations = Annotations::empty;
+    ParameterList               parameters;
+    BlockStatement              body;
     Util::Enumerator<IDeclaration>* getDeclarations() const override;
     IDeclaration getDeclByName(cstring name) const override;
     Annotations getAnnotations() const override { return annotations; }
@@ -153,8 +158,8 @@ class ExpressionListValue : PropertyValue {
 
 // An element in a table actions list
 class ActionListElement : IAnnotated, IDeclaration {
-    Annotations annotations;
-    Expression  expression;  // This can be a PathExpression or a MethodCallExpression
+    optional Annotations annotations = Annotations::empty;
+    Expression           expression;  // This can be a PathExpression or a MethodCallExpression
     dbprint { out << annotations << expression; }
     ID getName() const override { return getPath()->name; }
     Path getPath() const;
@@ -175,9 +180,9 @@ class ActionList : PropertyValue {
 }
 
 class KeyElement {
-    Annotations     annotations;
-    Expression      expression;
-    PathExpression  matchType;
+    optional Annotations annotations = Annotations::empty;
+    Expression           expression;
+    PathExpression       matchType;
 
     const IR::Node *transform_visit(Transform &v) {
         // call this from Transform::preorder(KeyElement) if the transform might split
@@ -205,6 +210,27 @@ class Key : PropertyValue {
     validate { keyElements->check_null(); }
 }
 
+/// Pre-defined entry in a table
+class Entry : IAnnotated {
+    /// annotations are optional (supported annotations: @priority(value))
+    optional Annotations annotations = Annotations::empty;
+    ListExpression      keys;         /// must be a tuple expression
+    Expression          action;       /// typically a MethodCallExpression.
+                                      /// The action must be defined in action list
+
+    Annotations     getAnnotations() const override { return annotations; }
+    ListExpression  getKeys() const { return keys; }
+    Expression      getAction() const { return action; }
+    dbprint { out << annotations << keys << action; }
+}
+
+/// List of predefined entries. Part of table properties
+class EntriesList : PropertyValue {
+    Vector<Entry> entries;
+    size_t size() const { return entries->size(); }
+    dbprint { out << "{ " << entries << "}"; }
+}
+
 class Property : Declaration, IAnnotated {
     optional Annotations   annotations = Annotations::empty;
     PropertyValue value;
@@ -227,13 +253,14 @@ class TableProperties : ISimpleNamespace {
     static const cstring actionsPropertyName;
     static const cstring keyPropertyName;
     static const cstring defaultActionPropertyName;
+    static const cstring entriesPropertyName;
 #nodbprint
     validate{ properties->check_null(); }
 }
 
 class P4Table : Declaration, IAnnotated, IApply {
-    Annotations     annotations;
-    TableProperties properties;
+    optional Annotations        annotations = Annotations::empty;
+    TableProperties             properties;
 
     Annotations getAnnotations() const override { return annotations; }
     Type_Method getApplyMethodType() const override;
@@ -268,12 +295,22 @@ class P4Table : Declaration, IAnnotated, IApply {
                     return k; } }
             error("%1% must be a constant expression", d); }
         return nullptr; }
+    EntriesList getEntries() const {
+        auto ep = properties->getProperty(TableProperties::entriesPropertyName);
+        if (ep == nullptr)
+            return nullptr;
+        if (!ep->value->is<IR::EntriesList>()) {
+            ::error("%1% must be a list of entries", ep);
+            return nullptr;
+        }
+        return ep->value->to<IR::EntriesList>();
+    }
 }
 
 class Declaration_Variable : Declaration, IAnnotated {
-    Annotations        annotations;
-    Type               type;
-    NullOK Expression  initializer;
+    optional Annotations        annotations = Annotations::empty;
+    Type                        type;
+    optional NullOK Expression  initializer = nullptr;
 
     Annotations getAnnotations() const override { return annotations; }
     dbprint {
@@ -282,9 +319,9 @@ class Declaration_Variable : Declaration, IAnnotated {
 }
 
 class Declaration_Constant : Declaration, IAnnotated {
-    Annotations        annotations;
-    Type               type;
-    Expression         initializer;
+    optional Annotations        annotations = Annotations::empty;
+    Type                        type;
+    Expression                  initializer;
 
     Annotations getAnnotations() const override { return annotations; }
     toString { return Declaration::toString(); }
@@ -360,8 +397,8 @@ class IfStatement : Statement {
 }
 
 class BlockStatement : Statement, ISimpleNamespace {
-    Annotations annotations;
-    IndexedVector<StatOrDecl> components;
+    optional Annotations        annotations = Annotations::empty;
+    IndexedVector<StatOrDecl>   components;
     IDeclaration getDeclByName(cstring name) const override {
         return components->getDeclaration(name); }
     Util::Enumerator<IDeclaration>* getDeclarations() const override {
@@ -392,7 +429,6 @@ class SwitchCase {
 class SwitchStatement : Statement {
     Expression expression;
     inline Vector<SwitchCase> cases;
-#nodbprint
     visit_children {
         v.visit(expression, "expression");
         cases.parallel_visit_children(v); }
@@ -485,3 +521,4 @@ class ToplevelBlock : Block {
 #nodbprint
     validate { BUG_CHECK(node->is<IR::P4Program>(), "%1%: expected a P4Program", node); }
 }
+/** @} *//* end group irdefs */

@@ -20,6 +20,14 @@ limitations under the License.
 namespace P4 {
 
 namespace {
+/**
+This inspector detects whether an IR tree contains
+'return' or 'exit' statements.
+It sets a boolean flag for each of them.
+
+It treats exceptionally Functions - it claims that
+returns do not exist in Functions.
+*/
 class HasExits : public Inspector {
  public:
     bool hasExits;
@@ -43,11 +51,11 @@ const IR::Node* DoRemoveReturns::preorder(IR::P4Action* action) {
         prune();
         return action;
     }
+    LOG3("Processing " << dbp(action));
     cstring var = refMap->newName(variableName);
     returnVar = IR::ID(var, nullptr);
-    auto f = new IR::BoolLiteral(Util::SourceInfo(), false);
-    auto decl = new IR::Declaration_Variable(Util::SourceInfo(), returnVar,
-                                             IR::Annotations::empty, IR::Type_Boolean::get(), f);
+    auto f = new IR::BoolLiteral(false);
+    auto decl = new IR::Declaration_Variable(returnVar, IR::Type_Boolean::get(), f);
     BUG_CHECK(stack.empty(), "Non-empty stack");
     push();
     visit(action->body);
@@ -96,6 +104,8 @@ const IR::Node* DoRemoveReturns::preorder(IR::Type_Package* pack) {
 }
 
 const IR::Node* DoRemoveReturns::preorder(IR::P4Control* control) {
+    visit(control->controlLocals);
+
     HasExits he;
     (void)control->body->apply(he);
     if (!he.hasReturns) {
@@ -106,9 +116,8 @@ const IR::Node* DoRemoveReturns::preorder(IR::P4Control* control) {
 
     cstring var = refMap->newName(variableName);
     returnVar = IR::ID(var, nullptr);
-    auto f = new IR::BoolLiteral(Util::SourceInfo(), false);
-    auto decl = new IR::Declaration_Variable(Util::SourceInfo(), returnVar,
-                                             IR::Annotations::empty, IR::Type_Boolean::get(), f);
+    auto f = new IR::BoolLiteral(false);
+    auto decl = new IR::Declaration_Variable(returnVar, IR::Type_Boolean::get(), f);
     BUG_CHECK(stack.empty(), "Non-empty stack");
     push();
     visit(control->body);
@@ -129,7 +138,7 @@ const IR::Node* DoRemoveReturns::preorder(IR::ReturnStatement* statement) {
     set(Returns::Yes);
     auto left = new IR::PathExpression(returnVar);
     return new IR::AssignmentStatement(statement->srcInfo, left,
-                                       new IR::BoolLiteral(Util::SourceInfo(), true));
+                                       new IR::BoolLiteral(true));
     return statement;
 }
 
@@ -154,16 +163,16 @@ const IR::Node* DoRemoveReturns::preorder(IR::BlockStatement* statement) {
         } else if (r == Returns::Maybe) {
             auto newBody = new IR::IndexedVector<IR::StatOrDecl>();
             auto path = new IR::PathExpression(returnVar);
-            auto condition = new IR::LNot(Util::SourceInfo(), path);
-            auto newBlock = new IR::BlockStatement(
-                Util::SourceInfo(), IR::Annotations::empty, newBody);
-            auto ifstat = new IR::IfStatement(Util::SourceInfo(), condition, newBlock, nullptr);
+            auto condition = new IR::LNot(path);
+            auto newBlock = new IR::BlockStatement(newBody);
+            auto ifstat = new IR::IfStatement(condition, newBlock, nullptr);
             body->push_back(ifstat);
             currentBody = newBody;
             ret = r;
         }
     }
-    set(ret);
+    if (!stack.empty())
+        set(ret);
     prune();
     return new IR::BlockStatement(statement->srcInfo, statement->annotations, body);
 }
@@ -172,7 +181,7 @@ const IR::Node* DoRemoveReturns::preorder(IR::IfStatement* statement) {
     push();
     visit(statement->ifTrue);
     if (statement->ifTrue == nullptr)
-        statement->ifTrue = new IR::EmptyStatement(Util::SourceInfo());
+        statement->ifTrue = new IR::EmptyStatement();
     auto rt = hasReturned();
     auto rf = Returns::No;
     pop();
@@ -247,7 +256,7 @@ const IR::Node* DoRemoveExits::preorder(IR::ExitStatement* statement) {
     set(Returns::Yes);
     auto left = new IR::PathExpression(returnVar);
     return new IR::AssignmentStatement(statement->srcInfo, left,
-                                       new IR::BoolLiteral(Util::SourceInfo(), true));
+                                       new IR::BoolLiteral(true));
 }
 
 const IR::Node* DoRemoveExits::preorder(IR::P4Table* table) {
@@ -295,17 +304,14 @@ const IR::Node* DoRemoveExits::preorder(IR::P4Control* control) {
     push();
     visit(control->body);
     auto stateful = new IR::IndexedVector<IR::Declaration>();
-    auto decl = new IR::Declaration_Variable(Util::SourceInfo(), returnVar,
-                                             IR::Annotations::empty,
-                                             IR::Type_Boolean::get(), nullptr);
+    auto decl = new IR::Declaration_Variable(returnVar, IR::Type_Boolean::get(), nullptr);
     stateful->push_back(decl);
     stateful->append(*control->controlLocals);
     control->controlLocals = stateful;
 
     auto newbody = new IR::IndexedVector<IR::StatOrDecl>();
     auto left = new IR::PathExpression(returnVar);
-    auto init = new IR::AssignmentStatement(Util::SourceInfo(), left,
-                                            new IR::BoolLiteral(Util::SourceInfo(), false));
+    auto init = new IR::AssignmentStatement(left, new IR::BoolLiteral(false));
     newbody->push_back(init);
     newbody->append(*control->body->components);
     control->body = new IR::BlockStatement(
@@ -333,16 +339,16 @@ const IR::Node* DoRemoveExits::preorder(IR::BlockStatement* statement) {
         } else if (r == Returns::Maybe) {
             auto newBody = new IR::IndexedVector<IR::StatOrDecl>();
             auto path = new IR::PathExpression(returnVar);
-            auto condition = new IR::LNot(Util::SourceInfo(), path);
-            auto newBlock = new IR::BlockStatement(
-                Util::SourceInfo(), IR::Annotations::empty, newBody);
-            auto ifstat = new IR::IfStatement(Util::SourceInfo(), condition, newBlock, nullptr);
+            auto condition = new IR::LNot(path);
+            auto newBlock = new IR::BlockStatement(newBody);
+            auto ifstat = new IR::IfStatement(condition, newBlock, nullptr);
             body->push_back(ifstat);
             currentBody = newBody;
             ret = r;
         }
     }
-    set(ret);
+    if (!stack.empty())
+        set(ret);
     prune();
     return new IR::BlockStatement(statement->srcInfo, statement->annotations, body);
 }
@@ -359,11 +365,11 @@ const IR::Node* DoRemoveExits::preorder(IR::IfStatement* statement) {
 
     visit(statement->ifTrue);
     if (statement->ifTrue == nullptr)
-        statement->ifTrue = new IR::EmptyStatement(Util::SourceInfo());
+        statement->ifTrue = new IR::EmptyStatement();
     if (ce.callsExit) {
         auto path = new IR::PathExpression(returnVar);
-        auto condition = new IR::LNot(Util::SourceInfo(), path);
-        auto newif = new IR::IfStatement(Util::SourceInfo(), condition, statement->ifTrue, nullptr);
+        auto condition = new IR::LNot(path);
+        auto newif = new IR::IfStatement(condition, statement->ifTrue, nullptr);
         statement->ifTrue = newif;
     }
     auto rt = hasReturned();
@@ -374,9 +380,8 @@ const IR::Node* DoRemoveExits::preorder(IR::IfStatement* statement) {
         visit(statement->ifFalse);
         if (ce.callsExit && statement->ifFalse != nullptr) {
             auto path = new IR::PathExpression(returnVar);
-            auto condition = new IR::LNot(Util::SourceInfo(), path);
-            auto newif = new IR::IfStatement(Util::SourceInfo(), condition,
-                                             statement->ifFalse, nullptr);
+            auto condition = new IR::LNot(path);
+            auto newif = new IR::IfStatement(condition, statement->ifFalse, nullptr);
             statement->ifFalse = newif;
         }
         rf = hasReturned();
@@ -413,12 +418,11 @@ const IR::Node* DoRemoveExits::preorder(IR::SwitchStatement* statement) {
             IR::Statement* stat = nullptr;
             if (c->statement != nullptr) {
                 auto path = new IR::PathExpression(returnVar);
-                auto condition = new IR::LNot(Util::SourceInfo(), path);
-                auto newif = new IR::IfStatement(Util::SourceInfo(), condition,
-                                                 c->statement, nullptr);
+                auto condition = new IR::LNot(path);
+                auto newif = new IR::IfStatement(condition, c->statement, nullptr);
                 auto vec = new IR::IndexedVector<IR::StatOrDecl>();
                 vec->push_back(newif);
-                stat = new IR::BlockStatement(newif->srcInfo, IR::Annotations::empty, vec);
+                stat = new IR::BlockStatement(newif->srcInfo, vec);
             }
             auto swcase = new IR::SwitchCase(c->srcInfo, c->label, stat);
             cases->push_back(swcase);

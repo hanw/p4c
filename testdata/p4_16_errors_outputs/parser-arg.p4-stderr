@@ -7,11 +7,15 @@ parser Parser();
 ../testdata/p4_16_errors/parser-arg.p4(18): error: Could not find type of parser MyParser
 parser MyParser(Parser p);
        ^^^^^^^^
-error: Could not find type of <Type_Name>(23) MyParser
+../testdata/p4_16_errors/parser-arg.p4(19): error: Could not find type of MyParser
+package Package(MyParser p1, MyParser p2);
+                ^^^^^^^^
 ../testdata/p4_16_errors/parser-arg.p4(18): error: Could not find type of parser MyParser
 parser MyParser(Parser p);
        ^^^^^^^^
-error: Could not find type of <Type_Name>(27) MyParser
+../testdata/p4_16_errors/parser-arg.p4(19): error: Could not find type of MyParser
+package Package(MyParser p1, MyParser p2);
+                             ^^^^^^^^
 ../testdata/p4_16_errors/parser-arg.p4(19): error: Could not find type of p1
 package Package(MyParser p1, MyParser p2);
                          ^^
@@ -28,6 +32,7 @@ parser Parser2(Parser p) {
 ../testdata/p4_16_errors/parser-arg.p4(17)
 parser Parser();
        ^^^^^^
+
 error: Could not find type of <Type_Parser>(70) Parser2
 ../testdata/p4_16_errors/parser-arg.p4(21): error: Could not find type of parser Parser1
 parser Parser1(Parser p) {
@@ -37,6 +42,7 @@ error: Could not find type of <Type_Name>(88) Parser1
 parser Parser2(Parser p) {
        ^^^^^^^
 error: Could not find type of <Type_Name>(93) Parser2
+
 ../testdata/p4_16_errors/parser-arg.p4(19): error: Could not find type of package Package
 package Package(MyParser p1, MyParser p2);
         ^^^^^^^
@@ -46,4 +52,5 @@ Parser1() p1;
 ../testdata/p4_16_errors/parser-arg.p4(36): error: Could not find type of p2
 Parser2() p2;
           ^^
+
 error: Could not find type of <Type_Name>(98) Package

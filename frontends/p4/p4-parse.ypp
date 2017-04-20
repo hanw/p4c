@@ -60,7 +60,6 @@ static Util::ProgramStructure structure;
 
 namespace {  // anonymous namespace
 static int yylex();
-
 %}
 
 %union {
@@ -81,6 +80,7 @@ static int yylex();
     IR::Vector<IR::Type>        *types;
     IR::Vector<IR::Method>      *methods;
     IR::Vector<IR::KeyElement>  *keyElements;
+    IR::Vector<IR::Entry>       *entriesList;
     IR::ID*                     id;
     cstring                     str;
     bool                        b;
@@ -97,6 +97,8 @@ static int yylex();
     IR::Expression              *Expression;
     IR::IDeclaration            *decl;
     IR::KeyElement              *KeyElement;
+    IR::Entry                   *Entry;
+    IR::MethodCallExpression    *MethodCallExpression;
     IR::Method                  *Method;
     IR::Function                *Function;
     IR::Parameter               *Parameter;
@@ -120,7 +122,7 @@ static int yylex();
 %token      LE GE SHL AND OR NE EQ
 %token      TRUE FALSE THIS
 %token      ABSTRACT ACTION ACTIONS APPLY BOOL BIT CONST CONTROL DATA
-            DEFAULT DONTCARE ELSE ENUM T_ERROR  // There is an ERROR macro elsewhere
+            DEFAULT DONTCARE ELSE ENTRIES ENUM T_ERROR  // There is an ERROR macro elsewhere
             EXIT EXTERN HEADER HEADER_UNION IF IN INOUT INT KEY MASK SELECT MATCH_KIND OUT
             PACKAGE PARSER RANGE RETURN STATE STRUCT SWITCH TABLE TRANSITION
             TUPLE TYPEDEF VARBIT VOID
@@ -139,6 +141,7 @@ static int yylex();
                         tupleType typeArg
 %type<Type_Name>        typeName
 %type<Parameter>        parameter
+%type<b>                optCONST
 %type<annos>            optAnnotations
 %type<annoVec>          annotations
 %type<Annotation>       annotation
@@ -183,6 +186,9 @@ static int yylex();
 %type<keyElements>      keyElementList
 %type<ActionListElement> actionRef
 %type<actions>          actionList
+%type<Entry>            entry
+%type<entriesList>      entriesList
+%type<MethodCallExpression> actionBinding
 
 %error-verbose
 %locations
@@ -260,11 +266,17 @@ nonTypeName
     | KEY         { $$ = new IR::ID(@1, "key"); }
     | ACTIONS     { $$ = new IR::ID(@1, "actions"); }
     | STATE       { $$ = new IR::ID(@1, "state"); }
+    | ENTRIES     { $$ = new IR::ID(@1, "entries"); }
     ;
 
 name
     : nonTypeName { $$ = $1; }
     | TYPE      { $$ = new IR::ID(@1, $1); }
+    ;
+
+optCONST
+    : /* empty */ { $$ = false; }
+    | CONST       { $$ = true; }
     ;
 
 optAnnotations
@@ -333,11 +345,10 @@ packageTypeDeclarationWithDefinition
 instantiation
       : annotations typeRef '(' argumentList ')' name ';'
                      { $$ = new IR::Declaration_Instance(@6, *$6, new IR::Annotations(*$1),
-                                                         $2, $4, nullptr);
+                                                         $2, $4);
                        structure.declareObject(*$6); }
       | typeRef '(' argumentList ')' name ';'
-                     { $$ = new IR::Declaration_Instance(@5, *$5, IR::Annotations::empty,
-                                                         $1, $3, nullptr);
+                     { $$ = new IR::Declaration_Instance(@5, *$5, $1, $3);
                        structure.declareObject(*$5); }
       /* experimental */
       | annotations typeRef '(' argumentList ')' name '=' objInitializer ';'
@@ -346,8 +357,7 @@ instantiation
                        structure.declareObject(*$6); }
       /* experimental */
       | typeRef '(' argumentList ')' name '=' objInitializer ';'
-                     { $$ = new IR::Declaration_Instance(@5, *$5, IR::Annotations::empty,
-                                                         $1, $3, $7);
+                     { $$ = new IR::Declaration_Instance(@5, *$5, $1, $3, $7);
                        structure.declareObject(*$5); }
     ;
 
@@ -355,7 +365,7 @@ instantiation
 objInitializer
     : '{' { structure.pushNamespace(@1, false); } objDeclarations '}'
                                { structure.pop();
-                                 $$ = new IR::BlockStatement(@1+@4, IR::Annotations::empty, $3); }
+                                 $$ = new IR::BlockStatement(@1+@4, $3); }
     ;
 
 objDeclarations
@@ -426,6 +436,7 @@ parserStatements
 parserStatement
     : assignmentOrMethodCallStatement { $$ = $1; }
     | variableDeclaration             { $$ = $1; }
+    | constantDeclaration             { $$ = $1; }
     | parserBlockStatement            { $$ = $1; }
     ;
 
@@ -665,7 +676,7 @@ structField
 
 enumDeclaration
     : optAnnotations ENUM name          { structure.declareType(*$3); } '{' identifierList '}'
-                                        { $$ = new IR::Type_Enum(@1 + @3, *$3, $6); }
+                                        { $$ = new IR::Type_Enum(@2, *$3, $6); }
     ;
 
 errorDeclaration
@@ -688,11 +699,11 @@ typedefDeclaration
     : annotations TYPEDEF typeRef name   { structure.declareType(*$4);
           $$ = new IR::Type_Typedef(@4, *$4, new IR::Annotations(*$1), $3); }
     | TYPEDEF typeRef name               { structure.declareType(*$3);
-          $$ = new IR::Type_Typedef(@3, *$3, IR::Annotations::empty, $2); }
+          $$ = new IR::Type_Typedef(@3, *$3, $2); }
     | annotations TYPEDEF derivedTypeDeclaration name   { structure.declareType(*$4);
                         $$ = new IR::Type_Typedef(@4, *$4, new IR::Annotations(*$1), $3); }
     | TYPEDEF derivedTypeDeclaration name { structure.declareType(*$3);
-                        $$ = new IR::Type_Typedef(@3, *$3, IR::Annotations::empty, $2); }
+                        $$ = new IR::Type_Typedef(@3, *$3, $2); }
     ;
 
 /*************************** STATEMENTS *************************/
@@ -795,19 +806,19 @@ tableProperty
     : KEY '=' '{' keyElementList '}'     { auto v = new IR::Key(@4, $4);
                                            auto id = IR::ID(@1, "key");
                                            $$ = new IR::Property(
-                                               @1 + @5, id, IR::Annotations::empty, v, false); }
+                                               @1 + @5, id, v, false); }
     | ACTIONS '=' '{' actionList '}'     { auto v = new IR::ActionList(@4, $4);
                                            auto id = IR::ID(@1, "actions");
                                            $$ = new IR::Property(
-                                               @1 + @5, id, IR::Annotations::empty, v, false); }
-    | optAnnotations CONST IDENTIFIER '=' initializer ';'
+                                               @1 + @5, id, v, false); }
+    | optAnnotations optCONST ENTRIES '=' '{' entriesList '}' {
+                                            auto l = new IR::EntriesList(@3, $6);
+                                            auto id = IR::ID(@3+@7, "entries");
+                                            $$ = new IR::Property(@3, id, $1, l, $2); }
+    | optAnnotations optCONST IDENTIFIER '=' initializer ';'
                                          { auto v = new IR::ExpressionValue(@5, $5);
                                             auto id = IR::ID(@3, $3);
-                                            $$ = new IR::Property(@3, id, $1, v, true); }
-    | optAnnotations IDENTIFIER '=' initializer ';'
-                                         { auto v = new IR::ExpressionValue(@4, $4);
-                                           auto id = IR::ID(@2, $2);
-                                           $$ = new IR::Property(@2, id, $1, v, false); }
+                                            $$ = new IR::Property(@3, id, $1, v, $2); }
     ;
 
 keyElementList
@@ -837,6 +848,33 @@ actionRef
                                            $$ = new IR::ActionListElement(@2, $1, mce); }
     ;
 
+entry
+    : keysetExpression ':' actionBinding optAnnotations ';'
+                                         {
+                                           assert($3->is<IR::MethodCallExpression>());
+                                           if (auto l = $1->to<IR::ListExpression>())
+                                             $$ = new IR::Entry(@1+@4, $4, l, $3);
+                                           else {  // if not a tuple, make it a list of 1
+                                             auto le = new IR::Vector<IR::Expression>();
+                                             le->push_back($1);
+                                             $$ = new IR::Entry(@1+@4, $4,
+                                                                new IR::ListExpression(@1, le),
+                                                                $3);
+                                           }
+                                         }
+    ;
+
+actionBinding
+    : lvalue '(' argumentList ')'      { $$ = new IR::MethodCallExpression(@1 + @4, $1,
+                                                               new IR::Vector<IR::Type>(), $3); }
+    | lvalue '<' typeArgumentList '>' '(' argumentList ')'
+                                       { $$ = new IR::MethodCallExpression(@1 + @7, $1, $3, $6); }
+
+entriesList
+    : entry                          { $$ = new IR::Vector<IR::Entry>(); $$->push_back($1); }
+    | entriesList entry              { $$ = $1; $$->push_back($2); }
+    ;
+
 /************************* ACTION ********************************/
 
 actionDeclaration
@@ -854,8 +892,7 @@ variableDeclaration
                                        $$ = new IR::Declaration_Variable(@1+@4, *$3, ann, $2, $4);
                                        structure.declareObject(*$3); }
     | typeRef name optInitializer ';'
-                                     { $$ = new IR::Declaration_Variable(
-                                         @1+@4, *$2, IR::Annotations::empty, $1, $3);
+                                     { $$ = new IR::Declaration_Variable(@1+@4, *$2, $1, $3);
                                        structure.declareObject(*$2); }
     ;
 
@@ -1013,6 +1050,27 @@ const IR::P4Program *parse_P4_16_file(const char *name, FILE *in) {
     } else {
         structure.endParse();
     }
+    return new IR::P4Program(declarations->srcInfo, declarations);
+}
+
+const IR::P4Program *parse_string(const std::string &pgm) {
+    int errors = 0;
+    Util::InputSources::reset();
+    clearErrorReporter();
+    structure.clear();
+    allErrors = nullptr;
+    yylloc = Util::SourceInfo();
+    declarations = new IR::IndexedVector<IR::Node>();
+    parsing = true;
+    BEGIN(INITIAL);
+    YY_BUFFER_STATE state = yy_scan_string(pgm.c_str());
+    errors |= yyparse();
+    parsing = false;
+    yy_delete_buffer(state);
+    if (errors) {
+        return nullptr;
+    }
+    structure.endParse();
     return new IR::P4Program(declarations->srcInfo, declarations);
 }
 

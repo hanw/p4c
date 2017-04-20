@@ -1,5 +1,5 @@
 /*
-Copyright 2013-present Barefoot Networks, Inc. 
+Copyright 2017 VMware, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,11 +13,19 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+#include <core.p4>
 
-#include "coreLibrary.h"
+header h_t {
+    bit<8> f;
+}
 
-namespace P4 {
+struct my_packet {
+    h_t[10] h;
+}
 
-P4CoreLibrary P4CoreLibrary::instance;
-
-}  // namespace P4
+parser MyParser(packet_in b, out my_packet p) {
+    state start {
+        b.extract(p.h);
+        transition accept;
+    }
+}
