@@ -21,10 +21,6 @@ limitations under the License.
  *   P4-16 declaration of the Portable Switch Architecture
  */
 
-#define unspecified 32
-typedef bit<32> SpecId_t;
-typedef bit<32> entry_key;
-
 /**
  * These types need to be defined before including the architecture file
  * and the macro protecting them should be defined.
@@ -37,6 +33,7 @@ typedef bit<unspecified> EgressInstance_t;
 typedef bit<unspecified> InstanceType_t;
 typedef bit<unspecified> ParserStatus_t;
 typedef bit<unspecified> ParserErrorLocation_t;
+typedef bit<unspecified> entry_key;           /// for DirectMeters
 const   InstanceType_t   INSTANCE_NORMAL = unspecified;
 const   PortId_t         PORT_CPU = unspecified;
 #else
@@ -49,13 +46,11 @@ const   PortId_t         PORT_CPU = unspecified;
 /**
  * PSA supported metadata types
  */
-@metadata
 struct psa_parser_input_metadata_t {
   PortId_t                 ingress_port;
   InstanceType_t           instance_type;
 }
 
-@metadata
 struct psa_ingress_input_metadata_t {
   PortId_t                 ingress_port;
   InstanceType_t           instance_type;  /// Clone or Normal
@@ -64,12 +59,10 @@ struct psa_ingress_input_metadata_t {
   ParserErrorLocation_t    parser_error_location;
 }
 
-@metadata
 struct psa_ingress_output_metadata_t {
-  SpecId_t                 egress_spec;
+  PortId_t                 egress_port;
 }
 
-@metadata
 struct psa_egress_input_metadata_t {
   PortId_t                 egress_port;
   InstanceType_t           instance_type;  /// Clone or Normal
@@ -300,10 +293,10 @@ extern Hash<Algo, O> {
 /// @param W    The width of the checksum
 extern Checksum<W> {
   Checksum(HashAlgorithm hash);          /// constructor
-  void clear();           /// prepare unit for computation
-  void update<T>(T data); /// add data to checksum
-  void remove<T>(T data); /// remove data from existing checksum
-  W    get();      	  /// get the checksum for data added since last clear
+  void clear();              /// prepare unit for computation
+  void update<T>(in T data); /// add data to checksum
+  void remove<T>(in T data); /// remove data from existing checksum
+  W    get();      	     /// get the checksum for data added since last clear
 
   /*
   @ControlPlaneAPI
@@ -330,19 +323,19 @@ enum CounterType_t {
 }
 
 /// Counter: RFC-XXXX
-extern Counter<W> {
-  Counter(bit<32> n_counters, W size_in_bits, CounterType_t counter_type);
-  void count(in bit<32> index, in W increment);
+extern Counter<W, S> {
+  Counter(S n_counters, W size_in_bits, CounterType_t counter_type);
+  void count(in S index, in W increment);
 
   /*
   @ControlPlaneAPI
   {
-    W    read<W>      (in int index);
-    W    sync_read<W> (in int index);
-    void set          (in int index, in int seed);
-    void reset        (in int index);
-    void start        (in int index);
-    void stop         (in int index);
+    W    read<W>      (in S index);
+    W    sync_read<W> (in S index);
+    void set          (in S index, in W seed);
+    void reset        (in S index);
+    void start        (in S index);
+    void stop         (in S index);
   }
   */
 }
@@ -357,7 +350,7 @@ extern DirectCounter<W> {
   {
     W    read<W>      (in entry_key key);
     W    sync_read<W> (in entry_key key);
-    void set          (in int seed);
+    void set          (in W seed);
     void reset        (in entry_key key);
     void start        (in entry_key key);
     void stop         (in entry_key key);
@@ -383,37 +376,35 @@ enum MeterType_t {
 enum MeterColor_t { RED, GREEN, YELLOW };
 
 /// Meter
-extern Meter {
-  Meter(bit<32> n_meters, MeterType_t type);
-  MeterColor_t execute(in bit<32> index, in MeterColor_t color);
+extern Meter<S> {
+  Meter(S n_meters, MeterType_t type);
+  MeterColor_t execute(in S index, in MeterColor_t color);
 
   /*
   @ControlPlaneAPI
   {
     reset(in MeterColor_t color);
-    setParams(in int committedRate, out int committedBurstSize
-              in int peakRate, in int peakBurstSize);
-    getParams(out int committedRate, out int committedBurstSize
-              out int peakRate, out int peakBurstSize);
+    setParams(in S committedRate, out S committedBurstSize
+              in S peakRate, in S peakBurstSize);
+    getParams(out S committedRate, out S committedBurstSize
+              out S peakRate, out S peakBurstSize);
   }
   */
 }
 
-enum count_t { Bytes, Packets, Both }
-
 /// DirectMeter
 extern DirectMeter {
-  DirectMeter(count_t type);
+  DirectMeter(MeterType_t type);
   MeterColor_t execute(in MeterColor_t color);
 
   /*
   @ControlPlaneAPI
   {
     reset(in MeterColor_t color);
-    setParams(in int committedRate, out int committedBurstSize
-              in int peakRate, in int peakBurstSize);
-    getParams(out int committedRate, out int committedBurstSize
-              out int peakRate, out int peakBurstSize);
+    void setParams<S>(in S committedRate, out S committedBurstSize
+                      in S peakRate, in S peakBurstSize);
+    void getParams<S>(out S committedRate, out S committedBurstSize
+                      out S peakRate, out S peakBurstSize);
   }
   */
 }
@@ -478,20 +469,55 @@ extern Random<T> {
 /**
  *  Action profiles are used as table implementation attributes
  *
- * \TODO: these need work to understand how they function and what
- * does setup implies.
+ * Action profiles implement a mechanism to populate table entries
+ * with actions and action data. The only data plane operation
+ * required is to instantiate this extern. When the control plane adds
+ * entries (members) into the extern, they are essentially populating
+ * the corresponding table entries.
  */
-extern ActionProfile<KeyT> {
-  /// Constructor
+extern ActionProfile {
+  /// Construct an action profile of 'size' entries
   ActionProfile(bit<32> size);
-
-  /// the selection function
-  KeyT action_selector(HashAlgorithm algo, bit<32> size, bit<32> outputWidth);
 
   /*
   @ControlPlaneAPI
   {
-    entry_handle_t entry(in key_t key, in actionRef action, in action_data);
+     entry_handle add_member    (action_ref, action_data);
+     void         delete_member (entry_handle);
+     entry_handle modify_member (entry_handle, action_ref, action_data);
+  }
+  */
+}
+
+/**
+ *  Action selectors are used as table implementation attributes
+ *
+ * Action selectors implement another mechanism to populate table
+ * entries with actions and action data. They are similar to action
+ * profiles, with additional support to define groups of
+ * entries. Action selectors require a hash algorithm to select
+ * members in a group. The only data plane operation required is to
+ * instantiate this extern. When the control plane adds entries
+ * (members) into the extern, they are essentially populating the
+ * corresponding table entries.
+ */
+extern ActionSelector {
+  /// Construct an action selector of 'size' entries
+  /// @param algo hash algorithm to select a member in a group
+  /// @param size number of entries in the action selector
+  /// @param outputWidth size of the key
+  ActionSelector(HashAlgorithm algo, bit<32> size, bit<32> outputWidth);
+
+  /*
+  @ControlPlaneAPI
+  {
+     entry_handle add_member        (action_ref, action_data);
+     void         delete_member     (entry_handle);
+     entry_handle modify_member     (entry_handle, action_ref, action_data);
+     group_handle create_group      ();
+     void         delete_group      (group_handle);
+     void         add_to_group      (group_handle, entry_handle);
+     void         delete_from_group (group_handle, entry_handle);
   }
   */
 }
@@ -503,7 +529,7 @@ extern ActionProfile<KeyT> {
 /// stream (copying or redirecting).
 extern Digest<T> {
   Digest(PortId_t receiver); /// define a digest stream to receiver
-  void emit(in T data);           /// emit data into the stream
+  void emit(in T data);      /// emit data into the stream
 
   /*
   @ControlPlaneAPI
