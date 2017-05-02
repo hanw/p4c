@@ -64,13 +64,10 @@ int main(int argc, char *const argv[]) {
         return 1;
 
     BMV2::Backend backend(&midEnd.enumMap);
-    backend.run(toplevel);
+    backend.addDebugHook(hook);
+    backend.process(toplevel);
+    backend.convert(toplevel);
 
-//    BMV2::JsonConverter converter(options);
-//    converter.convert(&midEnd.refMap, &midEnd.typeMap, toplevel, &midEnd.enumMap);
-//    if (::errorCount() > 0)
-//        return 1;
-//
     if (!options.outputFile.isNullOrEmpty()) {
         std::ostream* out = openFile(options.outputFile, false);
         if (out != nullptr) {
