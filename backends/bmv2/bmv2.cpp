@@ -74,10 +74,8 @@ int main(int argc, char *const argv[]) {
     if (::errorCount() > 0 || toplevel == nullptr)
         return 1;
 
-=======
-    BMV2::JsonConverter converter(options);
+    BMV2::Backend backend(&midEnd.enumMap);
     try {
-        BMV2::Backend backend(&midEnd.enumMap);
         backend.addDebugHook(hook);
         backend.process(toplevel);
         backend.convert(toplevel);
@@ -87,7 +85,6 @@ int main(int argc, char *const argv[]) {
     }
     if (::errorCount() > 0)
         return 1;
->>>>>>> 0bfc94ee... adds an unimplemented exception and exception catching in drivers (#555)
 
     if (!options.outputFile.isNullOrEmpty()) {
         std::ostream* out = openFile(options.outputFile, false);
