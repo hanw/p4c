@@ -78,7 +78,7 @@ int main(int argc, char *const argv[]) {
     try {
         backend.addDebugHook(hook);
         backend.process(toplevel);
-        backend.convert(toplevel);
+        backend.convert(toplevel, options);
     } catch (const Util::P4CExceptionBase &bug) {
         std::cerr << bug.what() << std::endl;
         return 1;
