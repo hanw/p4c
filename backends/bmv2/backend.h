@@ -105,7 +105,6 @@ class Backend : public PassManager {
     void convertActionBody(const IR::Vector<IR::StatOrDecl>* body, Util::JsonArray* result);
     void createActions(Util::JsonArray* actions);
     void createMetadata();
-    void createFieldAliases(const char *remapFile);
     void genExternMethod(Util::JsonArray* result, P4::ExternMethod *em);
     void padScalars();
 
