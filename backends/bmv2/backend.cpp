@@ -35,6 +35,23 @@ void Backend::createJsonType(const IR::Type_StructLike *st) {
     auto fields = new Util::JsonArray();
     pushFields(st, fields);
     auto id = bm->add_header_type(name, fields);
+#ifndef PSA
+    LOG1("... creating aliases for metadata fields " << st);
+    for (auto f : st->fields) {
+        if (auto name_annotation = f->getAnnotation("name")) {
+            auto container = new Util::JsonArray();
+            auto alias = new Util::JsonArray();
+            auto target_name = name_annotation->expr.front()->to<IR::StringLiteral>()->value;
+            LOG2("field alias " << target_name);
+            container->append(target_name); // name on target
+            // break down the alias into meta . field
+            alias->append(name);      // metadata name
+            alias->append(f->name);   // field name
+            container->append(alias);
+            field_aliases->append(container);
+        }
+    }
+#endif
 }
 
 // TODO(hanw): move to header.cpp
@@ -337,22 +354,6 @@ void Backend::createMetadata() {
     bm->add_metadata("standard_metadata", "standard_metadata");
 }
 
-// TODO(hanw): clean up
-void Backend::createFieldAliases(const char *remapFile) {
-    Arch::MetadataRemapT *remap = Arch::readMap(remapFile);
-    LOG1("Metadata alias map of size = " << remap->size());
-    for (auto r : *remap) {
-        auto container = new Util::JsonArray();
-        auto alias = new Util::JsonArray();
-        container->append(r.second);
-        // break down the alias into meta . field
-        auto meta = r.first.before(r.first.find('.'));
-        alias->append(meta);
-        alias->append(r.first.substr(meta.size()+1));
-        container->append(alias);
-        field_aliases->append(container);
-    }
-}
 
 // TODO(hanw): remove
 void Backend::addErrors(Util::JsonArray* errors) {
@@ -371,7 +372,6 @@ void Backend::process(const IR::ToplevelBlock* tb) {
     addPasses({
         new DiscoverStructure(&structure),
         new ErrorCodesVisitor(&errorCodesMap),
-        // new MetadataRemap(this, Arch::readMap(mapfile)),
     });
     tb->getProgram()->apply(*this);
 }
@@ -398,7 +398,6 @@ void Backend::convert(const IR::ToplevelBlock* tb, CompilerOptions& options) {
     checksums = mkArrayField(&toplevel, "checksums");
     force_arith = mkArrayField(&toplevel, "force_arith");
     externs = mkArrayField(&toplevel, "extern_instances");
-    constexpr char metadata_remap_file[] = "p4include/p4d2model_bmss_meta.map";
     field_aliases = mkArrayField(&toplevel, "field_aliases");
 
     // This visitor is used in multiple passes to convert expression to json
@@ -419,8 +418,6 @@ void Backend::convert(const IR::ToplevelBlock* tb, CompilerOptions& options) {
         new VisitFunctor([this](){ createActions(actions); }),
         new ConvertControl(this),
         new ConvertDeparser(this),
-        // new VisitFunctor([this, metadata_remap_file](){
-        //     createFieldAliases(metadata_remap_file); }),
     };
     codegen_passes.setName("CodeGen");
     tb->getMain()->apply(codegen_passes);
