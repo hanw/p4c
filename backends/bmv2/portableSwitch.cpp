@@ -360,8 +360,48 @@ bool InspectPsaProgram::preorder(const IR::Parameter* param) {
 }
 
 bool InspectPsaProgram::preorder(const IR::P4Parser* parser) {
-    // search std::map<IR::Node*, cstring> nameMap for name in json
-    // pinfo->parsers.emplace(name, parser);
+    auto parser_id = json->add_parser("parser");
+
+    for (auto s : parser->parserLocals) {
+        if (auto inst = s->to<IR::P4ValueSet>()) {
+            auto bitwidth = inst->elementType->width_bits();
+            auto name = inst->controlPlaneName();
+            json->add_parse_vset(name, bitwidth);
+        }
+    }
+
+    // convert parse state
+    for (auto state : parser->states) {
+        if (state->name == IR::ParserState::reject || state->name == IR::ParserState::accept)
+            continue;
+        auto state_id = json->add_parser_state(parser_id, state->controlPlaneName());
+        // convert statements
+        for (auto s : state->components) {
+            auto op = convertParserStatement(s);
+            json->add_parser_op(state_id, op);
+        }
+        // convert transitions
+        if (state->selectExpression != nullptr) {
+            if (state->selectExpression->is<IR::SelectExpression>()) {
+                auto expr = state->selectExpression->to<IR::SelectExpression>();
+                auto transitions = convertSelectExpression(expr);
+                for (auto transition : transitions) {
+                    json->add_parser_transition(state_id, transition);
+                }
+                auto key = convertSelectKey(expr);
+                json->add_parser_transition_key(state_id, key);
+            } else if (state->selectExpression->is<IR::PathExpression>()) {
+                auto expr = state->selectExpression->to<IR::PathExpression>();
+                auto transition = convertPathExpression(expr);
+                json->add_parser_transition(state_id, transition);
+            } else {
+                BUG("%1%: unexpected selectExpression", state->selectExpression);
+            }
+        } else {
+            auto transition = createDefaultTransition();
+            json->add_parser_transition(state_id, transition);
+        }
+    }
     return false;
 }
 
