@@ -361,15 +361,7 @@ bool InspectPsaProgram::preorder(const IR::Parameter* param) {
 
 bool InspectPsaProgram::preorder(const IR::P4Parser* parser) {
 
-    //auto parser_id = json->add_parser("parser");
-
-    for (auto s : parser->parserLocals) {
-        if (auto inst = s->to<IR::P4ValueSet>()) {
-            auto bitwidth = inst->elementType->width_bits();
-            auto name = inst->controlPlaneName();
-            cout<<name;
-            //json->add_parse_vset(name, bitwidth);
-        }
+    LOG1("parser " << parser);
     }
 
 
