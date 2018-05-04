@@ -367,7 +367,7 @@ bool InspectPsaProgram::preorder(const IR::P4Parser* parser) {
         if (auto inst = s->to<IR::P4ValueSet>()) {
             auto bitwidth = inst->elementType->width_bits();
             auto name = inst->controlPlaneName();
-            dump name;
+            dump(name);
             #json->add_parse_vset(name, bitwidth);
         }
     }
