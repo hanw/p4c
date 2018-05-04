@@ -360,8 +360,11 @@ bool InspectPsaProgram::preorder(const IR::Parameter* param) {
 }
 
 bool InspectPsaProgram::preorder(const IR::P4Parser* parser) {
-    // search std::map<IR::Node*, cstring> nameMap for name in json
-    // pinfo->parsers.emplace(name, parser);
+
+    LOG1("parser " << parser);
+    
+
+
     return false;
 }
 

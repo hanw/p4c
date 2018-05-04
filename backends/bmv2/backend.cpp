@@ -317,6 +317,7 @@ Backend::convert_simple_switch(const IR::ToplevelBlock* tlb, BMV2Options& option
 
     toplevel = evaluator->getToplevelBlock();
     toplevel->apply(*new BuildResourceMap(this));
+    dump(toplevel);
 
     jsonTop.emplace("program", options.file);
     jsonTop.emplace("__meta__", json->meta);

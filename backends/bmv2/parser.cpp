@@ -22,6 +22,7 @@ namespace BMV2 {
 // TODO(hanw) refactor this function
 Util::IJson* ParserConverter::convertParserStatement(const IR::StatOrDecl* stat) {
     auto result = new Util::JsonObject();
+    dump(stat);
     auto params = mkArrayField(result, "parameters");
     if (stat->is<IR::AssignmentStatement>()) {
         auto assign = stat->to<IR::AssignmentStatement>();
