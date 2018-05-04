@@ -362,7 +362,7 @@ bool InspectPsaProgram::preorder(const IR::Parameter* param) {
 bool InspectPsaProgram::preorder(const IR::P4Parser* parser) {
 
     LOG1("parser " << parser);
-    }
+    
 
 
     return false;
