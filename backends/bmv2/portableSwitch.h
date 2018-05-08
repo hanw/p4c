@@ -89,7 +89,8 @@ class PsaProgramStructure {
 
 public:
     PsaProgramStructure(ReferenceMap* refMap, TypeMap* typeMap)
-        : refMap(refMap), typeMap(typeMap) {
+        : refMap(refMap), typeMap(typeMap), conv(backend->getExpressionConverter()),
+    corelib(P4::P4CoreLibrary::instance) {
         CHECK_NULL(refMap);
         CHECK_NULL(typeMap);
         json = new BMV2::JsonObjects();
