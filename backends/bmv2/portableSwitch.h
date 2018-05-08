@@ -50,7 +50,7 @@ class PsaProgramStructure {
     TypeMap* typeMap;
     PsaExpressionConverter* conv;
     P4::P4CoreLibrary&   corelib;
-    Backend*           backend;
+    Backend* backend;
 
  public:
     // We place scalar user metadata fields (i.e., bit<>, bool)
