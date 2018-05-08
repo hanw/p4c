@@ -33,6 +33,8 @@ limitations under the License.
 
 namespace P4 {
 
+class Backend;
+
 enum gress_t {
     INGRESS,
     EGRESS
