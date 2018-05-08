@@ -31,6 +31,7 @@ limitations under the License.
 #include "psaExpression.h"
 #include "JsonObjects.h"
 
+
 namespace P4 {
 
 class Backend;
@@ -92,7 +93,7 @@ class PsaProgramStructure {
 
 public:
     PsaProgramStructure(ReferenceMap* refMap, TypeMap* typeMap)
-        : refMap(refMap), typeMap(typeMap), conv(backend->getExpressionConverter()),
+        : refMap(refMap), typeMap(typeMap), conv(conv->getExpressionConverter()),
     corelib(P4::P4CoreLibrary::instance) {
         CHECK_NULL(refMap);
         CHECK_NULL(typeMap);
@@ -168,6 +169,7 @@ class InspectPsaProgram : public Inspector {
     void addHeaderType(const IR::Type_StructLike *st);
     void addHeaderInstance(const IR::Type_StructLike *st, cstring name);
     bool preorder(const IR::Parameter* parameter) override;
+
 };
 
 class ConvertToJson : public Inspector {

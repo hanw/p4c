@@ -102,7 +102,7 @@ void PsaExpressionConverter::postorder(const IR::BoolLiteral* expression)  {
 
 void PsaExpressionConverter::postorder(const IR::MethodCallExpression* expression)  {
     auto instance = P4::MethodInstance::resolve(expression,
-                                                backend->getRefMap(), backend->getTypeMap());
+                                                refMap, typeMap);
     if (instance->is<P4::ExternMethod>()) {
         auto em = instance->to<P4::ExternMethod>();
         if (em->originalExternType->name == corelib.packetIn.name &&
@@ -110,7 +110,7 @@ void PsaExpressionConverter::postorder(const IR::MethodCallExpression* expressio
             BUG_CHECK(expression->typeArguments->size() == 1,
                       "Expected 1 type parameter for %1%", em->method);
             auto targ = expression->typeArguments->at(0);
-            auto typearg = backend->getTypeMap()->getTypeType(targ, true);
+            auto typearg = typeMap->getTypeType(targ, true);
             int width = typearg->width_bits();
             BUG_CHECK(width > 0, "%1%: unknown width", targ);
             auto j = new Util::JsonObject();
@@ -124,7 +124,7 @@ void PsaExpressionConverter::postorder(const IR::MethodCallExpression* expressio
     } else if (instance->is<P4::BuiltInMethod>()) {
         auto bim = instance->to<P4::BuiltInMethod>();
         if (bim->name == IR::Type_Header::isValid) {
-            auto type = backend->getTypeMap()->getType(bim->appliedTo, true);
+            auto type = typeMap->getType(bim->appliedTo, true);
             auto result = new Util::JsonObject();
             auto l = get(bim->appliedTo);
             if (type->is<IR::Type_HeaderUnion>()) {
@@ -190,7 +190,7 @@ void PsaExpressionConverter::postorder(const IR::ArrayIndex* expression)  {
     if (expression->left->is<IR::Member>()) {
         // This is a header part of the parameters
         auto mem = expression->left->to<IR::Member>();
-        auto parentType = backend->getTypeMap()->getType(mem->expr, true);
+        auto parentType = typeMap->getType(mem->expr, true);
         BUG_CHECK(parentType->is<IR::Type_StructLike>(), "%1%: expected a struct", parentType);
         auto st = parentType->to<IR::Type_StructLike>();
         auto field = st->getField(mem->member);
@@ -220,11 +220,11 @@ PsaExpressionConverter::enclosingParamReference(const IR::Expression* expression
         return nullptr;
 
     auto pe = expression->to<IR::PathExpression>();
-    auto decl = backend->getRefMap()->getDeclaration(pe->path, true);
+    auto decl = refMap->getDeclaration(pe->path, true);
     auto param = decl->to<IR::Parameter>();
     if (param == nullptr)
         return param;
-    if (backend->getStructure().nonActionParameters.count(param) > 0)
+    if (getStructure().nonActionParameters.count(param) > 0)
         return param;
     return nullptr;
 }
@@ -233,9 +233,9 @@ void PsaExpressionConverter::postorder(const IR::Member* expression)  {
     // TODO: deal with references that return bool
     auto result = new Util::JsonObject();
 
-    auto parentType = backend->getTypeMap()->getType(expression->expr, true);
+    auto parentType = typeMap->getType(expression->expr, true);
     cstring fieldName = expression->member.name;
-    auto type = backend->getTypeMap()->getType(expression, true);
+    auto type = typeMap->getType(expression, true);
 
     if (parentType->is<IR::Type_StructLike>()) {
         auto st = parentType->to<IR::Type_StructLike>();
@@ -250,7 +250,7 @@ void PsaExpressionConverter::postorder(const IR::Member* expression)  {
             // this deals with constants that have type 'error'
             result->emplace("type", "hexstr");
             auto decl = type->to<IR::Type_Error>()->getDeclByName(expression->member.name);
-            ErrorCodesMap errCodes = backend->getErrorCodesMap();
+            ErrorCodesMap errCodes = getErrorCodesMap();
             auto errorValue = errCodes.at(decl);
             result->emplace("value", Util::toString(errorValue));
             map.emplace(expression, result);
@@ -260,21 +260,19 @@ void PsaExpressionConverter::postorder(const IR::Member* expression)  {
 
     auto param = enclosingParamReference(expression->expr);
     if (param != nullptr) {
-        if (backend->isStandardMetadataParameter(param)) {
-            result->emplace("type", "field");
-            auto e = mkArrayField(result, "value");
-            e->append(BMV2::V1ModelProperties::jsonMetadataParameterName);
-            e->append(fieldName);
-        } else {
-            if (type->is<IR::Type_Stack>()) {
-                result->emplace("type", "header_stack");
-                result->emplace("value", fieldName);
-            } else if (type->is<IR::Type_HeaderUnion>()) {
-                result->emplace("type", "header_union");
-                result->emplace("value", fieldName);
-            } else if (parentType->is<IR::Type_HeaderUnion>()) {
-                auto l = get(expression->expr);
-                cstring nestedField = fieldName;
+        if (type->is<IR::Type_Stack>()) {
+            result->emplace("type", "header_stack");
+            result->emplace("value", fieldName);
+        }
+
+        else if (type->is<IR::Type_HeaderUnion>()) {
+             result->emplace("type", "header_union");
+             result->emplace("value", fieldName);
+        }
+
+        else if (parentType->is<IR::Type_HeaderUnion>()) {
+             auto l = get(expression->expr);
+             cstring nestedField = fieldName;
                 if (l->is<Util::JsonObject>()) {
                     auto lv = l->to<Util::JsonObject>()->get("value");
                     if (lv->is<Util::JsonValue>()) {
@@ -283,53 +281,60 @@ void PsaExpressionConverter::postorder(const IR::Member* expression)  {
                         nestedField = prefix + "." + nestedField;
                     }
                 }
-                result->emplace("type", "header");
-                result->emplace("value", nestedField);
-            } else if (parentType->is<IR::Type_StructLike>() &&
+             result->emplace("type", "header");
+             result->emplace("value", nestedField);
+        }
+
+        else if (parentType->is<IR::Type_StructLike>() &&
                        (type->is<IR::Type_Bits>() || type->is<IR::Type_Error>() ||
                         type->is<IR::Type_Boolean>())) {
-                auto field = parentType->to<IR::Type_StructLike>()->getField(
-                    expression->member);
-                LOG3("looking up field " << field);
-                CHECK_NULL(field);
-                auto name = ::get(backend->scalarMetadataFields, field);
-                CHECK_NULL(name);
-                if (type->is<IR::Type_Bits>() || type->is<IR::Type_Error>() ||
-                    leftValue || simpleExpressionsOnly) {
-                    result->emplace("type", "field");
-                    auto e = mkArrayField(result, "value");
-                    e->append(scalarsName);
-                    e->append(name);
-                } else if (type->is<IR::Type_Boolean>()) {
+             auto field = parentType->to<IR::Type_StructLike>()->getField(expression->member);
+             LOG3("looking up field " << field);
+             CHECK_NULL(field);
+             auto name = ::get(programstructure->scalarMetadataFields, field);
+             CHECK_NULL(name);
+             if (type->is<IR::Type_Bits>() || type->is<IR::Type_Error>() ||
+                leftValue || simpleExpressionsOnly) {
+                result->emplace("type", "field");
+                auto e = mkArrayField(result, "value");
+                e->append(scalarsName);
+                e->append(name);
+             }
+
+             else if (type->is<IR::Type_Boolean>()) {
                     // Boolean variables are stored as ints, so we
                     // have to insert a conversion when reading such a
                     // variable
-                    result->emplace("type", "expression");
-                    auto e = new Util::JsonObject();
-                    result->emplace("value", e);
-                    e->emplace("op", "d2b");  // data to Boolean cast
-                    e->emplace("left", Util::JsonValue::null);
-                    auto r = new Util::JsonObject();
-                    e->emplace("right", r);
+                result->emplace("type", "expression");
+                auto e = new Util::JsonObject();
+                result->emplace("value", e);
+                e->emplace("op", "d2b");  // data to Boolean cast
+                e->emplace("left", Util::JsonValue::null);
+                auto r = new Util::JsonObject();
+                e->emplace("right", r);
 
-                    r->emplace("type", "field");
-                    auto a = mkArrayField(r, "value");
-                    a->append(scalarsName);
-                    a->append(name);
-                }
-            } else {
+                r->emplace("type", "field");
+                auto a = mkArrayField(r, "value");
+                a->append(scalarsName);
+                a->append(name);
+             }
+
+             else {
                 // This may be wrong, but the caller will handle it properly
                 // (e.g., this can be a method, such as packet.lookahead)
                 result->emplace("type", "header");
                 result->emplace("value", fieldName);
-            }
+             }
         }
-    } else {
+
+    }
+
+    else {
         bool done = false;
         if (expression->expr->is<IR::Member>()) {
             // array.next.field => type: "stack_field", value: [ array, field ]
             auto mem = expression->expr->to<IR::Member>();
-            auto memtype = backend->getTypeMap()->getType(mem->expr, true);
+            auto memtype = typeMap->getType(mem->expr, true);
             if (memtype->is<IR::Type_Stack>() && mem->member == IR::Type_Stack::last) {
                 auto l = get(mem->expr);
                 CHECK_NULL(l);
@@ -545,11 +550,11 @@ void PsaExpressionConverter::postorder(const IR::Operation_Unary* expression)  {
 
 void PsaExpressionConverter::postorder(const IR::PathExpression* expression)  {
     // This is useful for action bodies mostly
-    auto decl = backend->getRefMap()->getDeclaration(expression->path, true);
+    auto decl = refMap->getDeclaration(expression->path, true);
     if (auto param = decl->to<IR::Parameter>()) {
-        if (backend->getStructure().nonActionParameters.find(param) !=
-            backend->getStructure().nonActionParameters.end()) {
-            auto type = backend->getTypeMap()->getType(param, true);
+        if (getStructure().nonActionParameters.find(param) !=
+            getStructure().nonActionParameters.end()) {
+            auto type = typeMap->getType(param, true);
             if (type->is<IR::Type_StructLike>()) {
                 auto result = new Util::JsonObject();
                 result->emplace("type", "header");
@@ -562,13 +567,13 @@ void PsaExpressionConverter::postorder(const IR::PathExpression* expression)  {
         }
         auto result = new Util::JsonObject();
         result->emplace("type", "runtime_data");
-        unsigned paramIndex = ::get(&backend->getStructure().index, param);
+        unsigned paramIndex = ::get(&getStructure().index, param);
         result->emplace("value", paramIndex);
         map.emplace(expression, result);
     } else if (auto var = decl->to<IR::Declaration_Variable>()) {
         LOG3("Variable to json " << var);
         auto result = new Util::JsonObject();
-        auto type = backend->getTypeMap()->getType(var, true);
+        auto type = typeMap->getType(var, true);
         if (type->is<IR::Type_StructLike>()) {
             result->emplace("type", "header");
             result->emplace("value", var->name);
@@ -630,7 +635,7 @@ Util::IJson*
 PsaExpressionConverter::convert(const IR::Expression* e, bool doFixup, bool wrap, bool convertBool) {
     const IR::Expression *expr = e;
     if (doFixup) {
-        ArithmeticFixup af(backend->getTypeMap());
+        ArithmeticFixup af(typeMap);
         auto r = e->apply(af);
         CHECK_NULL(r);
         expr = r->to<IR::Expression>();
@@ -675,7 +680,7 @@ PsaExpressionConverter::convert(const IR::Expression* e, bool doFixup, bool wrap
 Util::IJson* PsaExpressionConverter::convertLeftValue(const IR::Expression* e) {
     leftValue = true;
     const IR::Expression *expr = e;
-    ArithmeticFixup af(backend->getTypeMap());
+    ArithmeticFixup af(typeMap);
     auto r = e->apply(af);
     CHECK_NULL(r);
     expr = r->to<IR::Expression>();
