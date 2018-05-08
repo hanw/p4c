@@ -27,6 +27,9 @@ limitations under the License.
 #include "frontends/p4/methodInstance.h"
 #include "frontends/p4/typeMap.h"
 #include "helpers.h"
+#include "backend.h"
+#include "expression.h"
+#include "JsonObjects.h"
 
 namespace P4 {
 
@@ -45,6 +48,8 @@ class PsaProgramStructure {
     BMV2::JsonObjects*   json;     // output json data structure
     ReferenceMap* refMap;
     TypeMap* typeMap;
+    ExpressionConverter* conv;
+    P4::P4CoreLibrary&   corelib;
 
  public:
     // We place scalar user metadata fields (i.e., bit<>, bool)
@@ -92,6 +97,7 @@ public:
 
     const IR::P4Program* create(const IR::P4Program* program);
     void createStructLike(const IR::Type_StructLike* st);
+    Util::IJson* convertParserStatement(const IR::StatOrDecl* stat);
     void createTypes();
     void createHeaders();
     void createParsers();

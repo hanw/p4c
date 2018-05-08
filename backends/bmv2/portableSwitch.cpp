@@ -30,6 +30,153 @@ const IR::P4Program* PsaProgramStructure::create(const IR::P4Program* program) {
     return program;
 }
 
+Util::IJson* PsaProgramStructure::convertParserStatement(const IR::StatOrDecl* stat) {
+    auto result = new Util::JsonObject();
+    auto params = mkArrayField(result, "parameters");
+    if (stat->is<IR::AssignmentStatement>()) {
+        auto assign = stat->to<IR::AssignmentStatement>();
+        auto type = typeMap->getType(assign->left, true);
+        cstring operation = Backend::jsonAssignment(type, true);
+        result->emplace("op", operation);
+        auto l = conv->convertLeftValue(assign->left);
+        bool convertBool = type->is<IR::Type_Boolean>();
+        auto r = conv->convert(assign->right, true, true, convertBool);
+        params->append(l);
+        params->append(r);
+
+        if (operation != "set") {
+            // must wrap into another outer object
+            auto wrap = new Util::JsonObject();
+            wrap->emplace("op", "primitive");
+            auto params = mkParameters(wrap);
+            params->append(result);
+            result = wrap;
+        }
+
+        return result;
+    } else if (stat->is<IR::MethodCallStatement>()) {
+        auto mce = stat->to<IR::MethodCallStatement>()->methodCall;
+        auto minst = P4::MethodInstance::resolve(mce, refMap, typeMap);
+        if (minst->is<P4::ExternMethod>()) {
+            auto extmeth = minst->to<P4::ExternMethod>();
+            if (extmeth->method->name.name == corelib.packetIn.extract.name) {
+                int argCount = mce->arguments->size();
+                if (argCount == 1 || argCount == 2) {
+                    cstring ename = argCount == 1 ? "extract" : "extract_VL";
+                    result->emplace("op", ename);
+                    auto arg = mce->arguments->at(0);
+                    auto argtype = typeMap->getType(arg->expression, true);
+                    if (!argtype->is<IR::Type_Header>()) {
+                        ::error("%1%: extract only accepts arguments with header types, not %2%",
+                                arg, argtype);
+                        return result;
+                    }
+                    auto param = new Util::JsonObject();
+                    params->append(param);
+                    cstring type;
+                    Util::IJson* j = nullptr;
+
+                    if (arg->expression->is<IR::Member>()) {
+                        auto mem = arg->expression->to<IR::Member>();
+                        auto baseType = typeMap->getType(mem->expr, true);
+                        if (baseType->is<IR::Type_Stack>()) {
+                            if (mem->member == IR::Type_Stack::next) {
+                                type = "stack";
+                                j = conv->convert(mem->expr);
+                            } else {
+                                BUG("%1%: unsupported", mem);
+                            }
+                        }
+                    }
+                    if (j == nullptr) {
+                        type = "regular";
+                        j = conv->convert(arg->expression);
+                    }
+                    auto value = j->to<Util::JsonObject>()->get("value");
+                    param->emplace("type", type);
+                    param->emplace("value", value);
+
+                    if (argCount == 2) {
+                        auto arg2 = mce->arguments->at(1);
+                        auto jexpr = conv->convert(arg2->expression, true, false);
+                        auto rwrap = new Util::JsonObject();
+                        // The spec says that this must always be wrapped in an expression
+                        rwrap->emplace("type", "expression");
+                        rwrap->emplace("value", jexpr);
+                        params->append(rwrap);
+                    }
+                    return result;
+                }
+            }
+        } else if (minst->is<P4::ExternFunction>()) {
+            auto extfn = minst->to<P4::ExternFunction>();
+            if (extfn->method->name.name == IR::ParserState::verify) {
+                result->emplace("op", "verify");
+                BUG_CHECK(mce->arguments->size() == 2, "%1%: Expected 2 arguments", mce);
+                {
+                    auto cond = mce->arguments->at(0);
+                    // false means don't wrap in an outer expression object, which is not needed
+                    // here
+                    auto jexpr = conv->convert(cond->expression, true, false);
+                    params->append(jexpr);
+                }
+                {
+                    auto error = mce->arguments->at(1);
+                    // false means don't wrap in an outer expression object, which is not needed
+                    // here
+                    auto jexpr = conv->convert(error->expression, true, false);
+                    params->append(jexpr);
+                }
+                return result;
+            }
+        } else if (minst->is<P4::BuiltInMethod>()) {
+            /* example result:
+             {
+                "parameters" : [
+                {
+                  "op" : "add_header",
+                  "parameters" : [{"type" : "header", "value" : "ipv4"}]
+                }
+              ],
+              "op" : "primitive"
+            } */
+            result->emplace("op", "primitive");
+
+            auto bi = minst->to<P4::BuiltInMethod>();
+            cstring primitive;
+            auto paramsValue = new Util::JsonObject();
+            params->append(paramsValue);
+
+            auto pp = mkArrayField(paramsValue, "parameters");
+            auto obj = conv->convert(bi->appliedTo);
+            pp->append(obj);
+
+            if (bi->name == IR::Type_Header::setValid) {
+                primitive = "add_header";
+            } else if (bi->name == IR::Type_Header::setInvalid) {
+                primitive = "remove_header";
+            } else if (bi->name == IR::Type_Stack::push_front ||
+                       bi->name == IR::Type_Stack::pop_front) {
+                if (bi->name == IR::Type_Stack::push_front)
+                    primitive = "push";
+                else
+                    primitive = "pop";
+
+                BUG_CHECK(mce->arguments->size() == 1, "Expected 1 argument for %1%", mce);
+                auto arg = conv->convert(mce->arguments->at(0)->expression);
+                pp->append(arg);
+            } else {
+                BUG("%1%: Unexpected built-in method", bi->name);
+            }
+
+            paramsValue->emplace("op", primitive);
+            return result;
+        }
+    }
+    ::error("%1%: not supported in parser on this target", stat);
+    return result;
+}
+
 void PsaProgramStructure::createStructLike(const IR::Type_StructLike* st) {
     CHECK_NULL(st);
     cstring name = st->controlPlaneName();
@@ -156,7 +303,21 @@ void PsaProgramStructure::createParsers() {
             }
         }
 
+        // convert parse state
+        for (auto state : kv.second->states) {
+            if (state->name == IR::ParserState::reject || state->name == IR::ParserState::accept)
+                continue;
+            auto state_id = json->add_parser_state(parser_id, state->controlPlaneName());
+            // convert statements
+            for (auto s : state->components) {
+                auto op = convertParserStatement(s);
+                json->add_parser_op(state_id, op);
+            }
+
+        }
+
     }
+
 }
 
 
