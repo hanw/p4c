@@ -146,7 +146,7 @@ void PsaProgramStructure::createHeaders() {
 void PsaProgramStructure::createParsers() {
     // add parsers to json
     for (auto kv : parsers) {
-        LOG1("parser " << kv.first << kv.second);
+        LOG1("parser rakesh " << kv.first << kv.second);
     }
 }
 
