@@ -21,6 +21,7 @@ limitations under the License.
 #include "lower.h"
 #include "lib/gmputil.h"
 #include "lib/json.h"
+#include "lib/error.h"
 #include "frontends/common/resolveReferences/referenceMap.h"
 #include "frontends/p4/coreLibrary.h"
 #include "frontends/p4/enumInstance.h"
@@ -28,10 +29,10 @@ limitations under the License.
 #include "frontends/p4/typeMap.h"
 #include "helpers.h"
 #include "backend.h"
+#include "analyzer.h"
+#include "portableSwitch.h"
 
 namespace BMV2 {
-
-class Backend;
 
 /**
    Inserts casts and narrowing operations to implement correctly the semantics of
@@ -54,9 +55,13 @@ class ArithmeticFixup : public Transform {
 };
 
 class PsaExpressionConverter : public Inspector {
-    Backend*           backend;
+    PsaProgramStructure*           psaprogramstructure;
     P4::P4CoreLibrary& corelib;
     cstring            scalarsName;
+    ReferenceMap* refMap;
+    TypeMap* typeMap;
+    ProgramParts    structure;
+    ErrorCodesMap   errorCodesMap;
 
     /// after translating an Expression to JSON, save the result to 'map'.
     std::map<const IR::Expression*, Util::IJson*> map;
@@ -67,8 +72,8 @@ class PsaExpressionConverter : public Inspector {
     bool withConstantWidths{false};
 
  public:
-    PsaExpressionConverter(Backend *backend, cstring scalarsName) :
-            backend(backend), corelib(P4::P4CoreLibrary::instance),
+    PsaExpressionConverter(PsaProgramStructure psaprogramstructure, ReferenceMap* refMap, TypeMap* typeMap, cstring scalarsName) :
+            psaprogramstructure(psaprogramstructure), refMap(refMap), typeMap(typeMap), corelib(P4::P4CoreLibrary::instance),
             scalarsName(scalarsName), leftValue(false), simpleExpressionsOnly(false) {}
     /// If this is 'true' we fail to convert complex expressions.
     /// This is used for table key expressions, for example.
@@ -78,6 +83,8 @@ class PsaExpressionConverter : public Inspector {
     const IR::Parameter* enclosingParamReference(const IR::Expression* expression);
     Util::IJson* get(const IR::Expression* expression) const;
     Util::IJson* fixLocal(Util::IJson* json);
+    ProgramParts & getStructure() { return structure; }
+    ErrorCodesMap & getErrorCodesMap()  { return errorCodesMap; }
 
     /**
      * Convert an expression into JSON
