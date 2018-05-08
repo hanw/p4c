@@ -48,7 +48,7 @@ class PsaProgramStructure {
     BMV2::JsonObjects*   json;     // output json data structure
     ReferenceMap* refMap;
     TypeMap* typeMap;
-    ExpressionConverter* conv;
+    PsaExpressionConverter* conv;
     P4::P4CoreLibrary&   corelib;
 
  public:
