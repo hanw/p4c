@@ -28,7 +28,7 @@ limitations under the License.
 #include "frontends/p4/typeMap.h"
 #include "helpers.h"
 #include "backend.h"
-#include "expression.h"
+#include "PsaExpression.h"
 #include "JsonObjects.h"
 
 namespace P4 {
