@@ -93,7 +93,7 @@ class PsaProgramStructure {
 
 public:
     PsaProgramStructure(ReferenceMap* refMap, TypeMap* typeMap)
-        : refMap(refMap), typeMap(typeMap), conv(conv->getExpressionConverter()),
+        : refMap(refMap), typeMap(typeMap), conv(conv),
     corelib(P4::P4CoreLibrary::instance) {
         CHECK_NULL(refMap);
         CHECK_NULL(typeMap);
