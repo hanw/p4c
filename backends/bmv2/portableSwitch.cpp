@@ -149,14 +149,16 @@ void PsaProgramStructure::createParsers() {
         LOG1("parser" << kv.first << kv.second);
         auto parser_id = json->add_parser(kv.first);
         for (auto s : kv.second->parserLocals) {
-        if (auto inst = s->to<IR::P4ValueSet>()) {
-            auto bitwidth = inst->elementType->width_bits();
-            auto name = inst->controlPlaneName();
-            json->add_parse_vset(name, bitwidth);
+            if (auto inst = s->to<IR::P4ValueSet>()) {
+                auto bitwidth = inst->elementType->width_bits();
+                auto name = inst->controlPlaneName();
+                json->add_parse_vset(name, bitwidth);
+            }
         }
 
     }
 }
+
 
 void PsaProgramStructure::createExterns() {
     // add parse_vsets to json
