@@ -92,7 +92,7 @@ class PsaProgramStructure {
     ordered_map<cstring, cstring> field_aliases;
 
 public:
-    PsaProgramStructure(ReferenceMap* refMap, TypeMap* typeMap)
+    PsaProgramStructure(ReferenceMap* refMap, TypeMap* typeMap, PsaExpressionConverter* conv)
         : refMap(refMap), typeMap(typeMap), conv(conv),
     corelib(P4::P4CoreLibrary::instance) {
         CHECK_NULL(refMap);
