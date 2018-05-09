@@ -33,12 +33,12 @@ const IR::P4Program* PsaProgramStructure::create(const IR::P4Program* program) {
 Util::IJson* PsaProgramStructure::convertParserStatement(const IR::StatOrDecl* stat) {
     auto result = new Util::JsonObject();
     cstring scalarsName = refMap->newName("scalars");
-    auto conv = new BMV2::PsaExpressionConverter(refMap, typeMap, scalarMetadataFields, scalarsName);
-    auto params = mkArrayField(result, "parameters");
+    auto conv = new BMV2::PsaExpressionConverter(refMap,typeMap,scalarsName,scalarMetadataFields);
+    auto params = BMV2::mkArrayField(result, "parameters");
     if (stat->is<IR::AssignmentStatement>()) {
         auto assign = stat->to<IR::AssignmentStatement>();
         auto type = typeMap->getType(assign->left, true);
-        cstring operation = Backend::jsonAssignment(type, true);
+        cstring operation = BMV2::Backend::jsonAssignment(type, true);
         result->emplace("op", operation);
         auto l = conv->convertLeftValue(assign->left);
         bool convertBool = type->is<IR::Type_Boolean>();
@@ -50,7 +50,7 @@ Util::IJson* PsaProgramStructure::convertParserStatement(const IR::StatOrDecl* s
             // must wrap into another outer object
             auto wrap = new Util::JsonObject();
             wrap->emplace("op", "primitive");
-            auto params = mkParameters(wrap);
+            auto params = BMV2::mkParameters(wrap);
             params->append(result);
             result = wrap;
         }
@@ -149,7 +149,7 @@ Util::IJson* PsaProgramStructure::convertParserStatement(const IR::StatOrDecl* s
             auto paramsValue = new Util::JsonObject();
             params->append(paramsValue);
 
-            auto pp = mkArrayField(paramsValue, "parameters");
+            auto pp = BMV2::mkArrayField(paramsValue, "parameters");
             auto obj = conv->convert(bi->appliedTo);
             pp->append(obj);
 
