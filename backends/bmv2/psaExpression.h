@@ -40,7 +40,7 @@ namespace BMV2 {
    in P4-16 adding two 32-bit values should produce a 32-bit value, but using
    unbounded arithmetic, as in BMv2, it could produce a 33-bit value.
  */
-class ArithmeticFixup : public Transform {
+class PsaArithmeticFixup : public Transform {
     P4::TypeMap* typeMap;
  public:
     const IR::Expression* fix(const IR::Expression* expr, const IR::Type_Bits* type);
@@ -50,7 +50,7 @@ class ArithmeticFixup : public Transform {
     const IR::Node* postorder(IR::Neg* expression) override;
     const IR::Node* postorder(IR::Cmpl* expression) override;
     const IR::Node* postorder(IR::Cast* expression) override;
-    explicit ArithmeticFixup(P4::TypeMap* typeMap) : typeMap(typeMap)
+    explicit PsaArithmeticFixup(P4::TypeMap* typeMap) : typeMap(typeMap)
     { CHECK_NULL(typeMap); }
 };
 

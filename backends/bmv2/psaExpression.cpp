@@ -18,9 +18,9 @@ limitations under the License.
 
 namespace BMV2 {
 
-class ArithmeticFixup;
+class PsaArithmeticFixup;
 
-const IR::Expression* ArithmeticFixup::fix(const IR::Expression* expr, const IR::Type_Bits* type) {
+const IR::Expression* PsaArithmeticFixup::fix(const IR::Expression* expr, const IR::Type_Bits* type) {
     unsigned width = type->size;
     if (!type->isSigned) {
         auto mask = new IR::Constant(type, Util::mask(width), 16);
@@ -36,7 +36,7 @@ const IR::Expression* ArithmeticFixup::fix(const IR::Expression* expr, const IR:
     return expr;
 }
 
-const IR::Node* ArithmeticFixup::updateType(const IR::Expression* expression) {
+const IR::Node* PsaArithmeticFixup::updateType(const IR::Expression* expression) {
     if (*expression != *getOriginal()) {
         auto type = typeMap->getType(getOriginal(), true);
         typeMap->setType(expression, type);
@@ -44,11 +44,11 @@ const IR::Node* ArithmeticFixup::updateType(const IR::Expression* expression) {
     return expression;
 }
 
-const IR::Node* ArithmeticFixup::postorder(IR::Expression* expression) {
+const IR::Node* PsaArithmeticFixup::postorder(IR::Expression* expression) {
     return updateType(expression);
 }
 
-const IR::Node* ArithmeticFixup::postorder(IR::Operation_Binary* expression) {
+const IR::Node* PsaArithmeticFixup::postorder(IR::Operation_Binary* expression) {
     auto type = typeMap->getType(getOriginal(), true);
     if (expression->is<IR::BAnd>() || expression->is<IR::BOr>() ||
         expression->is<IR::BXor>() ||
@@ -60,21 +60,21 @@ const IR::Node* ArithmeticFixup::postorder(IR::Operation_Binary* expression) {
     return updateType(expression);
 }
 
-const IR::Node* ArithmeticFixup::postorder(IR::Neg* expression) {
+const IR::Node* PsaArithmeticFixup::postorder(IR::Neg* expression) {
     auto type = typeMap->getType(getOriginal(), true);
     if (type->is<IR::Type_Bits>())
         return fix(expression, type->to<IR::Type_Bits>());
     return updateType(expression);
 }
 
-const IR::Node* ArithmeticFixup::postorder(IR::Cmpl* expression) {
+const IR::Node* PsaArithmeticFixup::postorder(IR::Cmpl* expression) {
     auto type = typeMap->getType(getOriginal(), true);
     if (type->is<IR::Type_Bits>())
         return fix(expression, type->to<IR::Type_Bits>());
     return updateType(expression);
 }
 
-const IR::Node* ArithmeticFixup::postorder(IR::Cast* expression) {
+const IR::Node* PsaArithmeticFixup::postorder(IR::Cast* expression) {
     auto type = typeMap->getType(getOriginal(), true);
     if (type->is<IR::Type_Bits>())
         return fix(expression, type->to<IR::Type_Bits>());
@@ -165,7 +165,7 @@ void PsaExpressionConverter::postorder(const IR::MethodCallExpression* expressio
 }
 
 void PsaExpressionConverter::postorder(const IR::Cast* expression)  {
-    // nothing to do for casts - the ArithmeticFixup pass should have handled them already
+    // nothing to do for casts - the PsaArithmeticFixup pass should have handled them already
     auto j = get(expression->expr);
     map.emplace(expression, j);
 }
@@ -635,7 +635,7 @@ Util::IJson*
 PsaExpressionConverter::convert(const IR::Expression* e, bool doFixup, bool wrap, bool convertBool) {
     const IR::Expression *expr = e;
     if (doFixup) {
-        ArithmeticFixup af(typeMap);
+        PsaArithmeticFixup af(typeMap);
         auto r = e->apply(af);
         CHECK_NULL(r);
         expr = r->to<IR::Expression>();
@@ -680,7 +680,7 @@ PsaExpressionConverter::convert(const IR::Expression* e, bool doFixup, bool wrap
 Util::IJson* PsaExpressionConverter::convertLeftValue(const IR::Expression* e) {
     leftValue = true;
     const IR::Expression *expr = e;
-    ArithmeticFixup af(typeMap);
+    PsaArithmeticFixup af(typeMap);
     auto r = e->apply(af);
     CHECK_NULL(r);
     expr = r->to<IR::Expression>();
