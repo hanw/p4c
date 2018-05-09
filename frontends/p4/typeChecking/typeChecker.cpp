@@ -451,7 +451,8 @@ const IR::Type* TypeInference::canonicalize(const IR::Type* type) {
 
             if (fpType != method->type) {
                 method = new IR::Method(method->srcInfo, method->name,
-                                        fpType->to<IR::Type_Method>(), method->isAbstract);
+                                        fpType->to<IR::Type_Method>(), method->isAbstract,
+                                        method->annotations);
                 changes = true;
                 setType(method, fpType);
             }
@@ -863,13 +864,12 @@ bool TypeInference::checkAbstractMethods(const IR::Declaration_Instance* inst,
             BUG_CHECK(tvs->isIdentity(), "%1%: expected no type variables", tvs);
         }
     }
-
-    if (virt.size() != 0) {
-        typeError("%1%: %2% abstract method not implemented",
-                  inst, virt.begin()->second);
-        return false;
-    }
-    return true;
+    bool rv = true;
+    for (auto &vm : virt) {
+        if (!vm.second->annotations->getSingle("optional")) {
+            typeError("%1%: %2% abstract method not implemented", inst, vm.second);
+            rv = false; } }
+    return rv;
 }
 
 const IR::Node* TypeInference::preorder(IR::Declaration_Instance* decl) {
@@ -2847,6 +2847,18 @@ const IR::Node* TypeInference::postorder(IR::ConstructorCallExpression* expressi
     return expression;
 }
 
+static void convertStructToTuple(const IR::Type_StructLike* structType, IR::Type_Tuple *tuple) {
+    for (auto field : structType->fields) {
+        if (auto ft = field->type->to<IR::Type_Bits>()) {
+            tuple->components.push_back(ft);
+        } else if (auto ft = field->type->to<IR::Type_StructLike>()) {
+            convertStructToTuple(ft, tuple);
+        } else {
+            BUG("Unexpected type %1% for struct field %2%", field->type, field);
+        }
+    }
+}
+
 const IR::SelectCase*
 TypeInference::matchCase(const IR::SelectExpression* select, const IR::Type_Tuple* selectType,
                          const IR::SelectCase* selectCase, const IR::Type* caseType) {
@@ -2858,6 +2870,11 @@ TypeInference::matchCase(const IR::SelectExpression* select, const IR::Type_Tupl
     if (caseType->is<IR::Type_Dontcare>())
         return selectCase;
 
+    if (caseType->is<IR::Type_StructLike>()) {
+        auto tupleType = new IR::Type_Tuple();
+        convertStructToTuple(caseType->to<IR::Type_StructLike>(), tupleType);
+        caseType = tupleType;
+    }
     const IR::Type* useSelType = selectType;
     if (!caseType->is<IR::Type_Tuple>()) {
         if (selectType->components.size() != 1) {
