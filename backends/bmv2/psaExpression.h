@@ -72,7 +72,7 @@ class PsaExpressionConverter : public Inspector {
     bool withConstantWidths{false};
 
  public:
-    PsaExpressionConverter(PsaProgramStructure psaprogramstructure, P4::ReferenceMap* refMap, P4::TypeMap* typeMap, cstring scalarsName) :
+    PsaExpressionConverter(P4::PsaProgramStructure psaprogramstructure, P4::ReferenceMap* refMap, P4::TypeMap* typeMap, cstring scalarsName) :
             psaprogramstructure(psaprogramstructure), refMap(refMap), typeMap(typeMap), corelib(P4::P4CoreLibrary::instance),
             scalarsName(scalarsName), leftValue(false), simpleExpressionsOnly(false) {}
     /// If this is 'true' we fail to convert complex expressions.
