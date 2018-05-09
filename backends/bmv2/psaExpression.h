@@ -62,7 +62,6 @@ class PsaExpressionConverter : public Inspector {
     ProgramParts    structure;
     ErrorCodesMap   errorCodesMap;
     using ScalarMetadataMap = ordered_map<cstring, const IR::StructField*>;
-    ScalarMetadataMap* scalarMetadataFields;
 
     /// after translating an Expression to JSON, save the result to 'map'.
     std::map<const IR::Expression*, Util::IJson*> map;
@@ -73,9 +72,9 @@ class PsaExpressionConverter : public Inspector {
     bool withConstantWidths{false};
 
  public:
-    PsaExpressionConverter(P4::ReferenceMap* refMap, P4::TypeMap* typeMap, cstring scalarsName) :
+    PsaExpressionConverter(P4::ReferenceMap* refMap, P4::TypeMap* typeMap, cstring scalarsName, ScalarMetadataMap* scalarMetadataFields) :
             refMap(refMap), typeMap(typeMap), corelib(P4::P4CoreLibrary::instance),
-            scalarsName(scalarsName), leftValue(false), simpleExpressionsOnly(false) {}
+            scalarsName(scalarsName), scalarMetadataFields(scalarMetadataFields), leftValue(false), simpleExpressionsOnly(false) {}
     /// If this is 'true' we fail to convert complex expressions.
     /// This is used for table key expressions, for example.
     bool simpleExpressionsOnly;
