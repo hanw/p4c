@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "expression.h"
+#include "psaExpression.h"
 #include "backend.h"
 
 namespace BMV2 {
