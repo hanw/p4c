@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#ifndef _BACKENDS_BMV2_PORTABLESWITCH_H_
-#define _BACKENDS_BMV2_PORTABLESWITCH_H_
+#ifndef BACKENDS_BMV2_PSA_EXPRESSION
+#define BACKENDS_BMV2_PSA_EXPRESSION
 
 #include "ir/ir.h"
 #include "lower.h"
