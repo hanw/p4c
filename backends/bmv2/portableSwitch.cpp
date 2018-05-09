@@ -179,6 +179,157 @@ Util::IJson* PsaProgramStructure::convertParserStatement(const IR::StatOrDecl* s
     return result;
 }
 
+
+void PsaProgramStructure::convertSimpleKey(const IR::Expression* keySet,
+                                       mpz_class& value, mpz_class& mask) const {
+    if (keySet->is<IR::Mask>()) {
+        auto mk = keySet->to<IR::Mask>();
+        if (!mk->left->is<IR::Constant>()) {
+            ::error("%1% must evaluate to a compile-time constant", mk->left);
+            return;
+        }
+        if (!mk->right->is<IR::Constant>()) {
+            ::error("%1% must evaluate to a compile-time constant", mk->right);
+            return;
+        }
+        value = mk->left->to<IR::Constant>()->value;
+        mask = mk->right->to<IR::Constant>()->value;
+    } else if (keySet->is<IR::Constant>()) {
+        value = keySet->to<IR::Constant>()->value;
+        mask = -1;
+    } else if (keySet->is<IR::BoolLiteral>()) {
+        value = keySet->to<IR::BoolLiteral>()->value ? 1 : 0;
+        mask = -1;
+    } else if (keySet->is<IR::DefaultExpression>()) {
+        value = 0;
+        mask = 0;
+    } else {
+        ::error("%1% must evaluate to a compile-time constant", keySet);
+        value = 0;
+        mask = 0;
+    }
+}
+
+unsigned PsaProgramStructure::combine(const IR::Expression* keySet,
+                                const IR::ListExpression* select,
+                                mpz_class& value, mpz_class& mask,
+                                bool& is_vset, cstring& vset_name) const {
+    // From the BMv2 spec: For values and masks, make sure that you
+    // use the correct format. They need to be the concatenation (in
+    // the right order) of all byte padded fields (padded with 0
+    // bits). For example, if the transition key consists of a 12-bit
+    // field and a 2-bit field, each value will need to have 3 bytes
+    // (2 for the first field, 1 for the second one). If the
+    // transition value is 0xaba, 0x3, the value attribute will be set
+    // to 0x0aba03.
+    // Return width in bytes
+    value = 0;
+    mask = 0;
+    is_vset = false;
+    unsigned totalWidth = 0;
+    if (keySet->is<IR::DefaultExpression>()) {
+        return totalWidth;
+    } else if (keySet->is<IR::ListExpression>()) {
+        auto le = keySet->to<IR::ListExpression>();
+        BUG_CHECK(le->components.size() == select->components.size(),
+                  "%1%: mismatched select", select);
+        unsigned index = 0;
+
+        bool noMask = true;
+        for (auto it = select->components.begin();
+             it != select->components.end(); ++it) {
+            auto e = *it;
+            auto keyElement = le->components.at(index);
+
+            auto type = typeMap->getType(e, true);
+            int width = type->width_bits();
+            BUG_CHECK(width > 0, "%1%: unknown width", e);
+
+            mpz_class key_value, mask_value;
+            convertSimpleKey(keyElement, key_value, mask_value);
+            unsigned w = 8 * ROUNDUP(width, 8);
+            totalWidth += ROUNDUP(width, 8);
+            value = Util::shift_left(value, w) + key_value;
+            if (mask_value != -1) {
+                noMask = false;
+            } else {
+                // mask_value == -1 is a special value used to
+                // indicate an exact match on all bit positions.  When
+                // there is more than one keyElement, we must
+                // represent such an exact match with 'width' 1 bits,
+                // because it may be combined into a mask for other
+                // keyElements that have their own independent masks.
+                mask_value = Util::mask(width);
+            }
+            mask = Util::shift_left(mask, w) + mask_value;
+            LOG3("Shifting " << " into key " << key_value << " &&& " << mask_value <<
+                             " result is " << value << " &&& " << mask);
+            index++;
+        }
+
+        if (noMask)
+            mask = -1;
+        return totalWidth;
+    } else if (keySet->is<IR::PathExpression>()) {
+        auto pe = keySet->to<IR::PathExpression>();
+        auto decl = refMap->getDeclaration(pe->path, true);
+        vset_name = decl->controlPlaneName();
+        is_vset = true;
+        return totalWidth;
+    } else {
+        BUG_CHECK(select->components.size() == 1, "%1%: mismatched select/label", select);
+        convertSimpleKey(keySet, value, mask);
+        auto type = typeMap->getType(select->components.at(0), true);
+        return ROUNDUP(type->width_bits(), 8);
+    }
+}
+
+Util::IJson* PsaProgramStructure::stateName(IR::ID state) {
+    if (state.name == IR::ParserState::accept) {
+        return Util::JsonValue::null;
+    } else if (state.name == IR::ParserState::reject) {
+        ::warning("Explicit transition to %1% not supported on this target", state);
+        return Util::JsonValue::null;
+    } else {
+        return new Util::JsonValue(state.name);
+    }
+}
+
+std::vector<Util::IJson*>
+PsaProgramStructure::convertSelectExpression(const IR::SelectExpression* expr) {
+    std::vector<Util::IJson*> result;
+    auto se = expr->to<IR::SelectExpression>();
+    for (auto sc : se->selectCases) {
+        auto trans = new Util::JsonObject();
+        mpz_class value, mask;
+        bool is_vset;
+        cstring vset_name;
+        unsigned bytes = combine(sc->keyset, se->select, value, mask, is_vset, vset_name);
+        if (is_vset) {
+            trans->emplace("type", "parse_vset");
+            trans->emplace("value", vset_name);
+            trans->emplace("mask", mask);
+            trans->emplace("next_state", stateName(sc->state->path->name));
+        } else {
+            if (mask == 0) {
+                trans->emplace("value", "default");
+                trans->emplace("mask", Util::JsonValue::null);
+                trans->emplace("next_state", stateName(sc->state->path->name));
+            } else {
+                trans->emplace("type", "hexstr");
+                trans->emplace("value", BMV2::stringRepr(value, bytes));
+                if (mask == -1)
+                    trans->emplace("mask", Util::JsonValue::null);
+                else
+                    trans->emplace("mask", BMV2::stringRepr(mask, bytes));
+                trans->emplace("next_state", stateName(sc->state->path->name));
+            }
+        }
+        result.push_back(trans);
+    }
+    return result;
+}
+
 Util::IJson* PsaProgramStructure::convertSelectKey(const IR::SelectExpression* expr) {
     auto se = expr->to<IR::SelectExpression>();
     CHECK_NULL(se);
