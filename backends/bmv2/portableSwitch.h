@@ -50,6 +50,8 @@ class PsaProgramStructure {
     ReferenceMap* refMap;
     TypeMap* typeMap;
     P4::P4CoreLibrary&   corelib;
+    BMV2::PsaExpressionConverter* conv;
+
 
  public:
     // We place scalar user metadata fields (i.e., bit<>, bool)
@@ -94,6 +96,8 @@ public:
         CHECK_NULL(refMap);
         CHECK_NULL(typeMap);
         json = new BMV2::JsonObjects();
+        cstring scalarsName = refMap->newName("scalars");
+        conv = new BMV2::PsaExpressionConverter(refMap,typeMap,scalarsName,&scalarMetadataFields);
     }
 
     const IR::P4Program* create(const IR::P4Program* program);
@@ -117,6 +121,19 @@ public:
             return header_union_types.count(u->getName());
         return false;
     }
+
+    protected:
+    void convertSimpleKey(const IR::Expression* keySet, mpz_class& value, mpz_class& mask) const;
+    unsigned combine(const IR::Expression* keySet, const IR::ListExpression* select,
+                     mpz_class& value, mpz_class& mask, bool& is_vset, cstring& vset_name) const;
+    Util::IJson* stateName(IR::ID state);
+    Util::IJson* toJson(const IR::P4Parser* cont);
+    Util::IJson* toJson(const IR::ParserState* state);
+
+    Util::IJson* convertSelectKey(const IR::SelectExpression* expr);
+    Util::IJson* convertPathExpression(const IR::PathExpression* expr);
+    Util::IJson* createDefaultTransition();
+    std::vector<Util::IJson*> convertSelectExpression(const IR::SelectExpression* expr);
 };
 
 class ParsePsaArchitecture : public Inspector {
