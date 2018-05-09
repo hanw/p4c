@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#ifndef _BACKENDS_BMV2_EXPRESSION_H_
-#define _BACKENDS_BMV2_EXPRESSION_H_
+#ifndef _BACKENDS_BMV2_PSA_EXPRESSION_H_
+#define _BACKENDS_BMV2_PSA_EXPRESSION_H_
 
 #include "ir/ir.h"
 #include "lower.h"
