@@ -32,6 +32,7 @@ const IR::P4Program* PsaProgramStructure::create(const IR::P4Program* program) {
 
 Util::IJson* PsaProgramStructure::convertParserStatement(const IR::StatOrDecl* stat) {
     auto result = new Util::JsonObject();
+    auto conv = new BMV2::PsaExpressionConverter();
     auto params = mkArrayField(result, "parameters");
     if (stat->is<IR::AssignmentStatement>()) {
         auto assign = stat->to<IR::AssignmentStatement>();

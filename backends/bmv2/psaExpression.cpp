@@ -291,7 +291,7 @@ void PsaExpressionConverter::postorder(const IR::Member* expression)  {
              auto field = parentType->to<IR::Type_StructLike>()->getField(expression->member);
              LOG3("looking up field " << field);
              CHECK_NULL(field);
-             auto name = ::get(programstructure->scalarMetadataFields, field);
+             auto name = ::get(scalarMetadataFields, field);
              CHECK_NULL(name);
              if (type->is<IR::Type_Bits>() || type->is<IR::Type_Error>() ||
                 leftValue || simpleExpressionsOnly) {
