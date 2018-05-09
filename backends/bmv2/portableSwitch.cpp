@@ -337,6 +337,23 @@ Util::IJson* PsaProgramStructure::convertSelectKey(const IR::SelectExpression* e
     return key;
 }
 
+Util::IJson*
+PsaProgramStructure::convertPathExpression(const IR::PathExpression* pe) {
+    auto trans = new Util::JsonObject();
+    trans->emplace("value", "default");
+    trans->emplace("mask", Util::JsonValue::null);
+    trans->emplace("next_state", stateName(pe->path->name));
+    return trans;
+}
+
+Util::IJson*
+PsaProgramStructure::createDefaultTransition() {
+    auto trans = new Util::JsonObject();
+    trans->emplace("value", "default");
+    trans->emplace("mask", Util::JsonValue::null);
+    trans->emplace("next_state", Util::JsonValue::null);
+    return trans;
+}
 
 void PsaProgramStructure::createStructLike(const IR::Type_StructLike* st) {
     CHECK_NULL(st);
