@@ -33,7 +33,7 @@ const IR::P4Program* PsaProgramStructure::create(const IR::P4Program* program) {
 Util::IJson* PsaProgramStructure::convertParserStatement(const IR::StatOrDecl* stat) {
     auto result = new Util::JsonObject();
     cstring scalarsName = refMap->newName("scalars");
-    auto conv = new BMV2::PsaExpressionConverter(refMap,typeMap,scalarsName,scalarMetadataFields);
+    auto conv = new BMV2::PsaExpressionConverter(refMap,typeMap,scalarsName,&scalarMetadataFields);
     auto params = BMV2::mkArrayField(result, "parameters");
     if (stat->is<IR::AssignmentStatement>()) {
         auto assign = stat->to<IR::AssignmentStatement>();
@@ -179,6 +179,14 @@ Util::IJson* PsaProgramStructure::convertParserStatement(const IR::StatOrDecl* s
     return result;
 }
 
+Util::IJson* PsaProgramStructure::convertSelectKey(const IR::SelectExpression* expr) {
+    auto se = expr->to<IR::SelectExpression>();
+    CHECK_NULL(se);
+    auto key = conv->convert(se->select, false);
+    return key;
+}
+
+
 void PsaProgramStructure::createStructLike(const IR::Type_StructLike* st) {
     CHECK_NULL(st);
     cstring name = st->controlPlaneName();
@@ -314,6 +322,28 @@ void PsaProgramStructure::createParsers() {
             for (auto s : state->components) {
                 auto op = convertParserStatement(s);
                 json->add_parser_op(state_id, op);
+            }
+
+            // convert transitions
+            if (state->selectExpression != nullptr) {
+                if (state->selectExpression->is<IR::SelectExpression>()) {
+                    auto expr = state->selectExpression->to<IR::SelectExpression>();
+                    auto transitions = convertSelectExpression(expr);
+                    for (auto transition : transitions) {
+                        json->add_parser_transition(state_id, transition);
+                    }
+                    auto key = convertSelectKey(expr);
+                    json->add_parser_transition_key(state_id, key);
+                } else if (state->selectExpression->is<IR::PathExpression>()) {
+                    auto expr = state->selectExpression->to<IR::PathExpression>();
+                    auto transition = convertPathExpression(expr);
+                    json->add_parser_transition(state_id, transition);
+                } else {
+                    BUG("%1%: unexpected selectExpression", state->selectExpression);
+                }
+            } else {
+                auto transition = createDefaultTransition();
+                json->add_parser_transition(state_id, transition);
             }
 
         }
@@ -520,13 +550,13 @@ void InspectPsaProgram::addTypesAndInstances(const IR::Type_StructLike* type, bo
             if (ft->is<IR::Type_Bits>()) {
                 auto tb = ft->to<IR::Type_Bits>();
                 pinfo->scalars_width += tb->size;
-                pinfo->scalarMetadataFields.emplace(newName, f);
+                pinfo->scalarMetadataFields.emplace(f, newName);
             } else if (ft->is<IR::Type_Boolean>()) {
                 pinfo->scalars_width += 1;
-                pinfo->scalarMetadataFields.emplace(newName, f);
+                pinfo->scalarMetadataFields.emplace(f, newName);
             } else if (ft->is<IR::Type_Error>()) {
                 pinfo->scalars_width += 32;
-                pinfo->scalarMetadataFields.emplace(newName, f);
+                pinfo->scalarMetadataFields.emplace(f, newName);
             } else {
                 BUG("%1%: Unhandled type for %2%", ft, f);
             }

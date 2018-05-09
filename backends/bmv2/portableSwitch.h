@@ -55,7 +55,7 @@ class PsaProgramStructure {
     // We place scalar user metadata fields (i.e., bit<>, bool)
     // in the scalarsName metadata object, so we may need to rename
     // these fields.  This map holds the new names.
-    ordered_map<cstring, const IR::StructField*> scalarMetadataFields;
+    std::map<const IR::StructField*, cstring> scalarMetadataFields;
     std::vector<const IR::StructField*> scalars;
     unsigned                            scalars_width = 0;
     unsigned                            error_width = 32;
