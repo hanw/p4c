@@ -62,6 +62,7 @@ class PsaExpressionConverter : public Inspector {
     ProgramParts    structure;
     ErrorCodesMap   errorCodesMap;
     using ScalarMetadataMap = ordered_map<cstring, const IR::StructField*>;
+    ScalarMetadataMap* scalarMetadataFields;
 
     /// after translating an Expression to JSON, save the result to 'map'.
     std::map<const IR::Expression*, Util::IJson*> map;
