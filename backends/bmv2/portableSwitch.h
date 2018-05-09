@@ -34,8 +34,6 @@ limitations under the License.
 
 namespace P4 {
 
-class Backend;
-
 enum gress_t {
     INGRESS,
     EGRESS
@@ -51,9 +49,7 @@ class PsaProgramStructure {
     BMV2::JsonObjects*   json;     // output json data structure
     ReferenceMap* refMap;
     TypeMap* typeMap;
-    BMV2::PsaExpressionConverter* conv;
     P4::P4CoreLibrary&   corelib;
-    Backend* backend;
 
  public:
     // We place scalar user metadata fields (i.e., bit<>, bool)
@@ -92,8 +88,8 @@ class PsaProgramStructure {
     ordered_map<cstring, cstring> field_aliases;
 
 public:
-    PsaProgramStructure(P4::ReferenceMap* refMap, TypeMap* typeMap, BMV2::PsaExpressionConverter* conv)
-        : refMap(refMap), typeMap(typeMap), conv(conv),
+    PsaProgramStructure(ReferenceMap* refMap, TypeMap* typeMap)
+        : refMap(refMap), typeMap(typeMap),
     corelib(P4::P4CoreLibrary::instance) {
         CHECK_NULL(refMap);
         CHECK_NULL(typeMap);
