@@ -111,6 +111,7 @@ public:
     void createControls();
     void createDeparsers();
     BMV2::JsonObjects* getJson() { return json; }
+    P4::P4CoreLibrary &   getCoreLibrary() const   { return corelib; }
 
     bool hasVisited(const IR::Type_StructLike* st) {
         if (auto h = st->to<IR::Type_Header>())
@@ -129,7 +130,8 @@ public:
     Util::IJson* stateName(IR::ID state);
     Util::IJson* toJson(const IR::P4Parser* cont);
     Util::IJson* toJson(const IR::ParserState* state);
-
+    Util::IJson* convertDeparser(const cstring& name, const IR::P4Control* ctrl);
+    void convertDeparserBody(const IR::Vector<IR::StatOrDecl>* body, Util::JsonArray* result);
     Util::IJson* convertSelectKey(const IR::SelectExpression* expr);
     Util::IJson* convertPathExpression(const IR::PathExpression* expr);
     Util::IJson* createDefaultTransition();
