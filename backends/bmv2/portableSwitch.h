@@ -30,6 +30,7 @@ limitations under the License.
 #include "backend.h"
 #include "psaExpression.h"
 #include "JsonObjects.h"
+#include "sharedActionSelectorCheck.h"
 
 
 namespace P4 {
@@ -88,6 +89,7 @@ class PsaProgramStructure {
     // ordered_map<cstring, ??? > learn_lists;  // P4-16 has no field list;
     ordered_map<cstring, const IR::Declaration_Instance*> extern_instances;
     ordered_map<cstring, cstring> field_aliases;
+    std::map<const IR::Node*, const IR::CompileTimeValue*>  resourceMap;
 
 public:
     PsaProgramStructure(ReferenceMap* refMap, TypeMap* typeMap)
@@ -136,6 +138,16 @@ public:
     Util::IJson* convertPathExpression(const IR::PathExpression* expr);
     Util::IJson* createDefaultTransition();
     std::vector<Util::IJson*> convertSelectExpression(const IR::SelectExpression* expr);
+    Util::IJson* convertTable(const BMV2::CFG::TableNode* node,
+                              Util::JsonArray* action_profiles,
+                              BMV2::SharedActionSelectorCheck& selector_check);
+    void convertTableEntries(const IR::P4Table *table, Util::JsonObject *jsonTable);
+    cstring getKeyMatchType(const IR::KeyElement *ke);
+    /// Return 'true' if the table is 'simple'
+    bool handleTableImplementation(const IR::Property* implementation, const IR::Key* key,
+                                   Util::JsonObject* table, Util::JsonArray* action_profiles,
+                                   BMV2::SharedActionSelectorCheck& selector_check);
+    Util::IJson* convertIf(const BMV2::CFG::IfNode* node, cstring prefix);
 };
 
 class ParsePsaArchitecture : public Inspector {

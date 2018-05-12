@@ -603,9 +603,61 @@ void PsaProgramStructure::createActions() {
 void PsaProgramStructure::createControls() {
     // add pipelines to json
 
+    for (auto kv : pipelines) {
+        LOG1("pipelines" << kv.first << kv.second);
+        auto result = new Util::JsonObject();
+        result->emplace("name", kv.first);
+        result->emplace("id", BMV2::nextId("control"));
+        result->emplace_non_null("source_info", kv.second->sourceInfoJsonObj());
+
+        auto cfg = new BMV2::CFG();
+        cfg->build(kv.second, refMap, typeMap);
+        if (cfg->entryPoint->successors.size() == 0) {
+            result->emplace("init_table", Util::JsonValue::null);
+        }
+        else {
+            BUG_CHECK(cfg->entryPoint->successors.size() == 1, "Expected 1 start node for %1%", kv.second);
+            auto start = (*(cfg->entryPoint->successors.edges.begin()))->endpoint;
+            result->emplace("init_table", nodeName(start));
+        }
+
+        auto tables = BMV2::mkArrayField(result, "tables");
+        auto action_profiles = BMV2::mkArrayField(result, "action_profiles");
+        auto conditionals = BMV2::mkArrayField(result, "conditionals");
+
+        BMV2::SharedActionSelectorCheck selector_check(refMap, typeMap);
+        kv.second->apply(selector_check);
+
+        std::set<const IR::P4Table*> done;
+
+    // Tables are created prior to the other local declarations
+
+        for (auto node : cfg->allNodes) {
+            auto tn = node->to<BMV2::CFG::TableNode>();
+            if (tn != nullptr) {
+                if (done.find(tn->table) != done.end())
+                // The same table may appear in multiple nodes in the CFG.
+                // We emit it only once.  Other checks should ensure that
+                // the CFG is implementable.
+                    continue;
+                done.emplace(tn->table);
+                auto j = convertTable(tn, action_profiles, selector_check);
+                if (::errorCount() > 0)
+                    return;
+                tables->append(j);
+            } else if (node->is<BMV2::CFG::IfNode>()) {
+                auto j = convertIf(node->to<BMV2::CFG::IfNode>(), kv.first);
+                if (::errorCount() > 0)
+                    return;
+                conditionals->append(j);
+            }
+        }
+
+        json->pipelines->append(result);
+
+    }
 
 }
-
 void PsaProgramStructure::createDeparsers() {
     // add deparsers to json
 
@@ -655,6 +707,9 @@ void InspectPsaProgram::postorder(const IR::P4Parser* p) {
 }
 
 void InspectPsaProgram::postorder(const IR::P4Control* c) {
+
+
+
 
 }
 
