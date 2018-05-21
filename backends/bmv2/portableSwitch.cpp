@@ -1228,7 +1228,7 @@ void PsaProgramStructure::createControls() {
     // add pipelines to json
 
     for (auto kv : pipelines) {
-        LOG1("pipelines" << kv.first << kv.second);
+        LOG1("pipelines " << kv.first << kv.second);
         auto result = new Util::JsonObject();
         result->emplace("name", kv.first);
         result->emplace("id", BMV2::nextId("control"));
@@ -1274,6 +1274,20 @@ void PsaProgramStructure::createControls() {
                 if (::errorCount() > 0)
                     return;
                 conditionals->append(j);
+            }
+        }
+
+
+        for ( auto p : psa_resourceMap) {
+
+            LOG1("psa resource map is": << p.first << p.second);
+        }
+        for (auto c : kv.second->controlLocals) {
+
+            if (c->is<IR::Declaration_Instance>()) {
+
+                auto block = psa_resourceMap.at(kv.second);
+
             }
         }
 
@@ -1330,7 +1344,7 @@ void InspectPsaProgram::postorder(const IR::P4Parser* p) {
     // populate structure->parsers
 }
 
-void InspectPsaProgram::postorder(const IR::P4Control* c) {
+void InspectPsaProgram::postorder(const IR::P4Control* cont) {
 
 
 
@@ -1363,7 +1377,14 @@ void InspectPsaProgram::postorder(const IR::Declaration_Instance* di) {
     //          structure->extern_instances or
     //          structure->checksums
     // based on the type of the instance
+    cstring name = di->controlPlaneName();
+    LOG1("di is " << name);
+
+
+
+
 }
+
 
 void InspectPsaProgram::postorder(const IR::P4Action* act) {
     // inspect IR::P4Action,
@@ -1530,7 +1551,6 @@ bool InspectPsaProgram::preorder(const IR::Declaration_MatchKind* kind) {
     }
     return false;
 }
-
 
 
 }  // namespace P4

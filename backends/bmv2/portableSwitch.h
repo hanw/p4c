@@ -63,6 +63,7 @@ class PsaProgramStructure {
     // in the scalarsName metadata object, so we may need to rename
     // these fields.  This map holds the new names.
     std::map<const IR::StructField*, cstring> scalarMetadataFields;
+    std::map<const IR::Node*, const IR::CompileTimeValue*> psa_resourceMap;
     std::vector<const IR::StructField*> scalars;
     using DirectCounterMap = std::map<cstring, const IR::P4Table*>;
     unsigned                            scalars_width = 0;
@@ -98,7 +99,6 @@ class PsaProgramStructure {
     // ordered_map<cstring, ??? > learn_lists;  // P4-16 has no field list;
     ordered_map<cstring, const IR::Declaration_Instance*> extern_instances;
     ordered_map<cstring, cstring> field_aliases;
-    std::map<const IR::Node*, const IR::CompileTimeValue*>  resourceMap;
     std::set<cstring>   match_kinds;
 
 public:
@@ -173,10 +173,13 @@ class ParsePsaArchitecture : public Inspector {
     bool preorder(const IR::PackageBlock* block) override;
 };
 
+
+
 class InspectPsaProgram : public Inspector {
     ReferenceMap* refMap;
     TypeMap* typeMap;
     PsaProgramStructure *pinfo;
+
 
  public:
     explicit InspectPsaProgram(ReferenceMap* refMap, TypeMap* typeMap, PsaProgramStructure *pinfo)
@@ -196,9 +199,12 @@ class InspectPsaProgram : public Inspector {
     void postorder(const IR::P4Action* act) override;
     void postorder(const IR::Type_Error* err) override;
 
+
     // control
+
     bool preorder(const IR::P4Control *control) override;
     bool preorder(const IR::Declaration_MatchKind* kind) override;
+
 
     // parser
     bool preorder(const IR::P4Parser *p) override;
