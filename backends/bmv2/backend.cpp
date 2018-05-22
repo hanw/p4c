@@ -573,6 +573,7 @@ void Backend::convert_portable_switch(const IR::ToplevelBlock* tlb, BMV2Options&
         new P4::ConvertToJson(&structure),
     };
 
+
     tlb->apply(*new BMV2::PSA_BuildResourceMap(&structure.psa_resourceMap));
     program->apply(toJson);
 
