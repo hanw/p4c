@@ -25,11 +25,17 @@
 #include "backends/bmv2/psa_switch/psaSwitch.h"
 namespace DPDK{
 class ConvertToDpdkIRHelper : public Inspector {
-    int label_num;
+    int next_label_id;
     IR::IndexedVector<IR::DpdkAsmStatement> instructions;
+    P4::ReferenceMap *refmap;
+    P4::TypeMap *typemap;
  public:
     ConvertToDpdkIRHelper(){}
-    ConvertToDpdkIRHelper(int label_num): label_num(label_num){}
+    ConvertToDpdkIRHelper(int next_label_id): next_label_id(next_label_id){}
+    ConvertToDpdkIRHelper(
+        P4::ReferenceMap *refmap, 
+        P4::TypeMap *typemap, 
+        int next_label_id): refmap(refmap), typemap(typemap), next_label_id(next_label_id){}
     IR::IndexedVector<IR::DpdkAsmStatement> getInstructions() { return instructions; }
     bool preorder(const IR::AssignmentStatement* a) override;
     bool preorder(const IR::BlockStatement* a) override;
@@ -38,8 +44,9 @@ class ConvertToDpdkIRHelper : public Inspector {
 
     void add_instr(const IR::DpdkAsmStatement* s){ instructions.push_back(s); }
     IR::IndexedVector<IR::DpdkAsmStatement> & get_instr(){return instructions;}
-    int get_label_num(){return label_num;}
+    int get_label_num(){return next_label_id;}
 };
+
 
 }
 

@@ -51,9 +51,14 @@ class ConvertToDpdkProgram : public Transform {
 
     BMV2::PsaProgramStructure& structure;
     const IR::DpdkAsmProgram* dpdk_program;
+    P4::ReferenceMap *refmap;
+    P4::TypeMap *typemap;
 
  public:
-    ConvertToDpdkProgram(BMV2::PsaProgramStructure& structure) : structure(structure) {}
+    ConvertToDpdkProgram(
+        BMV2::PsaProgramStructure& structure, 
+        P4::ReferenceMap *refmap, 
+        P4::TypeMap * typemap) : structure(structure), refmap(refmap), typemap(typemap) {}
 
     const IR::DpdkAsmProgram* create();
     const IR::DpdkAsmStatement* createListStatement(cstring name,
@@ -79,8 +84,10 @@ class ConvertToDpdkControl : public Inspector {
     IR::IndexedVector<IR::DpdkAsmStatement> instructions;
     IR::IndexedVector<IR::DpdkTable> tables;
     IR::IndexedVector<IR::DpdkAction> actions;
+    P4::ReferenceMap *refmap;
+    P4::TypeMap *typemap;
  public:
-    ConvertToDpdkControl() {}
+    ConvertToDpdkControl(P4::ReferenceMap *refmap, P4::TypeMap *typemap): refmap(refmap), typemap(typemap) {}
 
     IR::IndexedVector<IR::DpdkTable>& getTables() { return tables; }
     IR::IndexedVector<IR::DpdkAction>& getActions() { return actions; }
@@ -88,11 +95,6 @@ class ConvertToDpdkControl : public Inspector {
 
     bool preorder(const IR::P4Action* a) override;
     bool preorder(const IR::P4Table* a) override;
-    // bool preorder(const IR::IfStatement* s) override;
-    // bool preorder(const IR::AssignmentStatement*) override;
-    // bool preorder(const IR::ReturnStatement* ) override;
-    // bool preorder(const IR::MethodCallStatement* ) override;
-    // bool preorder(const IR::Statement*) override;
     bool preorder(const IR::P4Control*) override;
 
     void add_inst(const IR::DpdkAsmStatement* s) { instructions.push_back(s); }
