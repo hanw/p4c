@@ -36,6 +36,7 @@ set(P4C_DPDK_SOURCES
     main.cpp
     ConvertToDpdkHelper.cpp
     ConvertToDpdkProgram.cpp
+    DpdkVariableCollector.cpp
     )
 
 set(P4C_DPDK_HEADERS
@@ -66,6 +67,7 @@ set(P4C_DPDK_HEADERS
     backend.h
     ConvertToDpdkHelper.h
     ConvertToDpdkProgram.h
+    DpdkVariableCollector.h
     )
 
 set (IR_DEF_FILES ${IR_DEF_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/dpdk.def PARENT_SCOPE)
