@@ -1,5 +1,5 @@
-#ifndef BACKENDS_DPDK_EXPRESSION_H_
-#define BACKENDS_DPDK_EXPRESSION_H_
+#ifndef BACKENDS_DPDK_HELPER_H_
+#define BACKENDS_DPDK_HELPER_H_
 
 #include "ir/ir.h"
 #include "lib/gmputil.h"
@@ -23,20 +23,30 @@
 #include "backends/bmv2/common/parser.h"
 #include "backends/bmv2/common/programStructure.h"
 #include "backends/bmv2/psa_switch/psaSwitch.h"
+#include "DpdkVariableCollector.h"
+
+
+#define TOSTR_DECLA(NAME) std::ostream& toStr(std::ostream&, IR::NAME*)
+
 namespace DPDK{
-class ConvertToDpdkIRHelper : public Inspector {
+class ConvertStatementToDpdk : public Inspector {
     int next_label_id;
+    DpdkVariableCollector *collector;
     IR::IndexedVector<IR::DpdkAsmStatement> instructions;
     P4::ReferenceMap *refmap;
     P4::TypeMap *typemap;
  public:
-    ConvertToDpdkIRHelper(){}
-    ConvertToDpdkIRHelper(int next_label_id): next_label_id(next_label_id){}
-    ConvertToDpdkIRHelper(
+    ConvertStatementToDpdk(
         P4::ReferenceMap *refmap, 
         P4::TypeMap *typemap, 
-        int next_label_id): refmap(refmap), typemap(typemap), next_label_id(next_label_id){}
+        int next_label_id,
+        DpdkVariableCollector *collector): 
+        refmap(refmap), 
+        typemap(typemap), 
+        next_label_id(next_label_id),
+        collector(collector){}
     IR::IndexedVector<IR::DpdkAsmStatement> getInstructions() { return instructions; }
+
     bool preorder(const IR::AssignmentStatement* a) override;
     bool preorder(const IR::BlockStatement* a) override;
     bool preorder(const IR::IfStatement* a) override;
@@ -46,8 +56,40 @@ class ConvertToDpdkIRHelper : public Inspector {
     IR::IndexedVector<IR::DpdkAsmStatement> & get_instr(){return instructions;}
     int get_label_num(){return next_label_id;}
 };
+// this function takes different subclass of Expression and translate it into string in desired format.
+// For example, for PathExpression, it returns PathExpression->path->name
+// For Member, it returns toStr(Member->expr).Member->member
+cstring toStr(const IR::Expression *const);
+
+// this function takes different subclass of Type and translate it into string in desired format.
+// For example, for Type_Boolean, it returns bool
+// For Type_Bits, it returns bit_<bit_width>
+cstring toStr(const IR::Type *const);
+
+// this function takes different subclass of PropertyValue and translate it into string in desired format.
+// For example, for ExpressionValue, it returns toStr(ExpressionValue->expression)
+cstring toStr(const IR::PropertyValue* const);
 
 
-}
+class TreeUnroller: public Inspector {
+    IR::IndexedVector<IR::DpdkAsmStatement> instructions;
+    DpdkVariableCollector *collector;
+    IR::PathExpression *tmp;
+    P4::ReferenceMap *refmap;
+    P4::TypeMap *typemap;
+public:
+    TreeUnroller(DpdkVariableCollector *collector, P4::ReferenceMap *refmap, P4::TypeMap *typemap): collector(collector), refmap(refmap), typemap(typemap){}
+    bool preorder(const IR::Operation_Binary*) override;
+    bool preorder(const IR::MethodCallExpression*) override;
+    bool preorder(const IR::Member*) override;
+    bool preorder(const IR::PathExpression*) override;
+    bool preorder(const IR::Constant*) override;
+    void add_instr(const IR::DpdkAsmStatement* s){ instructions.push_back(s); }
+    IR::IndexedVector<IR::DpdkAsmStatement> & get_instr(){return instructions;}
+    IR::Expression* get_tmp(){return tmp;}
+};
 
+
+
+} // namespace DPDK
 #endif
