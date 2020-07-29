@@ -181,7 +181,8 @@ std::ostream& IR::DpdkHeaderType::toSexp(std::ostream& out) const {
 }
 
 std::ostream& IR::DpdkStructType::toSexp(std::ostream& out) const {
-    out << "(struct " << name << std::endl;
+    if(this->is<IR::DpdkArgStructType>()) out << "(arg_struct " << name << std::endl;
+    else out << "(struct " << name << std::endl;
     if (fields.empty()) {
         out << "  ()";
         return out; }
@@ -208,10 +209,12 @@ std::ostream& IR::DpdkStructType::toSexp(std::ostream& out) const {
 
 std::ostream& IR::DpdkListStatement::toSexp(std::ostream& out) const {
     out << "(main " << std::endl << "(" << std::endl;
+    out << "  (rx m.standard_metadata_ingress_port)" << std::endl;
     for (auto s : statements) {
         out << "  ";
         s->toSexp(out) << std::endl;
     }
+    out << "  (tx m.ostd_egress_port)" << std::endl;
     out << ")" << std::endl << ")" << std::endl;
     return out;
 }
@@ -253,10 +256,7 @@ std::ostream& IR::DpdkExtractStatement::toSexp(std::ostream& out) const {
 
 std::ostream& IR::DpdkJmpStatement::toSexp(std::ostream& out) const {
     LOG1("print jmp");
-    if(!condition)
-        out << "(jmp " << label << ")";
-    else
-        out << "(jmp " << label << " " << DPDK::toStr(condition) << ")";
+    out << "(jmp " << label << ")";
     return out;
 }
 
@@ -372,11 +372,12 @@ std::ostream& IR::DpdkAction::toSexp(std::ostream& out) const {
         if(p != para.parameters.back())
             out << " ";
     }
-    out << ")" << std::endl << "(" << std::endl;
+    out << ")" << std::endl << "(";
     for(auto i: statements){
         add_space(out, 2);
         i->toSexp(out) << std::endl;
     }
+    out << "\t(return ) " << std::endl;
     out << "))";
 
     return out;

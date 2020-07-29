@@ -25,12 +25,12 @@
 #include "backends/bmv2/common/programStructure.h"
 #include "backends/bmv2/psa_switch/psaSwitch.h"
 #include "DpdkVariableCollector.h"
-
+#include "convertToDpdkArch.h"
 namespace DPDK
 {
     
 class ConvertToDpdkProgram : public Transform {
-    DpdkVariableCollector collector;
+    DpdkVariableCollector *collector;
     int next_label_id = 0;
     std::map<int, cstring> reg_id_to_name;
     std::map<cstring, int> reg_name_to_id;
@@ -40,14 +40,24 @@ class ConvertToDpdkProgram : public Transform {
     const IR::DpdkAsmProgram* dpdk_program;
     P4::ReferenceMap *refmap;
     P4::TypeMap *typemap;
-
+    CollectMetadataHeaderInfo *info;
+    std::map<const cstring, IR::IndexedVector<IR::Parameter>*> *args_struct_map;
  public:
     ConvertToDpdkProgram(
         BMV2::PsaProgramStructure& structure, 
         P4::ReferenceMap *refmap, 
-        P4::TypeMap * typemap) : structure(structure), refmap(refmap), typemap(typemap) {}
+        P4::TypeMap * typemap,
+        DpdkVariableCollector *collector,
+        CollectMetadataHeaderInfo* info,
+        std::map<const cstring, IR::IndexedVector<IR::Parameter>*> *args_struct_map) : 
+        structure(structure), 
+        refmap(refmap), 
+        typemap(typemap),
+        collector(collector),
+        info(info),
+        args_struct_map(args_struct_map) {}
 
-    const IR::DpdkAsmProgram* create();
+    const IR::DpdkAsmProgram* create(IR::P4Program *prog);
     const IR::DpdkAsmStatement* createListStatement(cstring name,
             std::initializer_list<IR::IndexedVector<IR::DpdkAsmStatement>> statements);
     const IR::Node* preorder(IR::P4Program* p) override;

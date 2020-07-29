@@ -14,6 +14,16 @@ class DpdkStructType : Type_Struct {
 #nodbprint
 }
 
+class DpdkMetadataStructType: DpdkStructType {
+    std::ostream& toSexp(std::ostream& out) const;
+#nodbprint
+}
+
+class DpdkArgStructType: DpdkStructType {
+    std::ostream& toSexp(std::ostream& out) const;
+#nodbprint
+}
+
 class DpdkAsmStatement {
     virtual std::ostream& toSexp(std::ostream& out) const;
 #nodbprint
@@ -94,10 +104,8 @@ class DpdkExtractStatement : DpdkAsmStatement {
 }
 class DpdkJmpStatement : DpdkAsmStatement {
     cstring label;
-    optional Expression condition;
     std::ostream& toSexp(std::ostream& out) const override;
 #nodbprint
-#novalidate
 }
 class DpdkJmpActionStatement : DpdkAsmStatement {
     std::ostream& toSexp(std::ostream& out) const override;
@@ -244,38 +252,32 @@ class DpdkCmpStatement: DpdkAsmStatement {
 #nodbprint
 }
 
-class DpdkJmpEqualStatement: DpdkAsmStatement {
-    cstring label;
+class DpdkJmpEqualStatement: DpdkJmpStatement {
     std::ostream& toSexp(std::ostream& out) const override;
 #nodbprint
 }
 
-class DpdkJmpNotEqualStatement: DpdkAsmStatement {
-    cstring label;
+class DpdkJmpNotEqualStatement: DpdkJmpStatement {
     std::ostream& toSexp(std::ostream& out) const override;
 #nodbprint
 }
 
-class DpdkJmpGreaterEqualStatement: DpdkAsmStatement {
-    cstring label;
+class DpdkJmpGreaterEqualStatement: DpdkJmpStatement{
     std::ostream& toSexp(std::ostream& out) const override;
 #nodbprint
 }
 
-class DpdkJmpGreaterStatement: DpdkAsmStatement {
-    cstring label;
+class DpdkJmpGreaterStatement: DpdkJmpStatement{
     std::ostream& toSexp(std::ostream& out) const override;
 #nodbprint
 }
 
-class DpdkJmpLessorEqualStatement: DpdkAsmStatement {
-    cstring label;
+class DpdkJmpLessorEqualStatement: DpdkJmpStatement{
     std::ostream& toSexp(std::ostream& out) const override;
 #nodbprint
 }
 
-class DpdkJmpLessorStatement: DpdkAsmStatement {
-    cstring label;
+class DpdkJmpLessorStatement: DpdkJmpStatement{
     std::ostream& toSexp(std::ostream& out) const override;
 #nodbprint
 }
