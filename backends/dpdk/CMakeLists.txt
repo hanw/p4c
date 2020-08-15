@@ -13,7 +13,7 @@
 # limitations under the License.
 
 set(P4C_DPDK_SOURCES
-    ../bmv2/psa_switch/midend.cpp
+    midend.cpp
     ../bmv2/common/helpers.cpp
     ../bmv2/common/JsonObjects.cpp
     ../bmv2/common/action.cpp
@@ -38,6 +38,7 @@ set(P4C_DPDK_SOURCES
     DpdkVariableCollector.cpp
     convertToDpdkArch.cpp
     DpdkAsmOptimization.cpp
+    elim_typedef.cpp
     )
 
 set(P4C_DPDK_HEADERS
@@ -71,6 +72,7 @@ set(P4C_DPDK_HEADERS
     DpdkVariableCollector.h
     convertToDpdkArch.h
     DpdkAsmOptimization.h
+    elim_typedef.h
     )
 
 set (IR_DEF_FILES ${IR_DEF_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/dpdk.def PARENT_SCOPE)

@@ -182,6 +182,7 @@ std::ostream& IR::DpdkHeaderType::toSexp(std::ostream& out) const {
 
 std::ostream& IR::DpdkStructType::toSexp(std::ostream& out) const {
     if(this->is<IR::DpdkArgStructType>()) out << "(arg_struct " << name << std::endl;
+    else if(this->is<IR::DpdkHeaderStructType>()) out << "(header_struct " << name << std::endl;
     else out << "(struct " << name << std::endl;
     if (fields.empty()) {
         out << "  ()";
@@ -190,10 +191,18 @@ std::ostream& IR::DpdkStructType::toSexp(std::ostream& out) const {
         out << "  (field " << (*it)->name;
         if (auto t = (*it)->type->to<IR::Type_Bits>())
             out << " (bit " << t->width_bits() << "))";
-        else if (auto t = (*it)->type->to<IR::Type_Name>())
-            out << " " << t->path << ")";
-        else if(auto t = (*it)->type->to<IR::Type_Error>())
-            out << " " << t->error << ")";
+        else if (auto t = (*it)->type->to<IR::Type_Name>()){
+            if(t->path->name == "error"){
+                out << " (bit 8))";
+            }
+            else {
+                out << " " << t->path << ")";
+            }
+        }
+        else if(auto t = (*it)->type->to<IR::Type_Error>()){
+            out << " (bit 8))";
+        }
+            // out << " " << t->error << ")";
         else if(auto t = (*it)->type->to<IR::Type_Boolean>())
             out << " bool)";
         else{
@@ -209,12 +218,12 @@ std::ostream& IR::DpdkStructType::toSexp(std::ostream& out) const {
 
 std::ostream& IR::DpdkListStatement::toSexp(std::ostream& out) const {
     out << "(main " << std::endl << "(" << std::endl;
-    out << "  (rx m.standard_metadata_ingress_port)" << std::endl;
+    out << "  (rx m.psa_ingress_input_metadata_ingress_port)" << std::endl;
     for (auto s : statements) {
         out << "  ";
         s->toSexp(out) << std::endl;
     }
-    out << "  (tx m.ostd_egress_port)" << std::endl;
+    out << "  (tx m.psa_ingress_output_metadata_egress_port)" << std::endl;
     out << ")" << std::endl << ")" << std::endl;
     return out;
 }
@@ -225,7 +234,9 @@ std::ostream& IR::DpdkMovStatement::toSexp(std::ostream& out) const {
 }
 
 std::ostream& IR::DpdkAddStatement::toSexp(std::ostream& out) const {
-    out << "(add " << DPDK::toStr(dst) << " " << DPDK::toStr(src1) << " " << DPDK::toStr(src2) << ")";
+    // out << "(add " << DPDK::toStr(dst) << " " << DPDK::toStr(src1) << " " << DPDK::toStr(src2) << ")";
+
+    out << "(add " << DPDK::toStr(dst) << " " << DPDK::toStr(src2) << ")";
     return out;
 }
 
@@ -312,7 +323,7 @@ std::ostream& IR::DpdkXorStatement::toSexp(std::ostream& out) const {
 
 
 std::ostream& IR::DpdkInvalidateStatement::toSexp(std::ostream& out) const {
-    out << "(invalid " << ")";
+    out << "(jiv " << DPDK::toStr(header) << " " << label << ")";
     return out;
 }
 
@@ -359,6 +370,13 @@ std::ostream& IR::DpdkTable::toSexp(std::ostream& out) const {
         add_space(out, 2);
         out << "(action_selector " << DPDK::toStr(psa_implementation->value) << ")" << std::endl;
     }
+    add_space(out, 2);
+    if(auto size = properties->getProperty("size")) {
+        out << "(table_size " << DPDK::toStr(size->value) << ")" << std::endl;
+    }
+    else {
+        out << "(table_size 0)" << std::endl;
+    }
     out << ")";
     return out;
 }
@@ -384,7 +402,7 @@ std::ostream& IR::DpdkAction::toSexp(std::ostream& out) const {
 }
 
 std::ostream& IR::DpdkChecksumAddStatement::toSexp(std::ostream& out) const{
-    out << "(csum_add " << csum << " " << DPDK::toStr(field) << ")";
+    out << "(csum_add " << "h.cksum_state." << intermediate_value << " " << DPDK::toStr(field) << ")";
     return out;
 }
 
@@ -403,12 +421,12 @@ std::ostream& IR::DpdkGetHashStatement::toSexp(std::ostream& out) const{
 }
 
 std::ostream& IR::DpdkValidateStatement::toSexp(std::ostream& out) const{
-    out << "(validate " << DPDK::toStr(dst) << " " << header << ")";
+    out << "(jv " << DPDK::toStr(header) << " " << label << ")";
     return out;
 }
 
 std::ostream& IR::DpdkGetChecksumStatement::toSexp(std::ostream& out) const{
-    out << "(csum_get " << DPDK::toStr(dst) << " " << checksum << ")";
+    out << "(mov " << DPDK::toStr(dst) << " " << "h.cksum_state." << intermediate_value << ")";
     return out;
 }
 
@@ -439,22 +457,22 @@ std::ostream& IR::DpdkCmpStatement::toSexp(std::ostream& out) const{
 }
 
 std::ostream& IR::DpdkJmpEqualStatement::toSexp(std::ostream& out) const{
-    out << "(je " << label << ")";
+    out << "(je " << label << " " << DPDK::toStr(src1) << " " << DPDK::toStr(src2) << ")";
     return out;
 }
 
 std::ostream& IR::DpdkJmpNotEqualStatement::toSexp(std::ostream& out) const{
-    out << "(je " << label << ")";
+    out << "(jne " << label << " " << DPDK::toStr(src1) << " " << DPDK::toStr(src2) << ")";
     return out;
 }
 
 std::ostream& IR::DpdkJmpGreaterEqualStatement::toSexp(std::ostream& out) const{
-    out << "(jge " << label << ")";
+    out << "(jge " << label << " " << DPDK::toStr(src1) << " " << DPDK::toStr(src2) << ")";
     return out;
 }
 
 std::ostream& IR::DpdkJmpGreaterStatement::toSexp(std::ostream& out) const{
-    out << "(jg " << label << ")";
+    out << "(jg " << label << " " << DPDK::toStr(src1) << " " << DPDK::toStr(src2) << ")";
     return out;
 }
 
@@ -464,7 +482,7 @@ std::ostream& IR::DpdkJmpLessorEqualStatement::toSexp(std::ostream& out) const{
 }
 
 std::ostream& IR::DpdkJmpLessorStatement::toSexp(std::ostream& out) const{
-    out << "(jl " << label << ")";
+    out << "(jl " << label << " " << DPDK::toStr(src1) << " " << DPDK::toStr(src2) << ")";
     return out;
 }
 

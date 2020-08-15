@@ -25,6 +25,8 @@ limitations under the License.
 #include "convertToDpdkArch.h"
 #include "DpdkVariableCollector.h"
 #include "DpdkAsmOptimization.h"
+#include "elim_typedef.h"
+
 
 namespace DPDK {
 
@@ -46,6 +48,7 @@ void PsaSwitchBackend::convert(const IR::ToplevelBlock* tlb) {
     DpdkVariableCollector collector;
     auto rewriteToDpdkArch = new DPDK::RewriteToDpdkArch(refMap, typeMap, &collector);
     PassManager simplify = {
+        new P4::EliminateTypedef(refMap, typeMap),
         new P4::ClearTypeMap(typeMap),  // because the user metadata type has changed
         new P4::SynthesizeActions(refMap, typeMap,
                 new BMV2::SkipControls(&structure.non_pipeline_controls)),
@@ -57,6 +60,7 @@ void PsaSwitchBackend::convert(const IR::ToplevelBlock* tlb) {
         new BMV2::RemoveComplexExpressions(refMap, typeMap,
                 new BMV2::ProcessControls(&structure.pipeline_controls)),
         new P4::RemoveAllUnusedDeclarations(refMap),
+        // Convert to Dpdk specific format
         rewriteToDpdkArch,
         // Converts the DAG into a TREE (at least for expressions)
         // This is important later for conversion to JSON.
@@ -77,14 +81,13 @@ void PsaSwitchBackend::convert(const IR::ToplevelBlock* tlb) {
     if (!main) return;  // no main
     main->apply(*parsePsaArch);
     program = toplevel->getProgram();
-    auto convertToDpdk = new ConvertToDpdkProgram(structure, refMap, typeMap, &collector, rewriteToDpdkArch->info, rewriteToDpdkArch->args_struct_map);
+    auto convertToDpdk = new ConvertToDpdkProgram(structure, refMap, typeMap, &collector, rewriteToDpdkArch);
     PassManager toAsm = {
         new BMV2::DiscoverStructure(&structure),
         new BMV2::InspectPsaProgram(refMap, typeMap, &structure),
         // convert to assembly program
         convertToDpdk,
     };
-    // std::cout << program << std::endl;
     program->apply(toAsm);
     dpdk_program = convertToDpdk->getDpdkProgram();
     if (!dpdk_program) return;

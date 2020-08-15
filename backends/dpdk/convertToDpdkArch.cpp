@@ -139,19 +139,6 @@ const IR::Node* ConvertToDpdkArch::postorder(IR::P4Parser* p) {
     return p;
 }
 
-const IR::Node* ConvertToDpdkArch::postorder(IR::Type_StructLike* s) {
-    return s;
-}
-
-const IR::Node* ConvertToDpdkArch::postorder(IR::PathExpression* p) {
-    return p;
-}
-
-const IR::Node* ConvertToDpdkArch::postorder(IR::Member* m) {
-    LOG1("m " << m);
-    return m;
-}
-
 void ParsePsa::parseIngressPipeline(const IR::PackageBlock* block) {
     auto ingress_parser = block->getParameterValue("ip");
     BlockInfo ip("IngressParser", INGRESS, PARSER);
@@ -215,13 +202,10 @@ bool ParsePsa::preorder(const IR::PackageBlock* block) {
 void CollectMetadataHeaderInfo::pushMetadata(const IR::Parameter* p){
     
     for(auto m: used_metadata){
-        // std::cout << "m:" << m->type->to<IR::Type_Name>()->path->name.name << std::endl;
-        // std::cout << "p:" << p->type->to<IR::Type_Name>()->path->name.name << std::endl;
         if(m->to<IR::Type_Name>()->path->name.name == p->type->to<IR::Type_Name>()->path->name.name){
             return;
         }
     }
-    // std::cout <<"pushed:" << p->type->to<IR::Type_Name>()->path->name.name << std::endl;
     used_metadata.push_back(p->type);
 }
 
@@ -293,10 +277,6 @@ bool CollectMetadataHeaderInfo::preorder(const IR::Type_Struct *s){
     return true;
  }
 
-const IR::Node* ReplaceMetadataHeaderName::postorder(IR::P4Program* p){
-    // std::cout << p << std::endl;
-    return p;
-}
 
 
 const IR::Node *ReplaceMetadataHeaderName::preorder(IR::Member *m){
@@ -321,7 +301,7 @@ const IR::Node *ReplaceMetadataHeaderName::preorder(IR::Member *m){
                 }
             }
         }
-    }    
+    }
     return m;
 }
 
@@ -438,29 +418,8 @@ const IR::Node *StatementUnroll::preorder(IR::AssignmentStatement *a){
     return a;
 }
 
-const IR::Node *StatementUnroll::postorder(IR::IfStatement *i){
-    auto code_block = new IR::IndexedVector<IR::StatOrDecl>;
-    ExpressionUnroll::sanity(i->condition);
-    auto unroller = new ExpressionUnroll(collector);
-    i->condition->apply(*unroller);
-    for(auto i:unroller->stmt)
-        code_block->push_back(i);
 
-    auto control = findOrigCtxt<IR::P4Control>();
-    auto parser = findOrigCtxt<IR::P4Parser>();
-
-    for(auto d: unroller->decl)
-        injector.collect(control, parser, d);
-    if(unroller->root) {
-        i->condition = unroller->root;
-    }
-    code_block->push_back(i);
-    return new IR::BlockStatement(*code_block);
-}
-
-const IR::Node *StatementUnroll::preorder(IR::MethodCallStatement *m){
-    // visit(m->methodCall);
-    // prune();    
+const IR::Node *StatementUnroll::preorder(IR::MethodCallStatement *m){    
     return m;
 }
 
@@ -498,7 +457,8 @@ bool ExpressionUnroll::preorder(const IR::Operation_Unary *u){
     }
     root = new IR::PathExpression(IR::ID(collector->get_next_tmp()));
     stmt.push_back(new IR::AssignmentStatement(root, un_expr));
-
+    decl.push_back(new IR::Declaration_Variable(root->path->name, u->type));
+    return false;
 }
 
 bool ExpressionUnroll::preorder(const IR::Operation_Binary *bin){
@@ -589,6 +549,169 @@ bool ExpressionUnroll::preorder(const IR::BoolLiteral *b){
     return false;
 }
 
+const IR::Node *IfStatementUnroll::postorder(IR::IfStatement *i){
+    auto code_block = new IR::IndexedVector<IR::StatOrDecl>;
+    ExpressionUnroll::sanity(i->condition);
+    auto unroller = new LogicalExpressionUnroll(collector, refMap, typeMap);
+    i->condition->apply(*unroller);
+    for(auto i:unroller->stmt)
+        code_block->push_back(i);
+
+    auto control = findOrigCtxt<IR::P4Control>();
+    auto parser = findOrigCtxt<IR::P4Parser>();
+
+    for(auto d: unroller->decl)
+        injector.collect(control, parser, d);
+    if(unroller->root) {
+        i->condition = unroller->root;
+    }
+    code_block->push_back(i);
+    return new IR::BlockStatement(*code_block);
+}
+
+const IR::Node *IfStatementUnroll::postorder(IR::P4Control *a){
+    auto control = getOriginal();
+    return injector.inject_control(control, a);
+}
+const IR::Node *IfStatementUnroll::postorder(IR::P4Parser *a){
+    auto parser = getOriginal();
+    return injector.inject_parser(parser, a);
+}
+
+bool LogicalExpressionUnroll::preorder(const IR::Operation_Unary *u){
+    sanity(u->expr);
+    if(not u->is<IR::Member>()){
+        std::cerr << u->node_type_name() << std::endl;
+        BUG("Not Implemented");
+    }
+    else{
+        root = u->clone();
+        return false;
+    }
+
+    visit(u->expr);
+    const IR::Expression *un_expr;
+    if(root){
+        if(auto neg = u->to<IR::Neg>()){
+            un_expr = new IR::Neg(root);
+        }
+        else if(auto neg = u->to<IR::Cmpl>()){
+            un_expr = new IR::Cmpl(root);
+        }
+        else if(auto neg = u->to<IR::LNot>()){
+            un_expr = new IR::LNot(root);
+        }
+        else{
+            std::cout << u->node_type_name() << std::endl;
+            BUG("Not Implemented");
+        }
+    }
+    else{
+        un_expr = u->expr;
+    }
+    auto tmp = new IR::PathExpression(IR::ID(collector->get_next_tmp()));
+    root = tmp;
+    stmt.push_back(new IR::AssignmentStatement(root, un_expr));
+    decl.push_back(new IR::Declaration_Variable(tmp->path->name, u->type));
+    return false;
+}
+
+bool LogicalExpressionUnroll::preorder(const IR::Operation_Binary *bin){
+    sanity(bin->left);
+    sanity(bin->right);
+    visit(bin->left);
+    const IR::Expression *left_root = root;
+    visit(bin->right);
+    const IR::Expression *right_root = root;
+    if(not left_root) left_root = bin->left;
+    if(not right_root) right_root = bin->right;
+    
+    IR::Expression *bin_expr;
+    if(is_logical(bin)){
+        if(bin->is<IR::LAnd>()){
+            bin_expr = new IR::LAnd(left_root, right_root);
+        } 
+        else if(bin->is<IR::LOr>()){
+            bin_expr = new IR::LOr(left_root, right_root);
+        }
+        else if(bin->is<IR::Equ>()){
+            bin_expr = new IR::Equ(left_root, right_root);
+        }
+        else if(bin->is<IR::Neq>()){
+            bin_expr = new IR::Neq(left_root, right_root);
+        }
+        else if(bin->is<IR::Grt>()){
+            bin_expr = new IR::Grt(left_root, right_root);
+        }
+        else if(bin->is<IR::Lss>()){
+            bin_expr = new IR::Lss(left_root, right_root);
+        }
+        root = bin_expr;
+    }
+    else{
+        auto tmp = new IR::PathExpression(IR::ID(collector->get_next_tmp()));
+        root = tmp;
+        decl.push_back(new IR::Declaration_Variable(tmp->path->name, bin->type));
+        if(bin->is<IR::Add>()) {
+            bin_expr = new IR::Add(left_root, right_root);
+        }
+        else if(bin->is<IR::Sub>()) {
+            bin_expr = new IR::Sub(left_root, right_root);
+        }
+        else if(bin->is<IR::Shl>()) {
+            bin_expr = new IR::Shl(left_root, right_root);
+        }
+        else if(bin->is<IR::Shr>()) {
+            bin_expr = new IR::Shr(left_root, right_root);
+        }
+        else{
+            std::cerr << bin->node_type_name() << std::endl;
+            BUG("not implemented");
+        }
+        stmt.push_back(new IR::AssignmentStatement(root, bin_expr));
+    }
+    return false;
+}
+
+bool LogicalExpressionUnroll::preorder(const IR::MethodCallExpression *m){
+    auto args = new IR::Vector<IR::Argument>;
+    for(auto arg: *m->arguments){
+        sanity(arg->expression);
+        visit(arg->expression);
+        if(not root) args->push_back(arg);
+        else args->push_back(new IR::Argument(root));
+    }
+    if(m->type->to<IR::Type_Boolean>()){
+        root = m->clone();
+        return false;
+    }
+    auto tmp = new IR::PathExpression(IR::ID(collector->get_next_tmp()));
+    root= tmp;
+    decl.push_back(new IR::Declaration_Variable(tmp->path->name, m->type));
+    auto new_m = new IR::MethodCallExpression(m->method, args);
+    stmt.push_back(new IR::AssignmentStatement(root, new_m));
+    return false;
+}
+
+bool LogicalExpressionUnroll::preorder(const IR::Member *member){
+    root = nullptr;
+    return false;
+}
+
+bool LogicalExpressionUnroll::preorder(const IR::PathExpression *path){
+    root = nullptr;
+    return false;
+}
+
+bool LogicalExpressionUnroll::preorder(const IR::Constant *c){
+    root = nullptr;
+    return false;
+}
+bool LogicalExpressionUnroll::preorder(const IR::BoolLiteral *b){
+    root = nullptr;
+    return false;
+}
+
 const IR::Node *ConvertBinaryOperationTo2Params::postorder(IR::AssignmentStatement *a){
     auto right = a->right;
     auto left = a->left;
@@ -637,39 +760,38 @@ const IR::Node *ConvertBinaryOperationTo2Params::postorder(IR::AssignmentStateme
                 std::cerr << r->left->node_type_name() << std::endl;
                 BUG("Confronting a expression that can be simplified to become a constant.");
             }
-            auto tmp1 = new IR::PathExpression(IR::ID(collector->get_next_tmp()));
-            auto tmp2 = new IR::PathExpression(IR::ID(collector->get_next_tmp()));
-            injector.collect(control, parser, new IR::Declaration_Variable(tmp1->path->name, src1->type));
-            injector.collect(control, parser, new IR::Declaration_Variable(tmp2->path->name, r->type));
-            code_block.push_back(new IR::AssignmentStatement(tmp1, src1));
+            // auto tmp = new IR::PathExpression(IR::ID(collector->get_next_tmp()));
+            // injector.collect(control, parser, new IR::Declaration_Variable(tmp->path->name, src1->type));
+            // injector.collect(control, parser, new IR::Declaration_Variable(tmp->path->name, r->type));
+            code_block.push_back(new IR::AssignmentStatement(left, src1));
             IR::Operation_Binary *expr;
             if(right->is<IR::Add>()){
-                expr = new IR::Add(tmp1, src2);
+                expr = new IR::Add(left, src2);
             }
             else if(right->is<IR::Sub>()){
-                expr = new IR::Sub(tmp1, src2);
+                expr = new IR::Sub(left, src2);
             }
             else if(right->is<IR::Shl>()){
-                expr = new IR::Shl(tmp1, src2);
+                expr = new IR::Shl(left, src2);
             }
             else if(right->is<IR::Shr>()){
-                expr = new IR::Shr(tmp1, src2);
+                expr = new IR::Shr(left, src2);
             }
             else if(right->is<IR::Equ>()){
-                expr = new IR::Equ(tmp1, src2);
+                expr = new IR::Equ(left, src2);
             }
             else if(right->is<IR::LAnd>()){
-                expr = new IR::LAnd(tmp1, src2);
+                expr = new IR::LAnd(left, src2);
             }
             else if(right->is<IR::Leq>()){
-                expr = new IR::Leq(tmp1, src2);
+                expr = new IR::Leq(left, src2);
             }
             else {
                 std::cerr << right->node_type_name() << std::endl;
                 BUG("not implemented.");
             }
-            code_block.push_back(new IR::AssignmentStatement(tmp2, expr));
-            code_block.push_back(new IR::AssignmentStatement(left, tmp2));
+            code_block.push_back(new IR::AssignmentStatement(left, expr));
+            // code_block.push_back(new IR::AssignmentStatement(left, tmp));
             return new IR::BlockStatement(code_block);
         }
     }
@@ -773,7 +895,7 @@ const IR::Node *CollectLocalVariableToMetadata::postorder(IR::P4Parser * p){
     return p;
 }
 
-const IR::Node *PrependHDotToActionArgs::postorder(IR::P4Action* a){
+const IR::Node *PrependPDotToActionArgs::postorder(IR::P4Action* a){
     if(a->parameters->size() > 0){
         auto l = new IR::IndexedVector<IR::Parameter>;
         for(auto p: a->parameters->parameters){
@@ -787,7 +909,7 @@ const IR::Node *PrependHDotToActionArgs::postorder(IR::P4Action* a){
     return a;
 }
 
-const IR::Node *PrependHDotToActionArgs::postorder(IR::P4Program* program){
+const IR::Node *PrependPDotToActionArgs::postorder(IR::P4Program* program){
     auto new_objs = new IR::Vector<IR::Node>;
     for(auto obj: program->objects){
         if(auto control = obj->to<IR::P4Control>()){
@@ -811,7 +933,7 @@ const IR::Node *PrependHDotToActionArgs::postorder(IR::P4Program* program){
     return program;
 }
 
-const IR::Node *PrependHDotToActionArgs::preorder(IR::PathExpression *path){
+const IR::Node *PrependPDotToActionArgs::preorder(IR::PathExpression *path){
     auto declaration = refMap->getDeclaration(path->path);
     if(auto action = findContext<IR::P4Action>()){
         if(not declaration){
