@@ -24,3 +24,6 @@ ARG DPDK=OFF
 COPY . /p4c/
 WORKDIR /p4c/
 RUN chmod u+x tools/ci-build.sh && tools/ci-build.sh
+
+# setup huge pages
+ENTRYPOINT ["tools/docker_entry_point.sh"]
