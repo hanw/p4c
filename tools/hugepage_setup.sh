@@ -1,5 +1,6 @@
 #!/bin/bash
 
+set -x
 if [ ! -d /mnt/huge ]; then
     echo "This is the docker entry point"
     if [ -z "$NUM_HUGEPAGES" ]; then

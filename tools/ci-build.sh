@@ -5,6 +5,8 @@
 set -e  # Exit on error.
 set -x  # Make command execution verbose
 
+BFN="/bfn"
+
 # Python3 is required for p4c to run, P4C_DEPS would otherwise uninstall it
 export P4C_PYTHON3="python3"
 
@@ -140,6 +142,16 @@ function build_dpdk() {
 if [ "$DPDK" == "ON" ]; then
   build_dpdk
 fi
+
+# Copy scripts into ${BFN}.
+{
+  mkdir -p /bfn
+  cp tools/hugepage_setup.sh \
+     tools/docker_entry_point.sh \
+     "${BFN}"
+  chmod 755 ${BFN}/docker_entry_point.sh
+  chmod 755 ${BFN}/hugepage_setup.sh
+}
 # ! ------  END P4C-DPDK REGRESSION ------------------------------------------
 
 function build() {
