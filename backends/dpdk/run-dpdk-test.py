@@ -163,6 +163,11 @@ def check_generated_files(options, tmpdir, expecteddir):
 def file_name(tmpfolder, base, suffix, ext):
     return os.path.join(tmpfolder, base + "-" + suffix + ext)
 
+def generate_cli(tmpdir, cli):
+    outfile = open(cli, 'w')
+    outfile.write("pipeline PIPELINE0 build %s/l2fwd.spec" % tmpdir)
+    outfile.close()
+
 def process_file(options, argv):
     assert isinstance(options, Options)
 
@@ -187,6 +192,7 @@ def process_file(options, argv):
         print("Writing temporary files into ", tmpdir)
     stderr = os.path.join(tmpdir, basename + "-error")
     spec = os.path.join(tmpdir, basename + ".spec")
+    cli = os.path.join(tmpdir, basename + ".cli")
     def getArch(path):
         v1Pattern = re.compile('include.*v1model\.p4')
         psaPattern = re.compile('include.*psa\.p4')
@@ -230,6 +236,17 @@ def process_file(options, argv):
 
     if result == SUCCESS:
         result = check_generated_files(options, tmpdir, expected_dirname)
+
+    # validate spec file in dpdk app
+    if result == SUCCESS:
+        # dpdk-pipeline must run with sudo.
+        generate_cli(tmpdir, cli)
+        dpdk_args = ["/dpdk/build/examples/dpdk-pipeline", "-s", cli]
+        result = run_timeout(options, dpdk_args, timeout, stderr)
+
+        if result != SUCCESS:
+            print("Error loading dpdk pipeline")
+            print("".join(open(stderr).readlines()))
 
     if options.cleanupTmp:
         if options.verbose:

@@ -5,6 +5,8 @@
 set -e  # Exit on error.
 set -x  # Make command execution verbose
 
+BFN="/bfn"
+
 # Python3 is required for p4c to run, P4C_DEPS would otherwise uninstall it
 export P4C_PYTHON3="python3"
 
@@ -46,7 +48,8 @@ export P4C_PIP_PACKAGES="ipaddr \
                           ply==3.8 \
                           scapy==2.4.4"
 
-
+export DPDK_DEPS="meson==0.54.3 \
+		  ninja"
 
 apt-get update
 apt-get install -y --no-install-recommends \
@@ -62,6 +65,7 @@ ln -sf /usr/bin/pip3 /usr/bin/pip
 
 pip3 install wheel
 pip3 install $P4C_PIP_PACKAGES
+pip3 install $DPDK_DEPS
 
 # Build libbpf for eBPF tests.
 cd /p4c
@@ -122,6 +126,33 @@ if [ "$VALIDATION" == "ON" ]; then
 fi
 # ! ------  END VALIDATION -----------------------------------------------
 
+# ! ------  BEGIN P4C-DPDK REGRESSION ----------------------------------------
+function build_dpdk() {
+  apt-get install -y python3-pyelftools
+  git clone https://github.com/DPDK/dpdk.git /dpdk
+  cd /dpdk
+  git fetch --all --tags
+  git checkout tags/v21.05 -b latest
+  mkdir -p build
+  meson -Dexamples=pipeline --werror build
+  ninja -C build
+  cd -
+}
+
+if [ "$DPDK" == "ON" ]; then
+  build_dpdk
+fi
+
+# Copy scripts into ${BFN}.
+{
+  mkdir -p /bfn
+  cp tools/hugepage_setup.sh \
+     tools/docker_entry_point.sh \
+     "${BFN}"
+  chmod 755 ${BFN}/docker_entry_point.sh
+  chmod 755 ${BFN}/hugepage_setup.sh
+}
+# ! ------  END P4C-DPDK REGRESSION ------------------------------------------
 
 function build() {
   if [ -e build ]; then /bin/rm -rf build; fi

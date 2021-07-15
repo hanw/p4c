@@ -17,8 +17,26 @@ ARG VALIDATION=OFF
 # This creates a release build that includes link time optimization and links
 # all libraries statically.
 ARG BUILD_STATIC_RELEASE=OFF
+# Build dpdk app for p4c-dpdk testing
+ARG DPDK=OFF
 
-# Delegate the build to tools/ci-build.
+# # Force /usr/bin to be before /usr/local/bin because bf-driver
+# # installs a version of python3 in /usr/local and that version is not
+# # picking up modules installed with pip3
+# ENV PATH="/usr/bin:${PATH}"
+#
+# # Set up Intel proxies.
+# ENV http_proxy='http://proxy-dmz.intel.com:911'
+# ENV https_proxy='http://proxy-dmz.intel.com:912'
+# ENV ftp_proxy='http://proxy-dmz.intel.com:21'
+# ENV socks_proxy='proxy-dmz.intel.com:1080'
+# ENV no_proxy='intel.com,*.intel.com,localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16,172.16.0.0/12'
+# ENV ALL_PROXY='socks5://proxy-us.intel.com'
+#
+# Dclegate the build to tools/ci-build.
 COPY . /p4c/
 WORKDIR /p4c/
 RUN chmod u+x tools/ci-build.sh && tools/ci-build.sh
+
+# setup huge pages
+ENTRYPOINT ["/bfn/docker_entry_point.sh"]
