@@ -44,10 +44,6 @@ jobs:
         tools/start_ccache
         docker build --network ccache_network -t p4c --build-arg IMAGE_TYPE=test --build-arg ENABLE_UNIFIED_COMPILATION=ON --build-arg ENABLE_GMP=ON --build-arg DPDK=ON .
 
-    - name: /proc/cpuinfo
-      run: |
-        sudo docker run --privileged -w /p4c/build -e $CTEST_PARALLEL_LEVEL p4c cat /proc/cpuinfo
-
     - name: Run dpdk
       run: |
         sudo docker run --cap-add ALL --device=/dev/hugepages:/dev/hugepages --privileged -w /p4c/build -e $CTEST_PARALLEL_LEVEL p4c /dpdk/build/examples/dpdk-pipeline
